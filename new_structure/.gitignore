@@ -1,0 +1,53 @@
+# 忽略临时目录
+temp/
+*.tmp
+*.temp
+
+# 忽略环境变量文件
+.env
+.env.local
+.env.production
+
+# 忽略Python缓存文件
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# 忽略IDE文件
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# 忽略日志文件
+*.log
+logs/
+
+# 忽略系统文件
+.DS_Store
+Thumbs.db
+
+# 忽略备份文件
+backup_old_files/
+
+# 忽略配置文件中的敏感信息
+config/*.env
+config/*.key 

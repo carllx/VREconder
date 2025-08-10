@@ -1,0 +1,81 @@
+# VR Video Processing Pipeline - Git Ignore
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments
+venv/
+env/
+ENV/
+
+# IDE
+.vscode/
+.idea/
+.cursor/
+*.swp
+*.swo
+
+# Logs
+logs/
+*.log
+
+# Temporary files - only ignore specific temp directories
+new_structure/temp/
+temp/
+tmp/
+*.tmp
+
+# Analysis reports
+analysis_reports/
+migration_reports/
+
+# Backup files
+backup_*/
+backup_old_files/
+
+# Environment variables
+.env
+.env.local
+.env.*
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Cache
+.pytest_cache/
+__pycache__/
+
+# Sensitive files
+*.key
+*.pem
+*.p12
+*.pfx
+secrets/
+secrets.yaml
+secrets.yml
+
+# Network and login files - only ignore specific sensitive files
+campus_network_login/
+login.ps1
+test_shared_access.ps1

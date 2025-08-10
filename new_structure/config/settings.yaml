@@ -1,0 +1,320 @@
+# VR Video Processing Pipeline - Unified Configuration
+
+app:
+  name: "VR Video Processing Pipeline"
+  version: "2.0.0"
+  debug: false
+
+paths:
+  project_root: "${PROJECT_ROOT}"
+  download: "${PROJECT_ROOT}/download"
+  output: "${PROJECT_ROOT}/output"
+  temp: "${PROJECT_ROOT}/temp"
+  logs: "${PROJECT_ROOT}/logs"
+  download_completed: "${PROJECT_ROOT}/01_Download_Completed"
+  temp_processing: "${PROJECT_ROOT}/Temp"
+  output_processed: "${PROJECT_ROOT}/Output"
+  windows:
+    ffmpeg_path: "D:/ffmpeg-7.1.1-full_build/bin/ffmpeg.exe"
+    mediainfo_path: "C:/mediainfo/mediainfo.exe"
+  macos:
+    ffmpeg_path: "/usr/local/bin/ffmpeg"
+    mediainfo_path: "/usr/local/bin/mediainfo"
+  relative_paths:
+    config: "config"
+    logs: "logs"
+    tests: "tests"
+    docs: "docs"
+
+network:
+  share_name: "VR_Project"
+  auto_setup: true
+  firewall_auto_config: true
+  access_script_auto_create: true
+  diagnosis_enabled: true
+
+distributed:
+  enabled: true
+  master_ip: "10.53.224.34"
+  share_name: "VR_Project"
+  auto_discover: true
+  heartbeat_interval: 30
+  task_timeout: 3600
+  max_workers_per_node: 2
+  segment_duration: 300
+  load_balancing:
+    strategy: "capability_based"  # capability_based, round_robin, least_loaded
+    min_segments_per_node: 1
+    max_segments_per_node: 4
+  monitoring:
+    enabled: true
+    web_interface: true
+    progress_update_interval: 5
+
+encoding:
+  hevc:
+    libx265:
+      preset: "slower"
+      crf_range:
+        min: 20
+        max: 38
+      profile: "main10"
+      tune: "grain"
+      x265_params:
+        keyint: 240
+        min-keyint: 24
+        bframes: 12
+        ref: 6
+    nvenc:
+      preset: "slow"
+      rc: "vbr"
+      cq: 28
+      maxrate: "50M"
+      bufsize: "100M"
+      profile: "main10"
+  avc:
+    libx264:
+      preset: "slower"
+      crf_range:
+        min: 18
+        max: 28
+      profile: "high"
+      level: "4.1"
+      tune: "film"
+  audio:
+    codec: "aac"
+    bitrate: "128k"
+    channels: 2
+    sample_rate: 48000
+  quality:
+    target_crf: 28
+    min_crf: 18
+    max_crf: 38
+    quality_presets:
+      high: 20
+      medium: 28
+      low: 35
+  quality_profiles:
+    low:
+      name: "低质量 - 快速编码"
+      description: "适用于快速预览和测试"
+      hevc_nvenc:
+        preset: "p4"
+        tune: "hq"
+        cq: 28
+        qmin: 26
+        qmax: 30
+        rc_lookahead: 16
+        spatial_aq: true
+        temporal_aq: false
+        aq_strength: 4
+        bframes: 2
+        profile: "main"
+        pix_fmt: "yuv420p"
+        use_10bit: false
+      libx265:
+        preset: "fast"
+        crf: 28
+        profile: "main"
+        pix_fmt: "yuv420p"
+    medium:
+      name: "中等质量 - 平衡性能"
+      description: "平衡质量和编码速度"
+      hevc_nvenc:
+        preset: "p5"
+        tune: "hq"
+        cq: 26
+        qmin: 24
+        qmax: 28
+        rc_lookahead: 24
+        spatial_aq: true
+        temporal_aq: true
+        aq_strength: 6
+        bframes: 3
+        profile: "main10"
+        pix_fmt: "p010le"
+        use_10bit: true
+      libx265:
+        preset: "medium"
+        crf: 26
+        profile: "main10"
+        pix_fmt: "yuv420p10le"
+    high:
+      name: "高质量 - 推荐设置"
+      description: "推荐的高质量编码设置"
+      hevc_nvenc:
+        preset: "p6"
+        tune: "uhq"
+        cq: 24
+        qmin: 22
+        qmax: 26
+        rc_lookahead: 32
+        spatial_aq: true
+        temporal_aq: true
+        aq_strength: 8
+        bframes: 4
+        profile: "main10"
+        pix_fmt: "p010le"
+        use_10bit: true
+        multipass: 2
+      libx265:
+        preset: "slow"
+        crf: 24
+        profile: "main10"
+        pix_fmt: "yuv420p10le"
+    ultra:
+      name: "超高质量 - 最佳画质"
+      description: "追求最佳画质，编码时间较长"
+      hevc_nvenc:
+        preset: "p7"
+        tune: "uhq"
+        cq: 22
+        qmin: 20
+        qmax: 24
+        rc_lookahead: 40
+        spatial_aq: true
+        temporal_aq: true
+        aq_strength: 10
+        bframes: 5
+        profile: "main10"
+        pix_fmt: "p010le"
+        use_10bit: true
+        multipass: 2
+      libx265:
+        preset: "veryslow"
+        crf: 22
+        profile: "main10"
+        pix_fmt: "yuv420p10le"
+  gpu_acceleration:
+    cuda:
+      enabled: true
+      hwaccel: "cuda"
+      hwaccel_output_format: "cuda"
+      supported_filters:
+        - "hwupload_cuda"
+        - "scale_npp"
+        - "bilateral_cuda"
+        - "tonemap_npp"
+        - "sr_cuda"
+        - "hwdownload"
+  ai_enhancement:
+    enabled: false
+    super_resolution:
+      model_path: "./models/super_resolution.onnx"
+      scale_factor: 2
+      quality: "high"
+    denoising:
+      model_path: "./models/denoising.onnx"
+      strength: 0.5
+    upscaling:
+      model_path: "./models/upscaling.onnx"
+      target_resolution: "4k"
+  filters:
+    denoise:
+      bilateral_cuda:
+        sigma_s: 10
+        sigma_r: 0.1
+      nlmeans:
+        s: 10
+        p: 7
+        r: 15
+    sharpen:
+      unsharp_cuda:
+        luma_msize_x: 5
+        luma_msize_y: 5
+        luma_amount: 1.0
+        chroma_msize_x: 5
+        chroma_msize_y: 5
+        chroma_amount: 0.5
+    tonemapping:
+      tonemap_npp:
+        format: "p010le"
+        matrix: "bt709"
+        primaries: "bt709"
+        transfer: "bt709"
+    scaling:
+      scale_npp:
+        format: "p010le"
+        algorithm: "lanczos"
+      scale_cuda:
+        format: "p010le"
+        algorithm: "lanczos"
+
+logging:
+  version: 1
+  disable_existing_loggers: false
+  formatters:
+    standard:
+      format: "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
+      datefmt: "%Y-%m-%d %H:%M:%S"
+    detailed:
+      format: "%(asctime)s [%(levelname)s] %(name)s:%(lineno)d: %(message)s"
+      datefmt: "%Y-%m-%d %H:%M:%S"
+  handlers:
+    console:
+      class: logging.StreamHandler
+      level: INFO
+      formatter: standard
+      stream: ext://sys.stdout
+    file:
+      class: logging.handlers.RotatingFileHandler
+      level: DEBUG
+      formatter: detailed
+      filename: logs/processing.log
+      maxBytes: 10485760
+      backupCount: 5
+    error_file:
+      class: logging.handlers.RotatingFileHandler
+      level: ERROR
+      formatter: detailed
+      filename: logs/errors.log
+      maxBytes: 10485760
+      backupCount: 3
+  loggers:
+    src:
+      level: DEBUG
+      handlers: [console, file]
+      propagate: false
+    scripts:
+      level: INFO
+      handlers: [console, file]
+      propagate: false
+  root:
+    level: INFO
+    handlers: [console, file]
+
+performance:
+  max_concurrent_jobs: 2
+  thread_count: 0
+  max_muxing_queue_size: 4096
+  buffer_size: 8192
+  io_buffer_size: 32768
+  use_mmap: true
+  monitoring:
+    enabled: true
+    interval: 5.0
+    log_metrics: true
+    export_performance_data: true
+
+output:
+  container: "mp4"
+  faststart: true
+  metadata:
+    stereo_mode: "left_right"
+    encoder: "VR Video Processing Pipeline"
+    quality_profile: "high"
+  filename_template: "{basename}_HEVC_{quality}_{timestamp}.mp4"
+  directory_structure:
+    base: "output"
+    subdirectories:
+      - "by_quality"
+      - "by_date"
+      - "by_resolution"
+
+error_handling:
+  max_retries: 3
+  retry_delay: 30
+  continue_on_error: true
+  log_errors: true
+  resume_encoding: true
+  checkpoint_interval: 300
