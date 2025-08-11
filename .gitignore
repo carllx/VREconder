@@ -1,6 +1,14 @@
-# VR Video Processing Pipeline - Git Ignore
+# 忽略临时目录
+temp/
+*.tmp
+*.temp
 
-# Python
+# 忽略环境变量文件
+.env
+.env.local
+.env.production
+
+# 忽略Python缓存文件
 __pycache__/
 *.py[cod]
 *$py.class
@@ -22,60 +30,24 @@ wheels/
 .installed.cfg
 *.egg
 
-# Virtual environments
-venv/
-env/
-ENV/
-
-# IDE
+# 忽略IDE文件
 .vscode/
 .idea/
-.cursor/
 *.swp
 *.swo
+*~
 
-# Logs
-logs/
+# 忽略日志文件
 *.log
+logs/
 
-# Temporary files - only ignore specific temp directories
-new_structure/temp/
-temp/
-tmp/
-*.tmp
-
-# Analysis reports
-analysis_reports/
-migration_reports/
-
-# Backup files
-backup_*/
-backup_old_files/
-
-# Environment variables
-.env
-.env.local
-.env.*
-
-# OS
+# 忽略系统文件
 .DS_Store
 Thumbs.db
-desktop.ini
 
-# Cache
-.pytest_cache/
-__pycache__/
+# 忽略备份文件
+backup_old_files/
 
-# Sensitive files
-*.key
-*.pem
-*.p12
-*.pfx
-secrets/
-secrets.yaml
-secrets.yml
-
-# Network and login files - only ignore specific sensitive files
-campus_network_login/
-login.ps1
-test_shared_access.ps1
+# 忽略配置文件中的敏感信息
+config/*.env
+config/*.key 

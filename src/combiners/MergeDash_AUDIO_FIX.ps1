@@ -1,4 +1,4 @@
-﻿# PowerShell version of MergeDash.sh
+﻿# PowerShell version of MergeDash.sh - Working version with audio stream corruption fixes
 
 #region Functions
 
@@ -7,13 +7,8 @@ function Get-Duration {
         [string]$Start,
         [string]$End
     )
-    if (Get-Command -Name bc -ErrorAction SilentlyContinue) {
-        $duration = Invoke-Expression ("bc -l <<< '$End - $Start'")
-        return $duration
-    } else {
-        $duration = [double]$End - [double]$Start
-        return $duration
-    }
+    $duration = [double]$End - [double]$Start
+    return $duration
 }
 
 # 优化：改进的二进制文件合并函数
@@ -85,6 +80,56 @@ function Merge-BinaryFiles {
     }
 }
 
+# 新增：音频流修复函数
+function Repair-AudioStream {
+    param (
+        [string]$InputFile,
+        [string]$OutputFile,
+        [string]$Duration
+    )
+    
+    $ffmpeg = (Get-Command ffmpeg -ErrorAction SilentlyContinue).Path
+    if (!$ffmpeg) {
+        Write-Host "错误：未找到 ffmpeg。请安装 ffmpeg 并确保它在 PATH 中。"
+        return $false
+    }
+    
+    # 尝试多种修复策略
+    $strategies = @()
+    $strategies += @{
+        Name = "Discard Corrupt Packets"
+        Args = @("-y", "-i", $InputFile, "-ss", "0", "-c", "copy", "-fflags", "+discardcorrupt", "-ignore_unknown", "-t", $Duration, $OutputFile)
+    }
+    $strategies += @{
+        Name = "Re-encode Audio"
+        Args = @("-y", "-i", $InputFile, "-ss", "0", "-c:v", "copy", "-c:a", "aac", "-avoid_negative_ts", "make_zero", "-fflags", "+discardcorrupt", "-t", $Duration, $OutputFile)
+    }
+    $strategies += @{
+        Name = "Video Only"
+        Args = @("-y", "-i", $InputFile, "-ss", "0", "-c:v", "copy", "-an", "-t", $Duration, $OutputFile)
+    }
+    $strategies += @{
+        Name = "Loose Parameters"
+        Args = @("-y", "-i", $InputFile, "-ss", "0", "-c:v", "copy", "-c:a", "aac", "-strict", "experimental", "-fflags", "+discardcorrupt+genpts", "-t", $Duration, $OutputFile)
+    }
+    
+    foreach ($strategy in $strategies) {
+        Write-Host "尝试策略: $($strategy.Name)"
+        Write-Host "执行: ffmpeg $($strategy.Args -join ' ')"
+        
+        & $ffmpeg @($strategy.Args)
+        if ($LASTEXITCODE -eq 0) {
+            Write-Host "策略 '$($strategy.Name)' 成功"
+            return $true
+        } else {
+            Write-Host "策略 '$($strategy.Name)' 失败，尝试下一个..."
+        }
+    }
+    
+    Write-Host "所有修复策略都失败了"
+    return $false
+}
+
 # 修改 Cleanup 函数，增加临时文件清理
 function Cleanup {
     param(
@@ -143,7 +188,7 @@ $identifiers = @()
 # 优化：预加载所有文件信息
 Write-Host "预加载文件信息..."
 $allFiles = Get-ChildItem -Path $folder_dir -File
-$m4sFiles = $allFiles | Where-Object { $_.Name -match '^P\d+-[\d.]+-[\d.]+-\d+\.m4s$' }
+$m4sFiles = $allFiles | Where-Object { $_.Name -match '^P[0-9]+-[0-9.]+-[0-9.]+-[0-9]+\.m4s$' }
 Write-Host "找到 $($m4sFiles.Count) 个 m4s 文件"
 
 # Iterate through files in the folder
@@ -180,14 +225,8 @@ foreach ($file in $m4sFiles) {
 # 优化：预先按标识符分组文件
 $m4sFilesLookup = @{}
 foreach ($identifier in $identifiers) {
-    $pattern = "^P$identifier-([\d.]+)-([\d.]+)-(\d+)\.m4s$" # 修改正则表达式以捕获序列号
-    $m4sFilesLookup[$identifier] = $m4sFiles | Where-Object { $_.Name -match $pattern } | Sort-Object -Property @{Expression={
-        if ($_.Name -match $pattern) {
-            [int]$Matches[3] # 按捕获到的第三组（序列号）的整数值排序
-        } else {
-            0 # 或者其他默认值/错误处理
-        }
-    }}
+    $pattern = '^P' + $identifier + '-([0-9.]+)-([0-9.]+)-([0-9]+)\.m4s$'
+    $m4sFilesLookup[$identifier] = $m4sFiles | Where-Object { $_.Name -match $pattern } | Sort-Object -Property Name
     Write-Host "标识符 $identifier 有 $($m4sFilesLookup[$identifier].Count) 个文件"
 }
 
@@ -199,7 +238,7 @@ Write-Host "排序后的标识符顺序: $($sortedIdentifiers -join ', ')"
 Clear-Content -Path $dir_concat -ErrorAction SilentlyContinue
 
 # Process each identifier in sorted order
-foreach ($identifier in $sortedIdentifiers) { # Use the sorted list
+foreach ($identifier in $sortedIdentifiers) {
     Write-Host "处理标识符: $identifier, 开始时间: $($start_for_identifier[$identifier]), 结束时间: $($end_for_identifier[$identifier])"
     
     $file_temp_pre = Join-Path -Path $folder_temp -ChildPath "Pre${identifier}.mp4"
@@ -253,18 +292,9 @@ foreach ($identifier in $sortedIdentifiers) { # Use the sorted list
       exit 1
     }
 
-    # 获取 ffmpeg 路径
-    $ffmpeg = (Get-Command ffmpeg -ErrorAction SilentlyContinue).Path
-    if (!$ffmpeg) {
-        Write-Host "错误：未找到 ffmpeg。请安装 ffmpeg 并确保它在 PATH 中。"
-        exit 1
-    }
-    
-    # 直接调用 ffmpeg 并检查退出代码
-    Write-Host "执行 ffmpeg: -y -i `"$file_temp_pre`" -ss 0 -c copy -t `"$duration`" `"$file_temp`""
-    & $ffmpeg -y -i "$file_temp_pre" -ss 0 -c copy -t "$duration" "$file_temp"
-    if ($LASTEXITCODE -ne 0) {
-        Write-Host "错误：ffmpeg 处理失败"
+    # 使用音频流修复函数
+    if (!(Repair-AudioStream -InputFile $file_temp_pre -OutputFile $file_temp -Duration $duration)) {
+        Write-Host "错误：无法修复音频流"
         exit 1
     }
 
@@ -297,11 +327,49 @@ $output_file = Join-Path -Path $folder_dir -ChildPath "$name.mp4"
 Write-Host "临时 concat 文件内容:"
 Get-Content -Path $dir_concat
 
-# 直接调用 ffmpeg 并检查退出代码
-Write-Host "执行最终合并: ffmpeg -y -f concat -safe 0 -i `"$dir_concat`" -c copy `"$output_file`""
-& $ffmpeg -y -f concat -safe 0 -i "$dir_concat" -c copy "$output_file"
-if ($LASTEXITCODE -ne 0) {
-    Write-Host "错误：ffmpeg 合并失败"
+# 使用音频流修复函数进行最终合并
+Write-Host "执行最终合并..."
+$final_concat_temp = Join-Path -Path $folder_temp -ChildPath "final_concat.txt"
+Copy-Item -Path $dir_concat -Destination $final_concat_temp -Force
+
+# 尝试多种最终合并策略
+$final_strategies = @()
+$final_strategies += @{
+    Name = "Standard Concat"
+    Args = @("-y", "-f", "concat", "-safe", "0", "-i", $final_concat_temp, "-c", "copy", "-fflags", "+discardcorrupt", "-ignore_unknown", $output_file)
+}
+$final_strategies += @{
+    Name = "Re-encode Audio"
+    Args = @("-y", "-f", "concat", "-safe", "0", "-i", $final_concat_temp, "-c:v", "copy", "-c:a", "aac", "-avoid_negative_ts", "make_zero", "-fflags", "+discardcorrupt", $output_file)
+}
+$final_strategies += @{
+    Name = "Video Only"
+    Args = @("-y", "-f", "concat", "-safe", "0", "-i", $final_concat_temp, "-c:v", "copy", "-an", $output_file)
+}
+
+$ffmpeg = (Get-Command ffmpeg -ErrorAction SilentlyContinue).Path
+if (!$ffmpeg) {
+    Write-Host "错误：未找到 ffmpeg。请安装 ffmpeg 并确保它在 PATH 中。"
+    exit 1
+}
+
+$final_success = $false
+foreach ($strategy in $final_strategies) {
+    Write-Host "尝试最终合并策略: $($strategy.Name)"
+    Write-Host "执行: ffmpeg $($strategy.Args -join ' ')"
+    
+    & $ffmpeg @($strategy.Args)
+    if ($LASTEXITCODE -eq 0) {
+        Write-Host "最终合并策略 '$($strategy.Name)' 成功"
+        $final_success = $true
+        break
+    } else {
+        Write-Host "最终合并策略 '$($strategy.Name)' 失败，尝试下一个..."
+    }
+}
+
+if (!$final_success) {
+    Write-Host "错误：所有最终合并策略都失败了"
     exit 1
 }
 
@@ -310,4 +378,4 @@ if ($LASTEXITCODE -ne 0) {
 
 # Call cleanup function before script exit.
 Cleanup -TempDir $folder_temp
-Write-Host "完成。输出文件: $output_file"
+Write-Host "完成。输出文件: $output_file" 
