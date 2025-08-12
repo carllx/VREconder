@@ -1,0 +1,53 @@
+# VREconder - VR Video Processing Core Rules
+
+## Project Architecture (v2.0)
+
+VREconder follows a **three-tier architecture**:
+
+```
+VREconder/
+├── scripts/          # User Layer - Platform-specific scripts
+│   ├── windows/      # Windows PowerShell scripts  
+│   └── macos/        # macOS/Linux Shell scripts
+├── tools/            # Tool Layer - Cross-platform user tools
+│   ├── batch/        # Batch processing CLI tools
+│   ├── maintenance/  # System maintenance tools
+│   └── deployment/   # Environment setup tools
+└── src/              # Core Layer - Business logic modules
+    ├── main.py       # Unified entry point
+    ├── encoders/     # Video encoding modules
+    ├── processors/   # Video processing modules
+    ├── classifiers/  # Video classification modules
+    ├── config/       # Configuration management
+    └── utils/        # Internal utilities
+```
+
+## Core Principles
+
+1. **Single Responsibility**: Each module has one clear purpose
+2. **Unidirectional Dependencies**: User Layer → Tool Layer → Core Layer
+3. **Cross-Platform Consistency**: Same functionality across all platforms
+4. **Configuration-Driven**: Avoid hardcoded values, use [config/settings.yaml](mdc:config/settings.yaml)
+5. **User-Friendly Tools**: Provide intuitive CLI interfaces
+
+## Key File References
+
+- Main entry point: [src/main.py](mdc:src/main.py)
+- Configuration: [config/settings.yaml](mdc:config/settings.yaml)
+- Cross-platform batch tool: [tools/batch/batch_cli.py](mdc:tools/batch/batch_cli.py)
+- Windows interface: [scripts/windows/batch_encoder.ps1](mdc:scripts/windows/batch_encoder.ps1)
+- macOS interface: [scripts/macos/batch_encoder.sh](mdc:scripts/macos/batch_encoder.sh)
+
+## Video Processing Workflow
+
+1. **Input** → Video classification → Resolution-based categorization
+2. **4K+ Videos** → Split into segments → Parallel encoding → Merge segments
+3. **Encoding** → HEVC/AVC conversion → Quality optimization
+4. **Output** → Compressed video files with quality reports
+
+## Technology Stack
+
+- **Languages**: Python 3.8+, PowerShell 7+, Bash
+- **Core Tools**: FFmpeg 4.0+, MediaInfo
+- **Encoders**: libx265 (quality), hevc_nvenc (speed), hevc_qsv (efficiency)
+- **Platforms**: Windows 11, macOS 12+, Linux Ubuntu 20.04+

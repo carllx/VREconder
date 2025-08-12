@@ -1,0 +1,263 @@
+# VREconder - Testing Standards
+
+## Testing Strategy
+
+### Test Types
+- **Unit Tests**: Individual functions and classes (`pytest`)
+- **Integration Tests**: Module interactions and workflows
+- **Performance Tests**: Processing speed and resource usage
+- **End-to-End Tests**: Complete processing pipelines
+
+### Test Structure
+
+#### Unit Test Example
+```python
+import pytest
+from unittest.mock import Mock, patch
+from pathlib import Path
+
+class TestVideoClassifier:
+    @pytest.fixture
+    def mock_config(self):
+        config = Mock()
+        config.paths = {"download": "/test/download", "output": "/test/output"}
+        return config
+    
+    def test_classify_4k_video(self, mock_config):
+        """Test 4K video classification"""
+        classifier = VideoClassifier(mock_config)
+        video_info = VideoInfo(width=3840, height=2160, codec="hvc1")
+        category = classifier.classify_video(video_info)
+        
+        assert category.resolution == "4K"
+        assert category.codec == "HEVC"
+    
+    @pytest.mark.parametrize("width,height,expected", [
+        (1920, 1080, "1080p"),
+        (3840, 2160, "4K"),
+        (7680, 4320, "8K"),
+    ])
+    def test_resolution_detection(self, width, height, expected, mock_config):
+        """Parameterized test for resolution detection"""
+        video_info = VideoInfo(width=width, height=height)
+        classifier = VideoClassifier(mock_config)
+        result = classifier.classify_video(video_info)
+        
+        assert result.resolution == expected
+```
+
+#### Integration Test Example
+```python
+class TestVideoProcessingPipeline:
+    @pytest.fixture
+    def temp_workspace(self):
+        temp_dir = tempfile.mkdtemp()
+        yield temp_dir
+        shutil.rmtree(temp_dir)
+    
+    def test_full_processing_pipeline(self, temp_workspace):
+        """Test complete video processing workflow"""
+        # Initialize components with test config
+        config = load_test_config(temp_workspace)
+        
+        # Test workflow: classify → encode → merge
+        classifier = VideoClassifier(config)
+        encoder = HEVCEncoder(config)
+        
+        # Verify each step
+        assert classifier.classify_video(sample_video) == expected_category
+        assert encoder.encode_video(input_path, output_path).success
+        assert Path(output_path).exists()
+```
+
+## Test Data Management
+
+### Test Fixtures
+```python
+@pytest.fixture(scope="session")
+def test_videos():
+    """Create test video files for different scenarios"""
+    videos = {}
+    
+    # Generate test videos with FFmpeg
+    for resolution, size in [("1080p", "1920x1080"), ("4K", "3840x2160")]:
+        video_path = create_test_video(size, resolution)
+        videos[resolution] = video_path
+    
+    yield videos
+    
+    # Cleanup
+    for video_path in videos.values():
+        Path(video_path).unlink(missing_ok=True)
+
+def create_test_video(size: str, name: str) -> Path:
+    """Generate test video using FFmpeg testsrc"""
+    output_path = Path(f"tests/data/{name}_test.mp4")
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    
+    subprocess.run([
+        "ffmpeg", "-f", "lavfi", "-i", f"testsrc=duration=5:size={size}:rate=30",
+        "-c:v", "libx264", "-preset", "ultrafast", "-crf", "30",
+        "-y", str(output_path)
+    ], check=True, capture_output=True)
+    
+    return output_path
+```
+
+## Performance Testing
+
+### Benchmark Tests
+```python
+@pytest.mark.benchmark
+def test_encoding_performance(benchmark, sample_video):
+    """Benchmark video encoding performance"""
+    def encode_video():
+        encoder = HEVCEncoder(get_test_config())
+        return encoder.encode_video(sample_video, "output.mp4")
+    
+    result = benchmark(encode_video)
+    
+    # Performance assertions
+    assert result.processing_time < 300  # < 5 minutes
+    assert result.compression_ratio > 1.5  # > 50% reduction
+```
+
+### Resource Monitoring
+```python
+@pytest.mark.performance
+def test_memory_usage(sample_video):
+    """Monitor memory usage during processing"""
+    import psutil
+    
+    process = psutil.Process()
+    start_memory = process.memory_info().rss
+    
+    # Execute processing
+    encoder = HEVCEncoder(get_test_config())
+    encoder.encode_video(sample_video, "output.mp4")
+    
+    peak_memory = process.memory_info().rss
+    memory_increase = peak_memory - start_memory
+    
+    # Memory should not exceed 4GB increase
+    assert memory_increase < 4 * 1024 * 1024 * 1024
+```
+
+## Test Configuration
+
+### Pytest Configuration (`pytest.ini`)
+```ini
+[tool:pytest]
+testpaths = tests
+python_files = test_*.py *_test.py
+python_classes = Test*
+python_functions = test_*
+addopts = 
+    --cov=src
+    --cov-report=html
+    --cov-report=term-missing
+    --cov-fail-under=80
+    --cov-branch
+markers =
+    unit: Unit tests
+    integration: Integration tests
+    performance: Performance tests
+    slow: Slow-running tests
+```
+
+### Coverage Configuration
+```ini
+[coverage:run]
+source = src
+omit = 
+    */tests/*
+    */__pycache__/*
+    */venv/*
+
+[coverage:report]
+exclude_lines =
+    pragma: no cover
+    def __repr__
+    raise AssertionError
+    raise NotImplementedError
+    if __name__ == .__main__.:
+```
+
+## Mock and Stub Patterns
+
+### External Tool Mocking
+```python
+@patch('subprocess.run')
+def test_ffmpeg_execution(mock_run):
+    """Test FFmpeg command execution"""
+    mock_run.return_value = Mock(returncode=0, stdout=b"success")
+    
+    result = execute_ffmpeg_command(["ffmpeg", "-i", "input.mp4", "output.mp4"])
+    
+    assert result.success
+    mock_run.assert_called_once()
+
+@patch('pathlib.Path.exists')
+def test_file_validation(mock_exists):
+    """Test file existence validation"""
+    mock_exists.return_value = False
+    
+    with pytest.raises(FileNotFoundError):
+        validate_video_file("nonexistent.mp4")
+```
+
+## Test Utilities
+
+### Assertion Helpers
+```python
+def assert_video_file_valid(file_path: Path) -> None:
+    """Assert video file is valid and playable"""
+    assert file_path.exists(), f"Video file missing: {file_path}"
+    assert file_path.stat().st_size > 0, f"Video file empty: {file_path}"
+    
+    # Validate with FFprobe
+    result = subprocess.run([
+        "ffprobe", "-v", "quiet", "-print_format", "json",
+        "-show_format", str(file_path)
+    ], capture_output=True, text=True)
+    
+    assert result.returncode == 0, f"Invalid video file: {file_path}"
+
+def assert_encoding_quality(input_path: Path, output_path: Path) -> None:
+    """Assert encoding maintained acceptable quality"""
+    input_size = input_path.stat().st_size
+    output_size = output_path.stat().st_size
+    compression_ratio = input_size / output_size
+    
+    assert 1.2 <= compression_ratio <= 10, f"Poor compression ratio: {compression_ratio}"
+    assert_video_file_valid(output_path)
+```
+
+## Quality Gates
+
+### Minimum Test Coverage
+- **Overall Coverage**: 80%
+- **Critical Modules**: 90% (encoders, processors)
+- **New Code**: 100%
+
+### Performance Benchmarks
+- **Processing Speed**: < 5 minutes per GB (NVENC)
+- **Memory Usage**: < 4GB peak increase
+- **File Size Reduction**: 30-70% of original
+
+### Test Execution
+```bash
+# Run all tests
+pytest
+
+# Run specific test types
+pytest -m unit
+pytest -m integration
+pytest -m performance
+
+# Generate coverage report
+pytest --cov=src --cov-report=html
+
+# Run benchmarks
+pytest -m benchmark --benchmark-only
+```

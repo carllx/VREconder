@@ -1,0 +1,182 @@
+# VREconder - Coding Standards
+
+## General Principles
+
+- **Configuration-Driven**: Use [config/settings.yaml](mdc:config/settings.yaml) instead of hardcoded values
+- **Error Handling**: Implement comprehensive error handling with meaningful messages
+- **Logging**: Use structured logging with appropriate levels (DEBUG, INFO, WARNING, ERROR)
+- **Type Safety**: Use type annotations/validation where language supports
+
+## Python Standards (*.py)
+
+### Style Guide
+- Follow PEP 8 with line length 88 characters (Black formatter)
+- Use type hints for all function parameters and return values
+- Use dataclasses for configuration objects
+
+### Naming Conventions
+- Classes: `PascalCase` (e.g., `VideoClassifier`)
+- Functions/Variables: `snake_case` (e.g., `process_video`)
+- Constants: `UPPER_SNAKE_CASE` (e.g., `DEFAULT_CRF`)
+
+### Import Order
+```python
+# Standard library
+import os
+from pathlib import Path
+from typing import Dict, List, Optional
+
+# Third-party
+import yaml
+import logging
+
+# Local modules
+from .config import Config
+from .utils import get_logger
+```
+
+### Error Handling Pattern
+```python
+class VideoProcessingError(Exception):
+    """Base class for video processing errors"""
+    pass
+
+def process_video(video_path: str) -> str:
+    try:
+        # Processing logic
+        return result
+    except FileNotFoundError:
+        logger.error(f"Video file not found: {video_path}")
+        raise VideoProcessingError(f"File not found: {video_path}")
+    except Exception as e:
+        logger.error(f"Unexpected error: {e}")
+        raise VideoProcessingError(f"Processing failed: {e}")
+```
+
+## PowerShell Standards (*.ps1)
+
+### Style Guide
+- Use PowerShell 7+ syntax
+- Include comprehensive help documentation
+- Use parameter validation attributes
+
+### Naming Conventions
+- Functions: `Verb-Noun` (e.g., `Get-VideoInfo`)
+- Variables: `PascalCase` (e.g., `$VideoPath`)
+- Parameters: `camelCase` (e.g., `$outputDir`)
+
+### Function Template
+```powershell
+function Get-VideoInfo {
+    <#
+    .SYNOPSIS
+        Brief description
+    .DESCRIPTION
+        Detailed description
+    .PARAMETER VideoPath
+        Parameter description
+    .EXAMPLE
+        Get-VideoInfo -VideoPath "video.mp4"
+    #>
+    
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [ValidateNotNullOrEmpty()]
+        [string]$VideoPath
+    )
+    
+    begin {
+        Write-Verbose "Starting operation"
+    }
+    
+    process {
+        try {
+            # Main logic
+        } catch {
+            Write-Error "Operation failed: $($_.Exception.Message)"
+            throw
+        }
+    }
+    
+    end {
+        Write-Verbose "Operation completed"
+    }
+}
+```
+
+## Bash Standards (*.sh)
+
+### Style Guide
+- Use `#!/bin/bash` shebang
+- Enable strict mode: `set -euo pipefail`
+- Use POSIX-compatible syntax where possible
+
+### Naming Conventions
+- Functions: `snake_case` (e.g., `classify_videos`)
+- Variables: `snake_case` (e.g., `video_path`)
+- Constants: `UPPER_SNAKE_CASE` (e.g., `DEFAULT_CRF`)
+
+### Script Template
+```bash
+#!/bin/bash
+#
+# VREconder - Script Description
+# Version: 2.0.0
+#
+
+set -euo pipefail
+
+# Configuration
+readonly SCRIPT_NAME="$(basename "$0")"
+readonly CONFIG_FILE="config/settings.yaml"
+
+# Logging function
+log_info() {
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] [INFO] $*" >&2
+}
+
+log_error() {
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] [ERROR] $*" >&2
+}
+
+# Error handling
+handle_error() {
+    local exit_code=$?
+    local line_number=$1
+    log_error "Error on line $line_number: exit code $exit_code"
+    exit "$exit_code"
+}
+
+trap 'handle_error $LINENO' ERR
+
+# Main function
+main() {
+    # Argument parsing and validation
+    # Main logic
+}
+
+# Entry point
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    main "$@"
+fi
+```
+
+## Cross-Platform Considerations
+
+### Path Handling
+- **Python**: Use `pathlib.Path` for all path operations
+- **PowerShell**: Use `Join-Path` and `Split-Path` cmdlets
+- **Bash**: Use proper quoting and variable expansion
+
+### Command Execution
+- Always validate external tool availability before use
+- Handle command failures gracefully with meaningful error messages
+- Use appropriate timeout values for long-running operations
+
+### Configuration Access
+All scripts should load configuration from [config/settings.yaml](mdc:config/settings.yaml):
+
+- **Python**: Use `yaml.safe_load()` with dataclasses
+- **PowerShell**: Use `ConvertFrom-Yaml` (requires PowerShell-Yaml module)
+- **Bash**: Use `yq` tool for YAML parsing

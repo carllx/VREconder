@@ -19,6 +19,7 @@ import time
 from utils.progress_monitor import ProgressLogger
 from .base_encoder import BaseEncoder
 from utils.resolve_path import resolve_path
+from utils.ffmpeg_detector import detect_ffmpeg_path
 
 
 class EncoderType(Enum):
@@ -70,29 +71,12 @@ class HEVCEncoder(BaseEncoder):
         self.available_encoders = self._detect_available_encoders()
         
     def _get_ffmpeg_path(self) -> str:
-        """Get FFmpeg executable path."""
-        ffmpeg_path = self.config.get('paths.windows.ffmpeg_path')
-        if ffmpeg_path:
-            return resolve_path(ffmpeg_path, self.config)
-        # Try to find ffmpeg in PATH
+        """Get FFmpeg executable path using the new detector."""
         try:
-            result = subprocess.run(['ffmpeg', '-version'], 
-                                  capture_output=True, text=True, check=True)
-            return 'ffmpeg'
-        except (subprocess.CalledProcessError, FileNotFoundError):
-            # Try common installation paths
-            common_paths = [
-                'C:/ffmpeg/bin/ffmpeg.exe',
-                'C:/Program Files/ffmpeg/bin/ffmpeg.exe',
-                '/usr/local/bin/ffmpeg',
-                '/usr/bin/ffmpeg'
-            ]
-            
-            for path in common_paths:
-                if os.path.exists(path):
-                    return path
-            
-            raise FileNotFoundError("FFmpeg not found. Please install FFmpeg.")
+            return detect_ffmpeg_path(self.config)
+        except Exception as e:
+            self.logger.error(f"FFmpeg 路径检测失败: {e}")
+            raise
     
     def _detect_available_encoders(self) -> List[EncoderType]:
         """Detect available HEVC encoders."""

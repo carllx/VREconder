@@ -15,11 +15,14 @@ paths:
   temp_processing: "${PROJECT_ROOT}/Temp"
   output_processed: "${PROJECT_ROOT}/Output"
   windows:
-    ffmpeg_path: "D:/ffmpeg-7.1.1-full_build/bin/ffmpeg.exe"
+    ffmpeg_path: "C:/ffmpeg-7.1.1-full_build/bin/ffmpeg.exe"
     mediainfo_path: "C:/mediainfo/mediainfo.exe"
   macos:
     ffmpeg_path: "/usr/local/bin/ffmpeg"
     mediainfo_path: "/usr/local/bin/mediainfo"
+  linux:
+    ffmpeg_path: "/usr/bin/ffmpeg"
+    mediainfo_path: "/usr/bin/mediainfo"
   relative_paths:
     config: "config"
     logs: "logs"

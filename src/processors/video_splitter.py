@@ -18,6 +18,7 @@ import time
 from utils.progress_monitor import ProgressLogger
 import threading
 from utils.dynamic_worker_pool import DynamicWorkerPool
+from utils.ffmpeg_detector import detect_ffmpeg_path
 
 
 @dataclass
@@ -48,26 +49,12 @@ class VideoSplitter:
         self.max_workers = config.get('processing', {}).get('max_workers', 4)
         
     def _get_ffmpeg_path(self) -> str:
-        """Get FFmpeg executable path."""
-        # Try to find ffmpeg in PATH
+        """Get FFmpeg executable path using the new detector."""
         try:
-            result = subprocess.run(['ffmpeg', '-version'], 
-                                  capture_output=True, text=True, check=True)
-            return 'ffmpeg'
-        except (subprocess.CalledProcessError, FileNotFoundError):
-            # Try common installation paths
-            common_paths = [
-                'C:/ffmpeg/bin/ffmpeg.exe',
-                'C:/Program Files/ffmpeg/bin/ffmpeg.exe',
-                '/usr/local/bin/ffmpeg',
-                '/usr/bin/ffmpeg'
-            ]
-            
-            for path in common_paths:
-                if os.path.exists(path):
-                    return path
-            
-            raise FileNotFoundError("FFmpeg not found. Please install FFmpeg.")
+            return detect_ffmpeg_path(self.config)
+        except Exception as e:
+            self.logger.error(f"FFmpeg 路径检测失败: {e}")
+            raise
     
     def get_video_duration(self, video_path: Path) -> float:
         """Get video duration in seconds."""

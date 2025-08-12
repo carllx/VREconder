@@ -6,7 +6,7 @@
 - **单一职责**：网络共享功能独立封装在 `utils/network_share.py` 中
 - **模块化**：通过 `NetworkShareManager` 和 `NetworkShareCLI` 类提供功能
 - **配置驱动**：所有配置集中在 `config/settings.yaml` 中
-- **接口统一**：通过 `main.py` 统一入口调用
+- **接口统一**：通过 `vreconder.py` 统一入口调用
 - **易扩展**：支持自定义共享路径、诊断功能等
 
 ## 架构设计
@@ -16,7 +16,6 @@
 src/
 ├── utils/
 │   └── network_share.py          # 网络共享核心模块
-├── main.py                       # 统一入口（已集成网络共享命令）
 └── config/
     └── settings.py               # 配置管理
 ```
@@ -33,20 +32,20 @@ network:
 ```
 
 ### 3. 统一入口
-所有网络共享功能通过 `main.py` 的 `network` 子命令访问：
+所有网络共享功能通过 `vreconder.py` 的 `network` 子命令访问：
 
 ```bash
 # 设置网络共享
-python src/main.py network setup
+python vreconder.py network setup
 
 # 显示共享信息
-python src/main.py network info
+python vreconder.py network info
 
 # 网络诊断
-python src/main.py network diagnose
+python vreconder.py network diagnose
 
 # 创建访问脚本
-python src/main.py network create-script
+python vreconder.py network create-script
 ```
 
 ## 功能特性
@@ -73,17 +72,17 @@ python src/main.py network create-script
 ### 步骤1: 设置共享
 ```bash
 # 在共享电脑上运行（需要管理员权限）
-python src/main.py network setup
+python vreconder.py network setup
 ```
 
 ### 步骤2: 查看共享信息
 ```bash
-python src/main.py network info
+python vreconder.py network info
 ```
 
 ### 步骤3: 诊断网络状态
 ```bash
-python src/main.py network diagnose
+python vreconder.py network diagnose
 ```
 
 ### 步骤4: 在其他电脑上访问
@@ -123,7 +122,7 @@ paths:
 - 职责分离，易于测试和维护
 
 ### 3. 统一入口
-- 通过 `main.py` 统一管理所有功能
+- 通过 `vreconder.py` 统一管理所有功能
 - 保持与现有视频处理流程的一致性
 - 支持子命令和参数解析
 
@@ -161,13 +160,13 @@ paths:
 1. **权限不足**
    ```bash
    # 以管理员身份运行
-   python src/main.py network setup
+   python vreconder.py network setup
    ```
 
 2. **网络连接失败**
    ```bash
    # 运行诊断
-   python src/main.py network diagnose
+   python vreconder.py network diagnose
    ```
 
 3. **共享访问被拒绝**
@@ -178,13 +177,13 @@ paths:
 ### 诊断命令
 ```bash
 # 完整诊断
-python src/main.py network diagnose
+python vreconder.py network diagnose
 
 # 查看共享信息
-python src/main.py network info
+python vreconder.py network info
 
 # 重新创建访问脚本
-python src/main.py network create-script
+python vreconder.py network create-script
 ```
 
 ## 最佳实践

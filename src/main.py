@@ -34,7 +34,7 @@ def split_encode_merge(config, input_file, output_file, segment_duration, encode
         parallel=False,  # 分割阶段串行，避免IO冲突
         encoder_type=encoder_type.value if hasattr(encoder_type, 'value') else encoder_type,
         crf=23,
-        max_workers=1,
+        max_workers=1,  # 分割阶段固定为1个worker，避免IO冲突
         base_dir=splits_dir,
         skip_encode=True  # 修复：分割阶段只分割，不编码，避免重复编码
     )
@@ -42,7 +42,9 @@ def split_encode_merge(config, input_file, output_file, segment_duration, encode
         logger.error("分割失败，无片段生成")
         return False
     # 2. 编码（智能跳过已编码文件）
-    max_workers = 2  # 强制每次并发处理2个segments
+    # 使用传入的 max_workers 参数，但确保至少为1
+    encoding_workers = max(1, max_workers)
+    logger.info(f"并行编码 {len(segments)} 个片段... (max_workers={encoding_workers})")
     logger.info(f"并行编码 {len(segments)} 个片段... (max_workers={max_workers})")
     logger.info(f"编码器类型: {encoder_type}")
     logger.info(f"质量预设: {quality_preset}")
@@ -98,7 +100,7 @@ def split_encode_merge(config, input_file, output_file, segment_duration, encode
         logger.info(f"开始编码 {len(segments_to_encode)} 个片段")
         encoded_files = existing_encoded_files.copy()
         
-        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        with ThreadPoolExecutor(max_workers=encoding_workers) as executor:
             future_to_seg = {}
             for seg in segments_to_encode:
                 logger.info(f"提交编码任务: segment_{seg.segment_index} -> {seg.output_file.name}")

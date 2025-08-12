@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 from dataclasses import dataclass
 from enum import Enum
+from utils.ffmpeg_detector import detect_ffmpeg_path
 
 
 class VideoResolution(Enum):

@@ -27,6 +27,7 @@ import GPUtil
 from utils.progress_monitor import ProgressLogger, monitor_progress
 from .base_encoder import BaseEncoder
 from utils.resolve_path import resolve_path
+from utils.ffmpeg_detector import detect_ffmpeg_path, detect_ffprobe_path
 
 
 class QualityLevel(Enum):
@@ -111,28 +112,12 @@ class AdvancedHEVCEncoder(BaseEncoder):
         self.monitoring_active = False
         
     def _get_ffmpeg_path(self) -> str:
-        """Get FFmpeg executable path."""
-        # 优先从 config 解析
-        ffmpeg_path = self.config.get('paths.windows.ffmpeg_path')
-        if ffmpeg_path:
-            return resolve_path(ffmpeg_path, self.config)
+        """Get FFmpeg executable path using the new detector."""
         try:
-            result = subprocess.run(['ffmpeg', '-version'], 
-                                  capture_output=True, text=True, check=True)
-            return 'ffmpeg'
-        except (subprocess.CalledProcessError, FileNotFoundError):
-            common_paths = [
-                'C:/ffmpeg/bin/ffmpeg.exe',
-                'C:/Program Files/ffmpeg/bin/ffmpeg.exe',
-                '/usr/local/bin/ffmpeg',
-                '/usr/bin/ffmpeg'
-            ]
-            
-            for path in common_paths:
-                if os.path.exists(path):
-                    return path
-            
-            raise FileNotFoundError("FFmpeg not found. Please install FFmpeg.")
+            return detect_ffmpeg_path(self.config)
+        except Exception as e:
+            self.logger.error(f"FFmpeg 路径检测失败: {e}")
+            raise
     
     def _get_mediainfo_path(self) -> str:
         """Get MediaInfo executable path."""
