@@ -302,11 +302,11 @@ python vreconder.py maintenance system-diagnose
 
 ## 📖 详细文档
 
-- 📖 [架构重构报告](ARCHITECTURE_REFACTORED.md) - 新架构设计详解
-- 📖 [使用指南](docs/USAGE_GUIDE.md) - 详细使用说明
-- 🏗️ [架构分析](docs/ARCHITECTURE_ANALYSIS.md) - 系统设计原理
-- ⚡ [性能优化](docs/PERFORMANCE_OPTIMIZATION.md) - 性能调优建议
+- 📖 [迁移指南](MIGRATION_GUIDE.md) - v2.0到v3.0迁移说明
+- 🏗️ [架构设计](docs/ARCHITECTURE.md) - 系统设计原理和模块说明
+- 🚀 [功能特性](docs/FEATURES.md) - 完整功能特性和使用场景
 - 🔧 [FFmpeg检测](docs/FFMPEG_DETECTION.md) - FFmpeg环境配置
+- 📚 [文档目录](docs/README.md) - 完整文档导航
 
 ## 🛠️ 开发和贡献
 

@@ -5,11 +5,12 @@
 ## 📚 文档概览
 
 ### 🏗️ 架构文档
-- **[架构分析](ARCHITECTURE_ANALYSIS.md)** - 项目架构设计原理和模块说明
+- **[架构设计](ARCHITECTURE.md)** - 项目架构设计原理和模块说明
 - **[FFmpeg检测](FFMPEG_DETECTION.md)** - FFmpeg环境自动检测功能说明
 
 ### 🚀 使用指南
 - **[快速开始](QUICKSTART.md)** - 项目快速上手指南
+- **[功能特性](FEATURES.md)** - 完整功能特性和使用场景说明
 
 ### 🔧 技术文档
 - **[网络共享](NETWORK_SHARING.md)** - 网络共享功能使用说明

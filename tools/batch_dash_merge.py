@@ -148,7 +148,7 @@ class BatchDashMerger:
         folder_name = folder_path.name
         
         # 创建输出文件路径
-        output_file = output_dir / f"{folder_name}_merged.mp4"
+        output_file = output_dir / f"{folder_name}.mp4"
         
         # 获取文件夹信息
         folder_info = self.get_folder_info(folder_path)

@@ -350,7 +350,7 @@ class DashMerger:
             
             # 最终合并
             if not output_file:
-                output_file = folder_path / f"{folder_path.name}_merged.mp4"
+                output_file = folder_path / f"{folder_path.name}.mp4"
             
             if len(processed_files) == 1:
                 # 只有一个文件，直接移动
@@ -404,7 +404,7 @@ class DashMerger:
         for subdir in subdirs:
             self.logger.info(f"Processing directory: {subdir.name}")
             try:
-                output_file = parent_dir / f"{subdir.name}_merged.mp4"
+                output_file = parent_dir / f"{subdir.name}.mp4"
                 success = self.merge_single_folder(subdir, output_file, dry_run)
                 results[str(subdir)] = success
                 
