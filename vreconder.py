@@ -80,6 +80,8 @@ def setup_batch_parser(parser):
     parser.add_argument('--parallel-files', type=int, default=1, help='并发文件数')
     
     # 可选参数
+    parser.add_argument('--fast', '--extreme-speed', dest='fast', action='store_true', 
+                       help='极速模式 (强制使用 NVENC + p7/Ultra 预设)')
     parser.add_argument('--dry-run', action='store_true', help='模拟运行')
     parser.add_argument('--list-files', action='store_true', help='列出文件')
     parser.add_argument('--verbose', '-v', action='store_true', help='详细输出')
@@ -119,6 +121,8 @@ def setup_single_parser(parser):
                        default='libx265', help='编码器类型')
     parser.add_argument('--quality', choices=['low', 'medium', 'high', 'ultra'], 
                        default='high', help='质量预设')
+    parser.add_argument('--fast', '--extreme-speed', dest='fast', action='store_true', 
+                       help='极速模式 (强制使用 NVENC + p7/Ultra 预设)')
 
 
 def setup_dash_parser(parser):
@@ -146,6 +150,17 @@ def handle_batch_command(args):
             '--max-workers', str(args.max_workers),
             '--parallel-files', str(args.parallel_files)
         ]
+        
+        # 处理极速模式
+        if args.fast:
+            print("🚀 极速模式已激活: 强制使用 NVENC (Ultra/p7)")
+            # 找到encoder和quality的索引并替换 (如果有)
+            for i in range(len(batch_args)):
+                if batch_args[i] == '--encoder':
+                    batch_args[i+1] = 'hevc_nvenc'
+                elif batch_args[i] == '--quality':
+                    batch_args[i+1] = 'ultra'
+
         
         if args.dry_run:
             batch_args.append('--dry-run')
@@ -240,9 +255,12 @@ def handle_single_command(args):
             'main.py', 'split-encode-merge',
             '--input-file', str(args.input_file),
             '--output-file', str(args.output_file),
-            '--encoder', args.encoder,
-            '--quality', args.quality
+            '--encoder', 'hevc_nvenc' if args.fast else args.encoder,
+            '--quality', 'ultra' if args.fast else args.quality
         ]
+        
+        if args.fast:
+             print("🚀 极速模式已激活: 强制使用 NVENC (Ultra/p7)")
         return src_main()
         
     except ImportError as e:

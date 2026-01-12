@@ -187,10 +187,23 @@ class HEVCEncoder(BaseEncoder):
 
         # 防御性处理，确保 quality_preset 为 Enum 实例
         if not isinstance(quality_preset, QualityPreset):
-            try:
-                quality_preset = QualityPreset(str(quality_preset))
-            except Exception:
-                quality_preset = QualityPreset.MEDIUM
+            # 映射用户友好的质量名称到 FFmpeg 预设
+            quality_map = {
+                "low": QualityPreset.FAST,
+                "medium": QualityPreset.MEDIUM,
+                "high": QualityPreset.SLOW,
+                "ultra": QualityPreset.VERY_SLOW
+            }
+            
+            qp_str = str(quality_preset).lower()
+            if qp_str in quality_map:
+                quality_preset = quality_map[qp_str]
+            else:
+                try:
+                    quality_preset = QualityPreset(qp_str)
+                except Exception:
+                    self.logger.warning(f"Unknown quality preset '{quality_preset}', defaulting to MEDIUM")
+                    quality_preset = QualityPreset.MEDIUM
         
         if not input_file.exists():
             raise FileNotFoundError(f"Input file not found: {input_file}")
@@ -251,9 +264,31 @@ class HEVCEncoder(BaseEncoder):
                 '-vf', 'scale=min(4096,iw):-2'  # 强制缩放到4K以内，保持宽高比
             ])
         
+        if encoder_type == EncoderType.NVENC:
+            # Map generic presets to NVENC p1-p7
+            nvenc_preset_map = {
+                QualityPreset.ULTRA_FAST: "p1",
+                QualityPreset.SUPER_FAST: "p1",
+                QualityPreset.VERY_FAST: "p2",
+                QualityPreset.FASTER: "p3",
+                QualityPreset.FAST: "p3",
+                QualityPreset.MEDIUM: "p4",
+                QualityPreset.SLOW: "p6", # High quality
+                QualityPreset.SLOWER: "p6",
+                QualityPreset.VERY_SLOW: "p7", # Best quality
+            }
+            preset_val = nvenc_preset_map.get(quality_preset, "p4")
+            cmd.extend([
+                '-c:v', encoder_type.value,
+                '-preset', preset_val,
+            ])
+        else:
+            cmd.extend([
+                '-c:v', encoder_type.value,
+                '-preset', quality_preset.value,
+            ])
+
         cmd.extend([
-            '-c:v', encoder_type.value,
-            '-preset', quality_preset.value,
             '-crf', str(crf),
             '-c:a', 'aac',
             '-b:a', '128k',

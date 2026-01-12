@@ -81,44 +81,33 @@ python vreconder.py maintenance config-validate
 
 #### 🚀 统一CLI工具 (所有平台)
 
+> [!IMPORTANT]
+> **环境变量**: 执行前请确保已设置 `PYTHONPATH="src"` 或处于项目根目录并根据操作系统设置环境变量。
+
 ```bash
-# 基本批量处理
-python vreconder.py batch --input-dir ./videos --output-dir ./output
+# 基本批量处理 (Windows PowerShell)
+$env:PYTHONPATH="src"; python vreconder.py batch --input-dir ./videos --output-dir ./output
 
-# 高质量HEVC编码
-python vreconder.py batch \
-    --input-dir ./videos \
-    --output-dir ./output \
-    --encoder libx265 \
-    --quality high \
-    --max-workers 2
-
-# NVIDIA GPU快速编码
-python vreconder.py batch \
+# 高质量HEVC编码 (推荐 NVIDIA GPU)
+$env:PYTHONPATH="src"; python vreconder.py batch \
     --input-dir ./videos \
     --output-dir ./output \
     --encoder hevc_nvenc \
-    --quality medium \
-    --parallel-files 2
+    --quality high \
+    --max-workers 2
 
-# 模拟运行 (预览处理列表)
-python vreconder.py batch \
+# 模拟运行 (预览处理列表，不会生成文件)
+$env:PYTHONPATH="src"; python vreconder.py batch \
     --input-dir ./videos \
     --output-dir ./output \
     --dry-run
-
-# 仅列出文件
-python vreconder.py batch \
-    --input-dir ./videos \
-    --output-dir ./output \
-    --list-files
 ```
 
 #### 单文件处理
 
 ```bash
 # 单文件处理
-python vreconder.py single \
+$env:PYTHONPATH="src"; python vreconder.py single \
     --input-file "input.mp4" \
     --output-file "output.mp4" \
     --encoder libx265 \
@@ -158,16 +147,16 @@ python vreconder.py setup --check-env
 python vreconder.py dash-merge ./dash_folder --output ./merged.mp4
 
 # 高效批量合并多个文件夹（推荐）
-python vreconder.py dash-merge C:\Users\carll\Desktop\catDownloads --batch --workers 6
+python vreconder.py dash-merge C:\Users\carll\Desktop\catDownloads\merge --batch --workers 6
 
 # 模拟运行（预览操作，扫描文件夹结构）
-python vreconder.py dash-merge C:\Users\carll\Desktop\catDownloads --batch --dry-run
+python vreconder.py dash-merge C:\Users\carll\Desktop\catDownloads\merge --batch --dry-run
 
 # 详细输出模式（显示文件处理顺序和进度）
 python vreconder.py dash-merge ./dash_folder --verbose
 
 # 直接使用专用批量工具（更多功能）
-python tools/batch_dash_merge.py C:\Users\carll\Desktop\catDownloads -w 8 -o D:\Output
+python tools/batch_dash_merge.py C:\Users\carll\Desktop\catDownloads\merge -w 8 -o D:\Output
 ```
 
 **🚀 批量处理特点** (已验证功能):
@@ -186,16 +175,18 @@ python tools/batch_dash_merge.py C:\Users\carll\Desktop\catDownloads -w 8 -o D:\
 - 支持多时间段片段合并 (实测支持5个段落P1-P5)
 - 包含音频流修复和多重重试机制 (5种修复策略自动尝试)
 - 支持init.mp4初始化文件自动识别和使用
-- 实际处理能力：621个文件，107.9MB，16.9秒完成
+- **实际处理能力**：621个文件，107.9MB，16.9秒完成
+  - 测试环境: Windows 11, Intel/AMD 多核 CPU, NVMe SSD, 16GB+ RAM
+  - 性能因素: 取决于 CPU 核心数、存储类型（SSD vs HDD）、系统负载
 
 ### 📈 实际测试结果示例
 ```
 🎬 VREconder 批量DASH合并
-📁 输入目录: C:\Users\carll\Desktop\catDownloads
-📁 输出目录: C:\Users\carll\Desktop\catDownloads\merged
+📁 输入目录: C:\Users\carll\Desktop\catDownloads\merge
+📁 输出目录: C:\Users\carll\Desktop\catDownloads\merge\merged
 🔧 并行任务: 2
 
-🔍 扫描目录: C:\Users\carll\Desktop\catDownloads
+🔍 扫描目录: C:\Users\carll\Desktop\catDownloads\merge
 ================================================================================
 📁 找到 2 个DASH文件夹:
   1. Asahi Rin2222 - VRKM673 (306 m4s + 0 init) | 53.7 MB | 5段落
@@ -302,11 +293,16 @@ python vreconder.py maintenance system-diagnose
 
 ## 📖 详细文档
 
+- 📖 [快速开始](docs/QUICKSTART.md) - 快速上手指南
 - 📖 [迁移指南](MIGRATION_GUIDE.md) - v2.0到v3.0迁移说明
 - 🏗️ [架构设计](docs/ARCHITECTURE.md) - 系统设计原理和模块说明
 - 🚀 [功能特性](docs/FEATURES.md) - 完整功能特性和使用场景
+- 🔌 [与Motrix配合](docs/SEGMENT2MOTRIX_GUIDE.md) - DASH下载与合并指南
+- 📊 [性能基准](docs/benchmark_guide.md) - 编码器性能对比指南
+- 🌐 [网络共享](docs/NETWORK_SHARING.md) - 局域网共享设置
 - 🔧 [FFmpeg检测](docs/FFMPEG_DETECTION.md) - FFmpeg环境配置
 - 📚 [文档目录](docs/README.md) - 完整文档导航
+- 💡 [未来需求](docs/dev/future_requirements.md) - 优化想法与需求池
 
 ## 🛠️ 开发和贡献
 
@@ -369,13 +365,10 @@ python vreconder.py dash-merge --help
 
 ## 📊 版本信息
 
-- **当前版本**: v3.0.1
+- **最后更新**: 2026-01-10
 - **架构版本**: 统一CLI架构 (简化版)
-- **兼容性**: 功能完全兼容，使用方式更简化
 - **新功能**: DASH视频分段合并 (v3.0.1新增，已测试验证)
-- **Python支持**: 3.8+
-- **平台支持**: Windows, macOS, Linux (真正统一)
-- **测试状态**: 批量DASH合并100%成功率，621个文件处理验证
+- **测试状态**: 批量DASH合并100%成功率，单文件转码已实测成功
 
 ## 📄 许可证
 

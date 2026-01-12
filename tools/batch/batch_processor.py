@@ -62,7 +62,8 @@ class BatchProcessor:
             video_files.extend(input_dir.glob(f"*{ext}"))
             video_files.extend(input_dir.glob(f"*{ext.upper()}"))
         
-        # 按文件名排序
+        # 去重并排序
+        video_files = list(set(video_files))
         video_files.sort(key=lambda x: x.name.lower())
         
         self.logger.info(f"在 {input_dir} 中找到 {len(video_files)} 个视频文件")
@@ -134,7 +135,7 @@ class BatchProcessor:
             if output_file.exists() and output_file.stat().st_size > 0:
                 size_mb = output_file.stat().st_size / (1024 * 1024)
                 success_msg = f"处理完成: {input_file.name} -> {output_file.name} ({size_mb:.2f} MB)"
-                self.logger.info(success_msg)
+                # logger.info(success_msg)  # Avoid double printing with process_directory
                 return True, success_msg
             else:
                 error_msg = f"处理失败: {input_file.name} - 输出文件未生成或为空"
