@@ -1,6 +1,7 @@
 // ==========================================
 // WebGL Shaders: Ideal Stereo Scene + Synthetic Scene + Cardboard Screen Distortion
 // Faithful port of Google WWGC (CardboardBarrelDistortion.js & CardboardView.js)
+// Standard WebGL1 Compliant (Zero fwidth / OES extension dependencies)
 // ==========================================
 
 export const vsSource = `
@@ -38,29 +39,28 @@ export const fsIdealSceneSource = `
     vec3 rayCam = normalize(vec3(tanX, tanY, -1.0));
 
     // 2. Synthetic Calibration Scene (Straight Grid, 90° Corners & Asymmetric L/R Badge)
+    // Pure WebGL1 Standard Arithmetic (Zero fwidth dependency)
     if (uSceneType == 1) {
-      vec2 gridPos = vec2(tanX, tanY) * 8.0;
-      vec2 gridFract = abs(fract(gridPos - 0.5) - 0.5) / fwidth(gridPos);
-      float line = min(gridFract.x, gridFract.y);
-      float gridAlpha = 1.0 - min(line, 1.0);
+      vec2 gridPos = vec2(tanX, tanY) * 6.0;
+      vec2 gridFract = abs(fract(gridPos) - 0.5);
+      float line = step(0.46, max(gridFract.x, gridFract.y));
 
       // Center crosshair (x=0, y=0)
-      float crossX = abs(tanX) / fwidth(tanX);
-      float crossY = abs(tanY) / fwidth(tanY);
-      float isCross = (crossX < 1.5 || crossY < 1.5) ? 1.0 : 0.0;
+      float isCross = (abs(tanX) < 0.006 || abs(tanY) < 0.006) ? 1.0 : 0.0;
 
-      // 90-degree corner targets
-      float cornerBox = (abs(abs(tanX) - 0.4) < 0.005 || abs(abs(tanY) - 0.4) < 0.005) ? 0.7 : 0.0;
+      // 90-degree corner targets (orthogonal square markers at tan = ±0.35)
+      float isCornerBox = ((abs(abs(tanX) - 0.35) < 0.007 && abs(tanY) <= 0.357) ||
+                           (abs(abs(tanY) - 0.35) < 0.007 && abs(tanX) <= 0.357)) ? 1.0 : 0.0;
 
       // Eye-specific Badge Color (Left: Cyan/Blue, Right: Orange/Gold)
       vec3 eyeThemeColor = (uEye == 0) ? vec3(0.06, 0.75, 0.95) : vec3(0.95, 0.55, 0.10);
       vec3 bg = (uEye == 0) ? vec3(0.03, 0.07, 0.14) : vec3(0.12, 0.06, 0.03);
 
       // Distinctive L / R central square marker
-      float isCenterBadge = (abs(tanX) < 0.08 && abs(tanY) < 0.08) ? 1.0 : 0.0;
+      float isCenterBadge = (abs(tanX) < 0.06 && abs(tanY) < 0.06) ? 1.0 : 0.0;
 
-      vec3 finalCol = mix(bg, eyeThemeColor, gridAlpha * 0.75);
-      finalCol = mix(finalCol, vec3(1.0, 1.0, 1.0), cornerBox);
+      vec3 finalCol = mix(bg, eyeThemeColor, line * 0.75);
+      finalCol = mix(finalCol, vec3(1.0, 1.0, 1.0), isCornerBox);
       finalCol = mix(finalCol, vec3(1.0, 0.2, 0.2), isCross);
       finalCol = mix(finalCol, eyeThemeColor, isCenterBadge);
 

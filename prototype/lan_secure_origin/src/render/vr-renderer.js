@@ -1,6 +1,7 @@
 // ==========================================
 // WebGL 2-Pass VR Renderer & Rectilinear Diagnostic
 // (Faithful implementation of Google CardboardView & CardboardBarrelDistortion)
+// With Explicit COMPILE_STATUS and LINK_STATUS Validation
 // ==========================================
 import { vsSource, fsIdealSceneSource, fsDistortionPassSource } from './shaders.js';
 import { Quat } from '../core/quaternion.js';
@@ -27,16 +28,37 @@ export class VRRenderer {
     this.initWebGL();
   }
 
-  createShader(glCtx, type, source) {
+  createShader(glCtx, type, source, shaderName) {
     const shader = glCtx.createShader(type);
     glCtx.shaderSource(shader, source);
     glCtx.compileShader(shader);
     if (!glCtx.getShaderParameter(shader, glCtx.COMPILE_STATUS)) {
-      console.error('Shader compile error:', glCtx.getShaderInfoLog(shader));
+      const log = glCtx.getShaderInfoLog(shader);
+      const errMsg = `[WebGL] ${shaderName || 'Shader'} compilation failed:\n${log}`;
+      console.error(errMsg);
       glCtx.deleteShader(shader);
-      return null;
+      throw new Error(errMsg);
     }
     return shader;
+  }
+
+  createProgram(glCtx, vsSrc, fsSrc, programName) {
+    const vs = this.createShader(glCtx, glCtx.VERTEX_SHADER, vsSrc, `${programName} (Vertex)`);
+    const fs = this.createShader(glCtx, glCtx.FRAGMENT_SHADER, fsSrc, `${programName} (Fragment)`);
+
+    const program = glCtx.createProgram();
+    glCtx.attachShader(program, vs);
+    glCtx.attachShader(program, fs);
+    glCtx.linkProgram(program);
+
+    if (!glCtx.getProgramParameter(program, glCtx.LINK_STATUS)) {
+      const log = glCtx.getProgramInfoLog(program);
+      const errMsg = `[WebGL] ${programName || 'Program'} link failed (LINK_STATUS=false):\n${log}`;
+      console.error(errMsg);
+      glCtx.deleteProgram(program);
+      throw new Error(errMsg);
+    }
+    return program;
   }
 
   initWebGL() {
@@ -49,26 +71,16 @@ export class VRRenderer {
     }
 
     const gl = this.gl;
-    if (!gl) return;
-
-    // 1. Pass 1: Ideal Scene Shader Program
-    const vs = this.createShader(gl, gl.VERTEX_SHADER, vsSource);
-    const fsScene = this.createShader(gl, gl.FRAGMENT_SHADER, fsIdealSceneSource);
-    if (vs && fsScene) {
-      this.programScene = gl.createProgram();
-      gl.attachShader(this.programScene, vs);
-      gl.attachShader(this.programScene, fsScene);
-      gl.linkProgram(this.programScene);
+    if (!gl) {
+      console.error('WebGL context unavailable');
+      return;
     }
 
-    // 2. Pass 2: Screen-Space Distortion Shader Program
-    const fsDistort = this.createShader(gl, gl.FRAGMENT_SHADER, fsDistortionPassSource);
-    if (vs && fsDistort) {
-      this.programDistort = gl.createProgram();
-      gl.attachShader(this.programDistort, vs);
-      gl.attachShader(this.programDistort, fsDistort);
-      gl.linkProgram(this.programDistort);
-    }
+    // 1. Pass 1: Ideal Scene Shader Program (with LINK_STATUS check)
+    this.programScene = this.createProgram(gl, vsSource, fsIdealSceneSource, 'Pass 1 Ideal Scene Program');
+
+    // 2. Pass 2: Screen-Space Distortion Shader Program (with LINK_STATUS check)
+    this.programDistort = this.createProgram(gl, vsSource, fsDistortionPassSource, 'Pass 2 Distortion Program');
 
     // Quad geometry
     this.posBuffer = gl.createBuffer();
