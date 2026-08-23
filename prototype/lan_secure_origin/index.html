@@ -356,7 +356,7 @@
         <span>🚀 Enter VR / Start Experiment</span>
       </button>
       <div class="subtitle" style="text-align:center; margin-top:4px;">
-        在 VR 中可通过注视 "🔀 Next Pattern" 或点击屏幕浮条快速切换 A/B/C
+        点击后有 3 秒倒计时，戴入眼镜并面朝正前方即可自动对准中心
       </div>
     </div>
 
@@ -411,7 +411,7 @@
         <div class="m-item">Cam Fwd: <span class="m-val" id="valCamFwd">0,0,-1</span></div>
         <div class="m-item">Head State: <span class="m-val" id="valHeadState">Center</span></div>
         <div class="m-item">Motion Perm: <span class="m-val" id="valMotionPerm">--</span></div>
-        <div class="m-item">Events: <span class="m-val" id="valEventCount">0</span></div>
+        <div class="m-item">Screen Lock: <span class="m-val" id="valWakeLock">Inactive</span></div>
       </div>
     </div>
   </div>
@@ -425,11 +425,37 @@
       }
       console.error(msg);
     }
-    window.onerror = (msg, url, line) => { showError(`${msg} (L${line})`); };
+    window.onerror = (msg, url, line) => { showError(msg + ' (L' + line + ')'); };
     window.onunhandledrejection = (e) => { showError(e.reason ? (e.reason.message || e.reason) : e); };
 
     // ==========================================
-    // 0. Web Audio API Synth Feedback
+    // 0. Screen Wake Lock & Anti-Sleep KeepAlive
+    // ==========================================
+    let wakeLockSentinel = null;
+    async function requestWakeLock() {
+      try {
+        if ('wakeLock' in navigator) {
+          wakeLockSentinel = await navigator.wakeLock.request('screen');
+          const el = document.getElementById('valWakeLock');
+          if (el) el.textContent = 'Active (NoSleep)';
+          wakeLockSentinel.addEventListener('release', () => {
+            const elR = document.getElementById('valWakeLock');
+            if (elR) elR.textContent = 'Released';
+          });
+        }
+      } catch (err) {
+        console.warn('WakeLock error:', err);
+      }
+    }
+
+    document.addEventListener('visibilitychange', async () => {
+      if (document.visibilityState === 'visible' && state.inVR) {
+        await requestWakeLock();
+      }
+    });
+
+    // ==========================================
+    // 1. Web Audio API Synth Feedback
     // ==========================================
     let audioCtx = null;
     function playAudioFeedback(type = 'activate') {
@@ -447,9 +473,23 @@
           gain.gain.exponentialRampToValueAtTime(0.001, now + 0.04);
           osc.start(now);
           osc.stop(now + 0.04);
+        } else if (type === 'tick') {
+          osc.frequency.setValueAtTime(520, now);
+          gain.gain.setValueAtTime(0.08, now);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + 0.06);
+          osc.start(now);
+          osc.stop(now + 0.06);
+        } else if (type === 'recenter_done') {
+          osc.frequency.setValueAtTime(523.25, now);
+          osc.frequency.setValueAtTime(659.25, now + 0.08);
+          osc.frequency.setValueAtTime(783.99, now + 0.16);
+          gain.gain.setValueAtTime(0.14, now);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
+          osc.start(now);
+          osc.stop(now + 0.35);
         } else if (type === 'activate') {
-          osc.frequency.setValueAtTime(587.33, now); // D5
-          osc.frequency.exponentialRampToValueAtTime(880, now + 0.09); // A5
+          osc.frequency.setValueAtTime(587.33, now);
+          osc.frequency.exponentialRampToValueAtTime(880, now + 0.09);
           gain.gain.setValueAtTime(0.12, now);
           gain.gain.exponentialRampToValueAtTime(0.001, now + 0.12);
           osc.start(now);
@@ -465,7 +505,7 @@
     }
 
     // ==========================================
-    // 1. Math: Quaternion Library (Camera-to-World)
+    // 2. Math: Quaternion Library (Camera-to-World)
     // ==========================================
     class Quat {
       constructor(x = 0, y = 0, z = 0, w = 1) {
@@ -537,7 +577,7 @@
     }
 
     // ==========================================
-    // 2. Global State
+    // 3. Global State
     // ==========================================
     const isStandalone = (window.navigator.standalone === true) || window.matchMedia('(display-mode: standalone)').matches;
 
@@ -577,6 +617,15 @@
       patternB_anchorPos: { yaw: 0, pitch: -16 },
       patternC_open: true,
 
+      // Recenter Posture Calibration State
+      recenterCountdown: {
+        active: false,
+        startTime: 0,
+        durationMs: 2500,
+        lastSecondTick: -1,
+        label: 'Recenter View'
+      },
+
       // Toast feedback
       toastText: '',
       toastTime: 0
@@ -610,11 +659,11 @@
       if (isNaN(seconds)) return '00:00';
       const m = Math.floor(seconds / 60);
       const s = Math.floor(seconds % 60);
-      return `${m < 10 ? '0' : ''}${m}:${s < 10 ? '0' : ''}${s}`;
+      return (m < 10 ? '0' : '') + m + ':' + (s < 10 ? '0' : '') + s;
     }
 
     // ==========================================
-    // 3. UX Telemetry Engine
+    // 4. UX Telemetry Engine
     // ==========================================
     class TelemetryEngine {
       constructor() {
@@ -645,19 +694,19 @@
         if (deg > 0.05 && deg < 45) {
           this.metrics[state.activePattern].travelDeg += deg;
         }
-        this.lastHeadFwd = [...newFwd];
+        this.lastHeadFwd = [newFwd[0], newFwd[1], newFwd[2]];
       }
 
       recordTargetEnter(pattern, targetId) {
         this.currentHoverTarget = targetId;
         this.hoverStartTime = performance.now();
         playAudioFeedback('hover');
-        this.sendEvent('targetEnter', { pattern, target: targetId });
+        this.sendEvent('targetEnter', { pattern: pattern, target: targetId });
       }
 
       recordDwellCancel(pattern, targetId, dwellMs) {
         this.metrics[pattern].cancels++;
-        this.sendEvent('dwellCancel', { pattern, target: targetId, dwellMs: Math.round(dwellMs) });
+        this.sendEvent('dwellCancel', { pattern: pattern, target: targetId, dwellMs: Math.round(dwellMs) });
         this.currentHoverTarget = null;
         this.hoverStartTime = 0;
         this.updateTable();
@@ -672,7 +721,7 @@
         playAudioFeedback('activate');
         triggerHaptic();
 
-        this.sendEvent('dwellComplete', { pattern, target: targetId, dwellMs: Math.round(dwellMs), timeToCmdMs: Math.round(timeToCmd) });
+        this.sendEvent('dwellComplete', { pattern: pattern, target: targetId, dwellMs: Math.round(dwellMs), timeToCmdMs: Math.round(timeToCmd) });
         this.currentHoverTarget = null;
         this.hoverStartTime = 0;
         this.updateTable();
@@ -701,7 +750,7 @@
 
       markTaskDone(taskKey) {
         this.completedTasks[taskKey] = true;
-        const row = document.querySelector(`.checklist-row[data-task="${taskKey}"] .chk-status`);
+        const row = document.querySelector('.checklist-row[data-task="' + taskKey + '"] .chk-status');
         if (row) {
           row.textContent = '✓ Done';
           row.className = 'chk-status chk-done';
@@ -719,12 +768,12 @@
       updateTable() {
         ['A', 'B', 'C'].forEach(p => {
           const m = this.metrics[p];
-          const row = document.getElementById(`row-${p}`);
+          const row = document.getElementById('row-' + p);
           if (!row) return;
           const avgDwell = m.dwellTimes.length ? (m.dwellTimes.reduce((a,b)=>a+b, 0) / m.dwellTimes.length).toFixed(0) + 'ms' : '--';
           const avgTimeToCmd = m.menuToCmdTimes.length ? (m.menuToCmdTimes.reduce((a,b)=>a+b, 0) / m.menuToCmdTimes.length).toFixed(0) + 'ms' : '--';
           const pName = p === 'A' ? 'A (Gaze Arc)' : p === 'B' ? 'B (Radial)' : 'C (Video HUD)';
-          row.innerHTML = `<td>${pName}</td><td>${m.activations}</td><td>${m.cancels}</td><td>${avgDwell}</td><td>${avgTimeToCmd}</td><td>${m.travelDeg.toFixed(1)}°</td>`;
+          row.innerHTML = '<td>' + pName + '</td><td>' + m.activations + '</td><td>' + m.cancels + '</td><td>' + avgDwell + '</td><td>' + avgTimeToCmd + '</td><td>' + m.travelDeg.toFixed(1) + '°</td>';
         });
       }
 
@@ -773,8 +822,18 @@
     const telemetry = new TelemetryEngine();
 
     // ==========================================
-    // 4. Common Command Model (Unified Across Patterns)
+    // 5. Common Command Model & Calibration Trigger
     // ==========================================
+    function startRecenterCalibration(durationMs = 2500, label = '校准姿势中 (Recenter)') {
+      state.recenterCountdown.active = true;
+      state.recenterCountdown.startTime = performance.now();
+      state.recenterCountdown.durationMs = durationMs;
+      state.recenterCountdown.lastSecondTick = -1;
+      state.recenterCountdown.label = label;
+      playAudioFeedback('tick');
+      showFeedbackToast('🎯 请面朝正前方调整舒适姿势...');
+    }
+
     const CommandModel = {
       playPause() {
         if (video.paused) {
@@ -804,18 +863,16 @@
       },
       seekBackward(sec = 10) {
         video.currentTime = Math.max(0, video.currentTime - sec);
-        showFeedbackToast(`⏪ -${sec}s (${formatTime(video.currentTime)})`);
-        telemetry.recordCommand(`seekBackward_${sec}s`);
+        showFeedbackToast('⏪ -' + sec + 's (' + formatTime(video.currentTime) + ')');
+        telemetry.recordCommand('seekBackward_' + sec + 's');
       },
       seekForward(sec = 10) {
         video.currentTime = Math.min(video.duration || 999999, video.currentTime + sec);
-        showFeedbackToast(`⏩ +${sec}s (${formatTime(video.currentTime)})`);
-        telemetry.recordCommand(`seekForward_${sec}s`);
+        showFeedbackToast('⏩ +' + sec + 's (' + formatTime(video.currentTime) + ')');
+        telemetry.recordCommand('seekForward_' + sec + 's');
       },
       recenter() {
-        recenterPose();
-        showFeedbackToast('🎯 View Recentered');
-        telemetry.recordCommand('recenter');
+        startRecenterCalibration(2500, '🎯 校准正前方视线');
       },
       openControls() {
         if (state.activePattern === 'B') {
@@ -842,7 +899,7 @@
         const idx = patterns.indexOf(state.activePattern);
         const nextPat = patterns[(idx + 1) % patterns.length];
         setPattern(nextPat);
-        showFeedbackToast(`Switched to Pattern ${nextPat}`);
+        showFeedbackToast('Switched to Pattern ' + nextPat);
       }
     };
 
@@ -852,7 +909,7 @@
       document.querySelectorAll('#grpPatternSelect button').forEach(b => {
         b.classList.toggle('active', b.getAttribute('data-pattern') === pat);
       });
-      btnVrSwitchPattern.textContent = `🔀 Pattern: ${pat}`;
+      btnVrSwitchPattern.textContent = '🔀 Pattern: ' + pat;
       if (pat === 'B') {
         state.patternB_open = false;
       } else if (pat === 'C') {
@@ -861,7 +918,7 @@
     }
 
     // ==========================================
-    // 5. WebGL VR Renderer Setup
+    // 6. WebGL VR Renderer Setup
     // ==========================================
     let gl = null;
     try {
@@ -885,15 +942,15 @@
       varying vec2 vUv;
 
       uniform sampler2D uVideoTexture;
-      uniform mat3 uCamRot;     // Camera-to-World rotation matrix
-      uniform int uStereoMode;  // 0: Left-to-Both, 1: SBS Normal, 2: SBS Swap, 3: 360 SBS
-      uniform int uEye;         // 0: Left Eye, 1: Right Eye
+      uniform mat3 uCamRot;
+      uniform int uStereoMode;
+      uniform int uEye;
       uniform float uAspect;
 
       const float PI = 3.14159265358979323846;
       const float HALF_PI = 1.57079632679489661923;
       const float TWO_PI = 6.28318530717958647692;
-      const float FOV = 1.65; // ~95 deg horizontal FOV
+      const float FOV = 1.65;
 
       void main() {
         vec2 ndc = (vUv - 0.5) * 2.0;
@@ -984,7 +1041,7 @@
     }
 
     // ==========================================
-    // 6. DeviceOrientation & Pose Recenter
+    // 7. DeviceOrientation & Pose Recenter
     // ==========================================
     const qCameraCorrect = new Quat(-Math.SQRT1_2, 0, 0, Math.SQRT1_2);
     const qScreenZ = new Quat();
@@ -1044,7 +1101,7 @@
       state.qCamera = [qCamera.x, qCamera.y, qCamera.z, qCamera.w];
 
       const elFwd = document.getElementById('valCamFwd');
-      if (elFwd) elFwd.textContent = `${state.cameraForward[0].toFixed(2)},${state.cameraForward[1].toFixed(2)},${state.cameraForward[2].toFixed(2)}`;
+      if (elFwd) elFwd.textContent = state.cameraForward[0].toFixed(2) + ',' + state.cameraForward[1].toFixed(2) + ',' + state.cameraForward[2].toFixed(2);
     }
 
     window.addEventListener('deviceorientation', (e) => {
@@ -1079,14 +1136,14 @@
       if (elEvt) elEvt.textContent = state.motionEventCount;
       const elFwd = document.getElementById('valCamFwd');
       const elHead = document.getElementById('valHeadState');
-      if (elFwd) elFwd.textContent = `${state.cameraForward[0].toFixed(2)},${state.cameraForward[1].toFixed(2)},${state.cameraForward[2].toFixed(2)}`;
+      if (elFwd) elFwd.textContent = state.cameraForward[0].toFixed(2) + ',' + state.cameraForward[1].toFixed(2) + ',' + state.cameraForward[2].toFixed(2);
       if (elHead) elHead.textContent = hState;
     }, { passive: true });
 
     // ==========================================
-    // 7. Stereo UI Math & Target Projection
+    // 8. Stereo UI Math & Target Projection
     // ==========================================
-    const FOV_RAD = 1.65; // ~95 deg
+    const FOV_RAD = 1.65;
     const TAN_HALF_FOV = Math.tan(FOV_RAD * 0.5);
 
     function sphericalToDir(yawDeg, pitchDeg) {
@@ -1100,11 +1157,10 @@
       ];
     }
 
-    // Projects a 3D world direction onto an eye's 2D canvas pixel coordinates
     function projectWorldDirToEye(dirWorld, eyeIndex, halfW, height) {
       const aspect = halfW / height;
       const dCam = qCameraInv.transformVector(dirWorld);
-      if (dCam[2] >= -0.01) return null; // Behind camera
+      if (dCam[2] >= -0.01) return null;
 
       const zDepth = -dCam[2];
       const ndcX = dCam[0] / (zDepth * TAN_HALF_FOV * aspect);
@@ -1117,7 +1173,6 @@
       return { x: px, y: py, ndcX, ndcY, zDepth };
     }
 
-    // Measure angular distance between head gaze (forward vector) and target world direction
     function getGazeAngularDistanceDeg(targetDirWorld) {
       const fwd = state.cameraForward;
       const dot = fwd[0] * targetDirWorld[0] + fwd[1] * targetDirWorld[1] + fwd[2] * targetDirWorld[2];
@@ -1125,12 +1180,10 @@
       return Math.acos(clamped) * (180 / Math.PI);
     }
 
-    // Build Interactive Items for current frame depending on active pattern
     function getActiveInteractiveItems() {
       const items = [];
 
       if (state.activePattern === 'A') {
-        // Pattern A: Center Gaze Arc docked at pitch -13°
         const arcButtons = [
           { id: 'pat_switch', label: '🔀 A/B/C', yaw: -30, pitch: -13, radiusDeg: 4.8, cmd: () => CommandModel.cyclePattern(), color: '#7c3aed' },
           { id: 'prev', label: '⏮ Prev', yaw: -20, pitch: -13, radiusDeg: 4.2, cmd: () => CommandModel.previous() },
@@ -1142,15 +1195,19 @@
         ];
         arcButtons.forEach(b => {
           items.push({
-            ...b,
+            id: b.id,
+            label: b.label,
+            yaw: b.yaw,
+            pitch: b.pitch,
+            radiusDeg: b.radiusDeg,
+            cmd: b.cmd,
+            color: b.color,
             pattern: 'A',
             dirWorld: sphericalToDir(b.yaw, b.pitch)
           });
         });
       } else if (state.activePattern === 'B') {
-        // Pattern B: Radial Menu (Daydream Elements style)
         if (!state.patternB_open) {
-          // Closed: Small summon anchor at pitch -16°
           items.push({
             id: 'open_radial',
             label: '🔘 Open Menu',
@@ -1163,11 +1220,9 @@
             dirWorld: sphericalToDir(0, -16)
           });
         } else {
-          // Open: Radial ring surrounding gaze anchor
           const anchorPitch = -12;
           const radialR = 13.5;
 
-          // Center Dead-Zone (Close)
           items.push({
             id: 'close_radial',
             label: '✕ Close',
@@ -1206,7 +1261,6 @@
             });
           });
 
-          // Top helper node for pattern switch
           items.push({
             id: 'pat_switch',
             label: '🔀 A/B/C',
@@ -1220,7 +1274,6 @@
           });
         }
       } else if (state.activePattern === 'C') {
-        // Pattern C: Video HUD with timeline & playback panel
         if (!state.patternC_open) {
           items.push({
             id: 'open_hud',
@@ -1234,19 +1287,16 @@
             dirWorld: sphericalToDir(0, -16)
           });
         } else {
-          // Row 1: Scrubber jump zones (-60s, -10s, +10s, +60s)
           items.push({ id: 'seek_b60', label: '-60s', pattern: 'C', yaw: -18, pitch: -7, radiusDeg: 3.8, cmd: () => CommandModel.seekBackward(60) });
           items.push({ id: 'seek_b10', label: '-10s', pattern: 'C', yaw: -8, pitch: -7, radiusDeg: 3.8, cmd: () => CommandModel.seekBackward(10) });
           items.push({ id: 'seek_f10', label: '+10s', pattern: 'C', yaw: 8, pitch: -7, radiusDeg: 3.8, cmd: () => CommandModel.seekForward(10) });
           items.push({ id: 'seek_f60', label: '+60s', pattern: 'C', yaw: 18, pitch: -7, radiusDeg: 3.8, cmd: () => CommandModel.seekForward(60) });
 
-          // Row 2: Transport bar
           items.push({ id: 'prev', label: '⏮ Prev', pattern: 'C', yaw: -20, pitch: -15, radiusDeg: 4.4, cmd: () => CommandModel.previous() });
           items.push({ id: 'play_pause', label: video.paused ? '▶ Play' : '⏸ Pause', pattern: 'C', yaw: -7, pitch: -15, radiusDeg: 5.2, cmd: () => CommandModel.playPause(), color: '#2563eb' });
           items.push({ id: 'next', label: '⏭ Next', pattern: 'C', yaw: 7, pitch: -15, radiusDeg: 4.4, cmd: () => CommandModel.next() });
           items.push({ id: 'recenter', label: '🎯 Center', pattern: 'C', yaw: 20, pitch: -15, radiusDeg: 4.4, cmd: () => CommandModel.recenter(), color: '#059669' });
 
-          // Row 3: Top utility controls
           items.push({ id: 'pat_switch', label: '🔀 A/B/C', pattern: 'C', yaw: -22, pitch: -22, radiusDeg: 3.8, color: '#7c3aed', cmd: () => CommandModel.cyclePattern() });
           items.push({ id: 'close_hud', label: '✕ Close', pattern: 'C', yaw: 22, pitch: -22, radiusDeg: 3.8, color: '#ef4444', cmd: () => CommandModel.closeControls() });
         }
@@ -1255,7 +1305,7 @@
       return items;
     }
 
-    // Dwell State Machine
+    // Dwell & Calibration State Machine
     let currentHoveredItem = null;
     let dwellProgress = 0;
     let activationFlashTime = 0;
@@ -1264,6 +1314,30 @@
 
     function updateDwellInteraction(now) {
       if (!state.inVR) return;
+
+      // Handle Recenter Posture Calibration Countdown
+      if (state.recenterCountdown.active) {
+        currentHoveredItem = null;
+        dwellProgress = 0;
+        const elapsed = now - state.recenterCountdown.startTime;
+        const remainingSec = Math.max(1, Math.ceil((state.recenterCountdown.durationMs - elapsed) / 1000));
+        
+        if (remainingSec !== state.recenterCountdown.lastSecondTick) {
+          state.recenterCountdown.lastSecondTick = remainingSec;
+          playAudioFeedback('tick');
+        }
+
+        if (elapsed >= state.recenterCountdown.durationMs) {
+          state.recenterCountdown.active = false;
+          recenterPose();
+          playAudioFeedback('recenter_done');
+          triggerHaptic();
+          telemetry.recordCommand('recenter');
+          showFeedbackToast('🎯 视角已精准校准至正前方！');
+          actionCooldownUntil = now + 500;
+        }
+        return;
+      }
 
       if (now < actionCooldownUntil) {
         dwellProgress = 0;
@@ -1282,7 +1356,6 @@
         }
       });
 
-      // Auto-close Pattern B if looking far away (>24°)
       if (state.activePattern === 'B' && state.patternB_open) {
         const centerDir = sphericalToDir(0, -12);
         const distToCenter = getGazeAngularDistanceDeg(centerDir);
@@ -1293,7 +1366,6 @@
 
       if (bestItem) {
         if (!currentHoveredItem || currentHoveredItem.id !== bestItem.id) {
-          // Exited previous target
           if (currentHoveredItem) {
             telemetry.recordDwellCancel(state.activePattern, currentHoveredItem.id, (now - telemetry.hoverStartTime));
           }
@@ -1305,10 +1377,9 @@
         dwellProgress = Math.min(1.0, elapsed / state.dwellThresholdMs);
 
         if (dwellProgress >= 1.0) {
-          // Activate!
           activatedItemId = bestItem.id;
           activationFlashTime = now;
-          actionCooldownUntil = now + 400; // 400ms cooldown to avoid repeat fires
+          actionCooldownUntil = now + 400;
           telemetry.recordDwellComplete(state.activePattern, bestItem.id, elapsed);
           bestItem.cmd();
           dwellProgress = 0;
@@ -1324,7 +1395,7 @@
     }
 
     // ==========================================
-    // 8. Stereo Canvas UI Rendering
+    // 9. Stereo Canvas UI Rendering
     // ==========================================
     function renderStereoUI(now, width, height) {
       if (!uiCtx) return;
@@ -1345,7 +1416,57 @@
         uiCtx.rect(eyeOffsetX, 0, halfW, height);
         uiCtx.clip();
 
-        // 1. Draw In-VR Status Bar (Top of field of view)
+        // Check if in Recenter Calibration Posture Countdown
+        if (state.recenterCountdown.active) {
+          const elapsed = now - state.recenterCountdown.startTime;
+          const dur = state.recenterCountdown.durationMs;
+          const remainSec = Math.max(1, Math.ceil((dur - elapsed) / 1000));
+          const progress = Math.max(0, Math.min(1, elapsed / dur));
+
+          const cardW = 340, cardH = 170;
+          uiCtx.fillStyle = 'rgba(15, 23, 42, 0.92)';
+          uiCtx.strokeStyle = '#38bdf8';
+          uiCtx.lineWidth = 2.5;
+          roundRect(uiCtx, eyeCenterX - cardW/2, eyeCenterY - cardH/2, cardW, cardH, 20, true, true);
+
+          uiCtx.font = 'bold 15px -apple-system, sans-serif';
+          uiCtx.fillStyle = '#38bdf8';
+          uiCtx.textAlign = 'center';
+          uiCtx.textBaseline = 'top';
+          uiCtx.fillText(state.recenterCountdown.label, eyeCenterX, eyeCenterY - cardH/2 + 16);
+
+          uiCtx.font = '13px -apple-system, sans-serif';
+          uiCtx.fillStyle = '#e2e8f0';
+          uiCtx.fillText('请调整好舒适坐姿，面朝正前方', eyeCenterX, eyeCenterY - cardH/2 + 40);
+
+          const numCenterY = eyeCenterY + 22;
+          uiCtx.beginPath();
+          uiCtx.arc(eyeCenterX, numCenterY, 30, 0, Math.PI * 2);
+          uiCtx.fillStyle = 'rgba(30, 41, 59, 0.9)';
+          uiCtx.fill();
+          uiCtx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
+          uiCtx.lineWidth = 3;
+          uiCtx.stroke();
+
+          uiCtx.beginPath();
+          const startAngle = -Math.PI / 2;
+          const endAngle = startAngle + (Math.PI * 2 * (1.0 - progress));
+          uiCtx.arc(eyeCenterX, numCenterY, 30, startAngle, endAngle);
+          uiCtx.strokeStyle = '#34d399';
+          uiCtx.lineWidth = 4;
+          uiCtx.stroke();
+
+          uiCtx.font = 'bold 26px -apple-system, monospace';
+          uiCtx.fillStyle = '#ffffff';
+          uiCtx.textAlign = 'center';
+          uiCtx.textBaseline = 'middle';
+          uiCtx.fillText(remainSec, eyeCenterX, numCenterY);
+
+          uiCtx.restore();
+          continue;
+        }
+
+        // 1. Draw In-VR Status Bar
         const hudProj = projectWorldDirToEye(sphericalToDir(0, 18), eye, halfW, height);
         if (hudProj) {
           uiCtx.fillStyle = 'rgba(15, 23, 42, 0.7)';
@@ -1357,11 +1478,11 @@
           uiCtx.font = 'bold 12px -apple-system, sans-serif';
           uiCtx.fillStyle = '#38bdf8';
           uiCtx.textAlign = 'left';
-          uiCtx.fillText(`Pattern ${state.activePattern}: ${state.activePattern === 'A' ? 'Gaze Arc' : state.activePattern === 'B' ? 'Radial Menu' : 'Video HUD'}`, hudProj.x - panelW/2 + 14, hudProj.y + 4);
+          uiCtx.fillText('Pattern ' + state.activePattern + ': ' + (state.activePattern === 'A' ? 'Gaze Arc' : state.activePattern === 'B' ? 'Radial Menu' : 'Video HUD'), hudProj.x - panelW/2 + 14, hudProj.y + 4);
 
           uiCtx.fillStyle = '#94a3b8';
           uiCtx.textAlign = 'right';
-          uiCtx.fillText(`${formatTime(video.currentTime)} / ${formatTime(video.duration)}`, hudProj.x + panelW/2 - 14, hudProj.y + 4);
+          uiCtx.fillText(formatTime(video.currentTime) + ' / ' + formatTime(video.duration), hudProj.x + panelW/2 - 14, hudProj.y + 4);
         }
 
         // 2. Draw Interactive UI Nodes
@@ -1375,37 +1496,33 @@
 
           uiCtx.save();
 
-          // Button Glow & Background
           if (isActivated) {
             uiCtx.fillStyle = 'rgba(16, 185, 129, 0.9)';
             uiCtx.strokeStyle = '#34d399';
             uiCtx.lineWidth = 3;
           } else if (isHovered) {
-            uiCtx.fillStyle = item.color ? `${item.color}cc` : 'rgba(37, 99, 235, 0.85)';
+            uiCtx.fillStyle = item.color ? (item.color + 'cc') : 'rgba(37, 99, 235, 0.85)';
             uiCtx.strokeStyle = '#38bdf8';
             uiCtx.lineWidth = 2.5;
             uiCtx.shadowColor = '#38bdf8';
             uiCtx.shadowBlur = 12;
           } else {
-            uiCtx.fillStyle = item.color ? `${item.color}66` : 'rgba(15, 23, 42, 0.75)';
+            uiCtx.fillStyle = item.color ? (item.color + '66') : 'rgba(15, 23, 42, 0.75)';
             uiCtx.strokeStyle = 'rgba(255, 255, 255, 0.25)';
             uiCtx.lineWidth = 1.2;
           }
 
-          // Draw Rounded Button Pill
           const pillW = Math.max(btnRadius * 2.2, 70);
           const pillH = btnRadius * 1.6;
           roundRect(uiCtx, p.x - pillW/2, p.y - pillH/2, pillW, pillH, pillH/2, true, true);
 
-          // Dwell Progress Filling Gauge on Button
           if (isHovered && dwellProgress > 0) {
             uiCtx.fillStyle = 'rgba(255, 255, 255, 0.3)';
             roundRect(uiCtx, p.x - pillW/2, p.y - pillH/2, pillW * dwellProgress, pillH, pillH/2, true, false);
           }
 
-          // Label
           uiCtx.shadowBlur = 0;
-          uiCtx.font = `bold ${Math.round(btnRadius * 0.55)}px -apple-system, sans-serif`;
+          uiCtx.font = 'bold ' + Math.round(btnRadius * 0.55) + 'px -apple-system, sans-serif';
           uiCtx.fillStyle = '#ffffff';
           uiCtx.textAlign = 'center';
           uiCtx.textBaseline = 'middle';
@@ -1415,18 +1532,18 @@
         });
 
         // 3. Feedback Toast
-        if (state.toastText && (now - state.toastTime < 2000)) {
-          const alpha = Math.min(1.0, 1.0 - (now - state.toastTime - 1200) / 800);
+        if (state.toastText && (now - state.toastTime < 2200)) {
+          const alpha = Math.min(1.0, 1.0 - (now - state.toastTime - 1400) / 800);
           if (alpha > 0) {
-            uiCtx.fillStyle = `rgba(15, 23, 42, ${0.85 * alpha})`;
-            uiCtx.strokeStyle = `rgba(56, 189, 248, ${0.8 * alpha})`;
+            uiCtx.fillStyle = 'rgba(15, 23, 42, ' + (0.88 * alpha) + ')';
+            uiCtx.strokeStyle = 'rgba(56, 189, 248, ' + (0.85 * alpha) + ')';
             uiCtx.lineWidth = 1.5;
-            const tw = 240, th = 32;
+            const tw = 260, th = 34;
             const toastY = eyeCenterY - 90;
-            roundRect(uiCtx, eyeCenterX - tw/2, toastY - th/2, tw, th, 16, true, true);
+            roundRect(uiCtx, eyeCenterX - tw/2, toastY - th/2, tw, th, 17, true, true);
 
             uiCtx.font = 'bold 13px -apple-system, sans-serif';
-            uiCtx.fillStyle = `rgba(255, 255, 255, ${alpha})`;
+            uiCtx.fillStyle = 'rgba(255, 255, 255, ' + alpha + ')';
             uiCtx.textAlign = 'center';
             uiCtx.textBaseline = 'middle';
             uiCtx.fillText(state.toastText, eyeCenterX, toastY);
@@ -1437,20 +1554,17 @@
         const isHovering = currentHoveredItem !== null;
         const reticleR = isHovering ? 14 : 9;
 
-        // Outer Reticle Ring
         uiCtx.beginPath();
         uiCtx.arc(eyeCenterX, eyeCenterY, reticleR, 0, Math.PI * 2);
         uiCtx.strokeStyle = isHovering ? '#38bdf8' : 'rgba(255, 255, 255, 0.7)';
         uiCtx.lineWidth = isHovering ? 2.5 : 1.5;
         uiCtx.stroke();
 
-        // Inner Dot
         uiCtx.beginPath();
         uiCtx.arc(eyeCenterX, eyeCenterY, 3, 0, Math.PI * 2);
         uiCtx.fillStyle = isHovering ? '#38bdf8' : 'rgba(255, 255, 255, 0.9)';
         uiCtx.fill();
 
-        // Dwell Radial Progress Arc
         if (isHovering && dwellProgress > 0) {
           uiCtx.beginPath();
           const startAngle = -Math.PI / 2;
@@ -1461,13 +1575,12 @@
           uiCtx.stroke();
         }
 
-        // Activation Ripple Pulse
         if (now - activationFlashTime < 250) {
           const pulseProgress = (now - activationFlashTime) / 250;
           const pulseR = reticleR + pulseProgress * 24;
           uiCtx.beginPath();
           uiCtx.arc(eyeCenterX, eyeCenterY, pulseR, 0, Math.PI * 2);
-          uiCtx.strokeStyle = `rgba(52, 211, 153, ${1.0 - pulseProgress})`;
+          uiCtx.strokeStyle = 'rgba(52, 211, 153, ' + (1.0 - pulseProgress) + ')';
           uiCtx.lineWidth = 2.5;
           uiCtx.stroke();
         }
@@ -1494,7 +1607,7 @@
     }
 
     // ==========================================
-    // 9. Main Render Loop
+    // 10. Main Render Loop
     // ==========================================
     let lastFpsTime = performance.now();
     let frameCounter = 0;
@@ -1573,7 +1686,7 @@
     requestAnimationFrame(renderLoop);
 
     // ==========================================
-    // 10. UI Setup & Video Loading
+    // 11. UI Setup & Video Loading
     // ==========================================
     async function loadVideoList() {
       try {
@@ -1585,7 +1698,7 @@
           data.videos.forEach((v, idx) => {
             const opt = document.createElement('option');
             opt.value = v.relPath;
-            opt.textContent = `[${v.sizeGB}] ${v.name}`;
+            opt.textContent = '[' + v.sizeGB + '] ' + v.name;
             videoSelect.appendChild(opt);
           });
           selectVideo(data.videos[0].relPath);
@@ -1598,7 +1711,7 @@
 
     function selectVideo(relPath) {
       state.videoPath = relPath;
-      video.src = `/video?path=${encodeURIComponent(relPath)}`;
+      video.src = '/video?path=' + encodeURIComponent(relPath);
       video.load();
       if (state.inVR) {
         video.play().catch(e => console.log('play catch:', e));
@@ -1615,13 +1728,13 @@
       state.videoHeight = video.videoHeight;
       const elRes = document.getElementById('valVideoRes');
       const elDur = document.getElementById('valVideoDur');
-      if (elRes) elRes.textContent = `${video.videoWidth}x${video.videoHeight}`;
-      if (elDur) elDur.textContent = `${video.duration.toFixed(1)}s`;
+      if (elRes) elRes.textContent = video.videoWidth + 'x' + video.videoHeight;
+      if (elDur) elDur.textContent = video.duration.toFixed(1) + 's';
     });
 
     video.addEventListener('timeupdate', () => {
       const elTime = document.getElementById('valVideoTime');
-      if (elTime) elTime.textContent = `${video.currentTime.toFixed(1)}s`;
+      if (elTime) elTime.textContent = video.currentTime.toFixed(1) + 's';
     });
 
     video.addEventListener('play', () => {
@@ -1635,7 +1748,7 @@
     });
 
     video.addEventListener('error', (e) => {
-      const err = video.error ? `${video.error.code}: ${video.error.message}` : 'unknown error';
+      const err = video.error ? (video.error.code + ': ' + video.error.message) : 'unknown error';
       showError('Video decode error: ' + err);
     });
 
@@ -1657,7 +1770,7 @@
         grpDwellThreshold.querySelectorAll('button').forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
         state.dwellThresholdMs = parseInt(btn.getAttribute('data-dwell'), 10);
-        showFeedbackToast(`Dwell: ${state.dwellThresholdMs}ms`);
+        showFeedbackToast('Dwell: ' + state.dwellThresholdMs + 'ms');
       }
     });
 
@@ -1685,23 +1798,26 @@
         if (elPerm) elPerm.textContent = 'Standard';
       }
 
-      // 2. Play Video on user click
+      // 2. Acquire Screen WakeLock
+      requestWakeLock();
+
+      // 3. Play Video & Resume Audio Context
       video.muted = false;
       video.play().catch((e) => {
         console.log('Video play error on gesture:', e);
         video.muted = true;
         video.play().catch(e2 => console.log('Muted play error:', e2));
       });
+      if (audioCtx && audioCtx.state === 'suspended') {
+        audioCtx.resume();
+      }
 
-      // 3. Recenter Pose at entry
+      // 4. Enter Fullscreen VR View & start initial 3s calibration
       updateScreenOrientation();
-      recenterPose();
-
-      // 4. Enter Fullscreen VR View
       state.inVR = true;
       uiOverlay.classList.add('hidden');
       showFloatingBar();
-      showFeedbackToast(`Started in Pattern ${state.activePattern}`);
+      startRecenterCalibration(3000, '🥽 戴入眼镜并面朝正前方');
     });
 
     // Floating Bar Reveal
@@ -1730,7 +1846,7 @@
     document.getElementById('btnVrToggleStereo').addEventListener('click', (e) => {
       e.stopPropagation();
       state.stereoMode = (state.stereoMode + 1) % 3;
-      showFeedbackToast(`Stereo Mode: ${state.stereoMode}`);
+      showFeedbackToast('Stereo Mode: ' + state.stereoMode);
     });
     document.getElementById('btnVrExit').addEventListener('click', (e) => {
       e.stopPropagation();
