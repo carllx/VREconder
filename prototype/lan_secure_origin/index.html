@@ -8,7 +8,7 @@
   <meta name="apple-mobile-web-app-title" content="VREconder">
   <meta name="apple-touch-fullscreen" content="yes">
   <link rel="manifest" href="/manifest.json">
-  <title>VREconder VR Web Player - In-Headset Controls</title>
+  <title>VREconder VR Web Player - Optimized In-Headset Controls</title>
   <style>
     :root {
       --bg: #090d16;
@@ -258,7 +258,7 @@
       color: #fff;
       border: none;
       border-radius: 18px;
-      padding: 8px 12px;
+      padding: 8px 14px;
       font-size: 0.78rem;
       font-weight: 600;
       cursor: pointer;
@@ -296,9 +296,8 @@
 
   <!-- In-VR Floating Quick Bar (Tap screen in VR to reveal) -->
   <div id="vrFloatingBar" class="fade-out">
-    <button class="vr-btn vr-btn-pattern" id="btnVrSwitchPattern">🔀 Pattern: A</button>
+    <button class="vr-btn vr-btn-pattern" id="btnVrSwitchPattern">🔀 Pattern: B</button>
     <button class="vr-btn vr-btn-reset" id="btnVrReset">🎯 Recenter</button>
-    <button class="vr-btn" id="btnVrToggleStereo">👁 Stereo</button>
     <button class="vr-btn vr-btn-exit" id="btnVrExit">⚙ Exit VR</button>
   </div>
 
@@ -308,18 +307,18 @@
 
     <div class="card">
       <div style="display:flex; justify-content:space-between; align-items:center;">
-        <h1>🥽 VREconder UX Patterns (Issue #9)</h1>
+        <h1>🥽 VREconder 3D VR Player (Issue #9)</h1>
         <span class="status-badge" id="badgeDisplayMode">Browser Tab</span>
       </div>
-      <div class="subtitle">A. Center Gaze + Dwell &bull; B. Radial Menu &bull; C. Video HUD</div>
+      <div class="subtitle">3D Stereoscopic 180° SBS &bull; Hidden Minimalist In-Headset Controls</div>
     </div>
 
     <!-- Pattern Selection -->
     <div class="card">
       <div class="label">1. Active UX Pattern Experiment</div>
       <div class="btn-grid-3" id="grpPatternSelect">
-        <button class="opt-btn active" data-pattern="A">Pattern A<br><span style="font-size:0.68rem;opacity:0.8;">Center Gaze Arc</span></button>
-        <button class="opt-btn pattern-b" data-pattern="B">Pattern B<br><span style="font-size:0.68rem;opacity:0.8;">Radial Menu</span></button>
+        <button class="opt-btn" data-pattern="A">Pattern A<br><span style="font-size:0.68rem;opacity:0.8;">Bottom Arc</span></button>
+        <button class="opt-btn pattern-b active" data-pattern="B">Pattern B (推荐)<br><span style="font-size:0.68rem;opacity:0.8;">Radial Menu</span></button>
         <button class="opt-btn pattern-c" data-pattern="C">Pattern C<br><span style="font-size:0.68rem;opacity:0.8;">Video HUD</span></button>
       </div>
 
@@ -336,7 +335,7 @@
 
     <!-- Media Source Selection -->
     <div class="card">
-      <div class="label">2. VR Media Source (G:\Media\VR)</div>
+      <div class="label">2. 3D VR Media Source (G:\Media\VR)</div>
       <select id="videoSelect">
         <option value="4K/4096_2048_crf18_avc1-Kururugi Aoi - WAVR224.mp4">[6.09 GB] 4K/4096_2048_crf18_avc1-Kururugi Aoi - WAVR224.mp4</option>
       </select>
@@ -351,19 +350,19 @@
 
     <!-- Enter VR Button -->
     <div class="card">
-      <div class="label">3. Launch VR Headset View</div>
+      <div class="label">3. Launch 3D Stereo VR View</div>
       <button class="btn-main" id="btnEnterVR">
-        <span>🚀 Enter VR / Start Experiment</span>
+        <span>🚀 Enter 3D VR / Start Viewing</span>
       </button>
       <div class="subtitle" style="text-align:center; margin-top:4px;">
-        点击后有 3 秒倒计时，戴入眼镜并面朝正前方即可自动对准中心
+        观看时默认 100% 全屏无遮挡；低头看下方 ⚡ 触发点即可呼出紧凑图标菜单
       </div>
     </div>
 
     <!-- Test Protocol Checklist -->
     <div class="card">
       <div style="display:flex; justify-content:space-between; align-items:center;">
-        <div class="label">4. Standardized Task Checklist (2-3 min per pattern)</div>
+        <div class="label">4. Standardized Task Checklist</div>
         <button id="btnResetTasks" style="background:#334155;color:#cbd5e1;border:none;border-radius:4px;padding:2px 6px;font-size:0.7rem;cursor:pointer;">Reset Tasks</button>
       </div>
       <div id="checklistContainer" style="margin-top:4px;">
@@ -395,8 +394,8 @@
           </tr>
         </thead>
         <tbody id="telemetryTableBody">
-          <tr id="row-A"><td>A (Gaze Arc)</td><td>0</td><td>0</td><td>--</td><td>--</td><td>0.0°</td></tr>
-          <tr id="row-B"><td>B (Radial)</td><td>0</td><td>0</td><td>--</td><td>--</td><td>0.0°</td></tr>
+          <tr id="row-A"><td>A (Bottom Arc)</td><td>0</td><td>0</td><td>--</td><td>--</td><td>0.0°</td></tr>
+          <tr id="row-B"><td>B (Radial Menu)</td><td>0</td><td>0</td><td>--</td><td>--</td><td>0.0°</td></tr>
           <tr id="row-C"><td>C (Video HUD)</td><td>0</td><td>0</td><td>--</td><td>--</td><td>0.0°</td></tr>
         </tbody>
       </table>
@@ -407,11 +406,11 @@
       <div class="label">6. Real-time Diagnostics</div>
       <div class="metrics-grid">
         <div class="m-item">FPS: <span class="m-val" id="valFps">0.0</span></div>
-        <div class="m-item">Screen Ang: <span class="m-val" id="valScreenAngle">0°</span></div>
+        <div class="m-item">Mode: <span class="m-val" id="valStereoMode">3D SBS 180°</span></div>
         <div class="m-item">Cam Fwd: <span class="m-val" id="valCamFwd">0,0,-1</span></div>
-        <div class="m-item">Head State: <span class="m-val" id="valHeadState">Center</span></div>
-        <div class="m-item">Motion Perm: <span class="m-val" id="valMotionPerm">--</span></div>
-        <div class="m-item">Screen Lock: <span class="m-val" id="valWakeLock">Inactive</span></div>
+        <div class="m-item">Head: <span class="m-val" id="valHeadState">Center</span></div>
+        <div class="m-item">Motion: <span class="m-val" id="valMotionPerm">--</span></div>
+        <div class="m-item">NoSleep: <span class="m-val" id="valWakeLock">Inactive</span></div>
       </div>
     </div>
   </div>
@@ -468,39 +467,39 @@
         gain.connect(audioCtx.destination);
         const now = audioCtx.currentTime;
         if (type === 'hover') {
-          osc.frequency.setValueAtTime(440, now);
-          gain.gain.setValueAtTime(0.04, now);
-          gain.gain.exponentialRampToValueAtTime(0.001, now + 0.04);
+          osc.frequency.setValueAtTime(480, now);
+          gain.gain.setValueAtTime(0.03, now);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + 0.03);
           osc.start(now);
-          osc.stop(now + 0.04);
+          osc.stop(now + 0.03);
         } else if (type === 'tick') {
           osc.frequency.setValueAtTime(520, now);
-          gain.gain.setValueAtTime(0.08, now);
-          gain.gain.exponentialRampToValueAtTime(0.001, now + 0.06);
+          gain.gain.setValueAtTime(0.06, now);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + 0.05);
           osc.start(now);
-          osc.stop(now + 0.06);
+          osc.stop(now + 0.05);
         } else if (type === 'recenter_done') {
           osc.frequency.setValueAtTime(523.25, now);
           osc.frequency.setValueAtTime(659.25, now + 0.08);
           osc.frequency.setValueAtTime(783.99, now + 0.16);
-          gain.gain.setValueAtTime(0.14, now);
-          gain.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
-          osc.start(now);
-          osc.stop(now + 0.35);
-        } else if (type === 'activate') {
-          osc.frequency.setValueAtTime(587.33, now);
-          osc.frequency.exponentialRampToValueAtTime(880, now + 0.09);
           gain.gain.setValueAtTime(0.12, now);
-          gain.gain.exponentialRampToValueAtTime(0.001, now + 0.12);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + 0.3);
           osc.start(now);
-          osc.stop(now + 0.12);
+          osc.stop(now + 0.3);
+        } else if (type === 'activate') {
+          osc.frequency.setValueAtTime(620, now);
+          osc.frequency.exponentialRampToValueAtTime(880, now + 0.08);
+          gain.gain.setValueAtTime(0.1, now);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + 0.1);
+          osc.start(now);
+          osc.stop(now + 0.1);
         }
       } catch (e) {}
     }
 
     function triggerHaptic() {
       if (navigator.vibrate) {
-        navigator.vibrate(40);
+        navigator.vibrate(30);
       }
     }
 
@@ -577,15 +576,15 @@
     }
 
     // ==========================================
-    // 3. Global State
+    // 3. Global State (Default 3D Stereoscopic SBS)
     // ==========================================
     const isStandalone = (window.navigator.standalone === true) || window.matchMedia('(display-mode: standalone)').matches;
 
     const state = {
       inVR: false,
       standalone: isStandalone,
-      stereoMode: 0, // 0: LEFT_MONO, 1: SBS_NORMAL, 2: SBS_SWAP, 3: 360_SBS
-      activePattern: 'A', // 'A' | 'B' | 'C'
+      stereoMode: 1, // 1: 3D SBS Stereoscopic (True 3D VR)
+      activePattern: 'B', // Default to Pattern B (Radial)
       dwellThresholdMs: 1000,
       
       // Video Playlist
@@ -612,10 +611,10 @@
       viewport: { w: window.innerWidth, h: window.innerHeight, dpr: window.devicePixelRatio },
       headStateText: 'Center',
 
-      // Pattern States
+      // Pattern States - Default 100% Hidden
+      patternA_open: false,
       patternB_open: false,
-      patternB_anchorPos: { yaw: 0, pitch: -16 },
-      patternC_open: true,
+      patternC_open: false,
 
       // Recenter Posture Calibration State
       recenterCountdown: {
@@ -731,7 +730,6 @@
         const timeToCmd = Math.max(0, performance.now() - this.menuOpenTime);
         this.sendEvent('commandInvoked', { pattern: state.activePattern, command: commandId, timeToCmdMs: Math.round(timeToCmd) });
         
-        // Check task checklist
         if (commandId === 'playPause') {
           if (video.paused) this.markTaskDone('pause');
           else this.markTaskDone('play');
@@ -772,7 +770,7 @@
           if (!row) return;
           const avgDwell = m.dwellTimes.length ? (m.dwellTimes.reduce((a,b)=>a+b, 0) / m.dwellTimes.length).toFixed(0) + 'ms' : '--';
           const avgTimeToCmd = m.menuToCmdTimes.length ? (m.menuToCmdTimes.reduce((a,b)=>a+b, 0) / m.menuToCmdTimes.length).toFixed(0) + 'ms' : '--';
-          const pName = p === 'A' ? 'A (Gaze Arc)' : p === 'B' ? 'B (Radial)' : 'C (Video HUD)';
+          const pName = p === 'A' ? 'A (Bottom Arc)' : p === 'B' ? 'B (Radial Menu)' : 'C (Video HUD)';
           row.innerHTML = '<td>' + pName + '</td><td>' + m.activations + '</td><td>' + m.cancels + '</td><td>' + avgDwell + '</td><td>' + avgTimeToCmd + '</td><td>' + m.travelDeg.toFixed(1) + '°</td>';
         });
       }
@@ -831,17 +829,17 @@
       state.recenterCountdown.lastSecondTick = -1;
       state.recenterCountdown.label = label;
       playAudioFeedback('tick');
-      showFeedbackToast('🎯 请面朝正前方调整舒适姿势...');
+      showFeedbackToast('🎯 请面朝正前方坐正...');
     }
 
     const CommandModel = {
       playPause() {
         if (video.paused) {
           video.play().catch(e => console.log('Play error:', e));
-          showFeedbackToast('▶ Playing');
+          showFeedbackToast('▶ 播放中');
         } else {
           video.pause();
-          showFeedbackToast('⏸ Paused');
+          showFeedbackToast('⏸ 已暂停');
         }
         telemetry.recordCommand('playPause');
       },
@@ -849,7 +847,7 @@
         if (state.videoList && state.videoList.length > 0) {
           state.currentVideoIndex = (state.currentVideoIndex - 1 + state.videoList.length) % state.videoList.length;
           selectVideo(state.videoList[state.currentVideoIndex].relPath);
-          showFeedbackToast('⏮ Previous Video');
+          showFeedbackToast('⏮ 上一个视频');
         }
         telemetry.recordCommand('previous');
       },
@@ -857,7 +855,7 @@
         if (state.videoList && state.videoList.length > 0) {
           state.currentVideoIndex = (state.currentVideoIndex + 1) % state.videoList.length;
           selectVideo(state.videoList[state.currentVideoIndex].relPath);
-          showFeedbackToast('⏭ Next Video');
+          showFeedbackToast('⏭ 下一个视频');
         }
         telemetry.recordCommand('next');
       },
@@ -875,31 +873,24 @@
         startRecenterCalibration(2500, '🎯 校准正前方视线');
       },
       openControls() {
-        if (state.activePattern === 'B') {
-          state.patternB_open = true;
-          telemetry.menuOpenTime = performance.now();
-          showFeedbackToast('Radial Menu Opened');
-        } else if (state.activePattern === 'C') {
-          state.patternC_open = true;
-          telemetry.menuOpenTime = performance.now();
-          showFeedbackToast('Video HUD Opened');
-        }
+        if (state.activePattern === 'A') state.patternA_open = true;
+        if (state.activePattern === 'B') state.patternB_open = true;
+        if (state.activePattern === 'C') state.patternC_open = true;
+        telemetry.menuOpenTime = performance.now();
+        showFeedbackToast('菜单已展开');
       },
       closeControls() {
-        if (state.activePattern === 'B') {
-          state.patternB_open = false;
-          showFeedbackToast('Radial Menu Closed');
-        } else if (state.activePattern === 'C') {
-          state.patternC_open = false;
-          showFeedbackToast('Video HUD Closed');
-        }
+        state.patternA_open = false;
+        state.patternB_open = false;
+        state.patternC_open = false;
+        showFeedbackToast('菜单已收起');
       },
       cyclePattern() {
-        const patterns = ['A', 'B', 'C'];
+        const patterns = ['B', 'A', 'C'];
         const idx = patterns.indexOf(state.activePattern);
         const nextPat = patterns[(idx + 1) % patterns.length];
         setPattern(nextPat);
-        showFeedbackToast('Switched to Pattern ' + nextPat);
+        showFeedbackToast('切换至 Pattern ' + nextPat);
       }
     };
 
@@ -910,15 +901,13 @@
         b.classList.toggle('active', b.getAttribute('data-pattern') === pat);
       });
       btnVrSwitchPattern.textContent = '🔀 Pattern: ' + pat;
-      if (pat === 'B') {
-        state.patternB_open = false;
-      } else if (pat === 'C') {
-        state.patternC_open = true;
-      }
+      state.patternA_open = false;
+      state.patternB_open = false;
+      state.patternC_open = false;
     }
 
     // ==========================================
-    // 6. WebGL VR Renderer Setup
+    // 6. WebGL VR Renderer Setup (3D Stereo SBS 180°)
     // ==========================================
     let gl = null;
     try {
@@ -943,14 +932,12 @@
 
       uniform sampler2D uVideoTexture;
       uniform mat3 uCamRot;
-      uniform int uStereoMode;
       uniform int uEye;
       uniform float uAspect;
 
       const float PI = 3.14159265358979323846;
       const float HALF_PI = 1.57079632679489661923;
-      const float TWO_PI = 6.28318530717958647692;
-      const float FOV = 1.65;
+      const float FOV = 1.65; // ~95 deg per eye
 
       void main() {
         vec2 ndc = (vUv - 0.5) * 2.0;
@@ -962,29 +949,17 @@
         float lon = atan(dWorld.x, -dWorld.z);
         float lat = asin(clamp(dWorld.y, -1.0, 1.0));
 
-        float uLocal = 0.0;
+        if (abs(lon) > HALF_PI) {
+          gl_FragColor = vec4(0.02, 0.03, 0.05, 1.0);
+          return;
+        }
+
+        float uLocal = 0.5 + lon / PI;
         float vLocal = 0.5 + lat / PI;
 
-        if (uStereoMode == 3) {
-          uLocal = fract(0.5 + lon / TWO_PI);
-        } else {
-          if (abs(lon) > HALF_PI) {
-            gl_FragColor = vec4(0.02, 0.03, 0.05, 1.0);
-            return;
-          }
-          uLocal = 0.5 + lon / PI;
-        }
-
-        vec2 texUv;
-        if (uStereoMode == 0) {
-          texUv = vec2(uLocal * 0.5, vLocal);
-        } else if (uStereoMode == 1) {
-          float sourceEye = float(uEye);
-          texUv = vec2(0.5 * (uLocal + sourceEye), vLocal);
-        } else if (uStereoMode == 2) {
-          float sourceEye = float(1 - uEye);
-          texUv = vec2(0.5 * (uLocal + sourceEye), vLocal);
-        }
+        // True 3D Side-by-Side (SBS 180°): Left Eye uses [0, 0.5], Right Eye uses [0.5, 1.0]
+        float sourceEye = float(uEye);
+        vec2 texUv = vec2(0.5 * (uLocal + sourceEye), vLocal);
 
         gl_FragColor = texture2D(uVideoTexture, texUv);
       }
@@ -1003,7 +978,7 @@
     }
 
     let program = null;
-    let aPositionLoc = -1, uVideoTextureLoc = null, uCamRotLoc = null, uStereoModeLoc = null, uEyeLoc = null, uAspectLoc = null;
+    let aPositionLoc = -1, uVideoTextureLoc = null, uCamRotLoc = null, uEyeLoc = null, uAspectLoc = null;
     let posBuffer = null;
     let videoTex = null;
 
@@ -1026,7 +1001,6 @@
         aPositionLoc = gl.getAttribLocation(program, 'aPosition');
         uVideoTextureLoc = gl.getUniformLocation(program, 'uVideoTexture');
         uCamRotLoc = gl.getUniformLocation(program, 'uCamRot');
-        uStereoModeLoc = gl.getUniformLocation(program, 'uStereoMode');
         uEyeLoc = gl.getUniformLocation(program, 'uEye');
         uAspectLoc = gl.getUniformLocation(program, 'uAspect');
 
@@ -1041,7 +1015,29 @@
     }
 
     // ==========================================
-    // 7. DeviceOrientation & Pose Recenter
+    // 7. Hardware Video Frame Callback & Texture Cache
+    // (Prevents GPU overload, overheating, and stuttering)
+    // ==========================================
+    let videoFrameNeedsUpload = false;
+    let lastUploadedVideoTime = -1;
+
+    function onVideoFrameCallback(now, metadata) {
+      videoFrameNeedsUpload = true;
+      if (video.requestVideoFrameCallback) {
+        video.requestVideoFrameCallback(onVideoFrameCallback);
+      }
+    }
+
+    if (video.requestVideoFrameCallback) {
+      video.requestVideoFrameCallback(onVideoFrameCallback);
+    } else {
+      video.addEventListener('timeupdate', () => {
+        videoFrameNeedsUpload = true;
+      });
+    }
+
+    // ==========================================
+    // 8. DeviceOrientation & Pose Recenter
     // ==========================================
     const qCameraCorrect = new Quat(-Math.SQRT1_2, 0, 0, Math.SQRT1_2);
     const qScreenZ = new Quat();
@@ -1059,8 +1055,6 @@
       } else {
         state.screenAngle = window.innerWidth > window.innerHeight ? 90 : 0;
       }
-      const el = document.getElementById('valScreenAngle');
-      if (el) el.textContent = state.screenAngle + '°';
       state.viewport = { w: window.innerWidth, h: window.innerHeight, dpr: window.devicePixelRatio };
     }
     window.addEventListener('orientationchange', updateScreenOrientation);
@@ -1126,14 +1120,12 @@
       const fx = state.cameraForward[0];
       const fy = state.cameraForward[1];
       let hState = 'Center';
-      if (fx > 0.25) hState = 'Turn RIGHT (+X)';
-      else if (fx < -0.25) hState = 'Turn LEFT (-X)';
-      else if (fy > 0.25) hState = 'Look UP (+Y)';
-      else if (fy < -0.25) hState = 'Look DOWN (-Y)';
+      if (fx > 0.25) hState = 'Turn RIGHT';
+      else if (fx < -0.25) hState = 'Turn LEFT';
+      else if (fy > 0.25) hState = 'Look UP';
+      else if (fy < -0.25) hState = 'Look DOWN';
       state.headStateText = hState;
 
-      const elEvt = document.getElementById('valEventCount');
-      if (elEvt) elEvt.textContent = state.motionEventCount;
       const elFwd = document.getElementById('valCamFwd');
       const elHead = document.getElementById('valHeadState');
       if (elFwd) elFwd.textContent = state.cameraForward[0].toFixed(2) + ',' + state.cameraForward[1].toFixed(2) + ',' + state.cameraForward[2].toFixed(2);
@@ -1141,7 +1133,7 @@
     }, { passive: true });
 
     // ==========================================
-    // 8. Stereo UI Math & Target Projection
+    // 9. Stereo UI Math & Compact Icon Nodes
     // ==========================================
     const FOV_RAD = 1.65;
     const TAN_HALF_FOV = Math.tan(FOV_RAD * 0.5);
@@ -1180,68 +1172,82 @@
       return Math.acos(clamped) * (180 / Math.PI);
     }
 
+    // Get Compact, Non-overlapping Interactive Items
     function getActiveInteractiveItems() {
       const items = [];
+      const isPlay = !video.paused;
 
       if (state.activePattern === 'A') {
-        const arcButtons = [
-          { id: 'pat_switch', label: '🔀 A/B/C', yaw: -30, pitch: -13, radiusDeg: 4.8, cmd: () => CommandModel.cyclePattern(), color: '#7c3aed' },
-          { id: 'prev', label: '⏮ Prev', yaw: -20, pitch: -13, radiusDeg: 4.2, cmd: () => CommandModel.previous() },
-          { id: 'seek_back', label: '⏪ -10s', yaw: -10, pitch: -13, radiusDeg: 4.2, cmd: () => CommandModel.seekBackward(10) },
-          { id: 'play_pause', label: video.paused ? '▶ Play' : '⏸ Pause', yaw: 0, pitch: -13, radiusDeg: 5.2, cmd: () => CommandModel.playPause(), color: '#2563eb' },
-          { id: 'seek_fwd', label: '⏩ +10s', yaw: 10, pitch: -13, radiusDeg: 4.2, cmd: () => CommandModel.seekForward(10) },
-          { id: 'next', label: '⏭ Next', yaw: 20, pitch: -13, radiusDeg: 4.2, cmd: () => CommandModel.next() },
-          { id: 'recenter', label: '🎯 Center', yaw: 30, pitch: -13, radiusDeg: 4.8, cmd: () => CommandModel.recenter(), color: '#059669' }
-        ];
-        arcButtons.forEach(b => {
+        // Pattern A: Hidden Bottom Arc (Triggered by looking down pitch <= -18 deg)
+        if (!state.patternA_open) {
           items.push({
-            id: b.id,
-            label: b.label,
-            yaw: b.yaw,
-            pitch: b.pitch,
-            radiusDeg: b.radiusDeg,
-            cmd: b.cmd,
-            color: b.color,
+            id: 'open_arc',
+            icon: '⚡',
+            label: 'Controls',
             pattern: 'A',
-            dirWorld: sphericalToDir(b.yaw, b.pitch)
-          });
-        });
-      } else if (state.activePattern === 'B') {
-        if (!state.patternB_open) {
-          items.push({
-            id: 'open_radial',
-            label: '🔘 Open Menu',
-            pattern: 'B',
             yaw: 0,
-            pitch: -16,
+            pitch: -24,
             radiusDeg: 5.5,
             color: '#7c3aed',
             cmd: () => CommandModel.openControls(),
-            dirWorld: sphericalToDir(0, -16)
+            dirWorld: sphericalToDir(0, -24)
           });
         } else {
-          const anchorPitch = -12;
-          const radialR = 13.5;
+          const arcP = -22;
+          const arcNodes = [
+            { id: 'pat_switch', icon: '🔀', yaw: -27, pitch: arcP, radiusDeg: 3.8, cmd: () => CommandModel.cyclePattern(), color: '#7c3aed' },
+            { id: 'prev', icon: '⏮', yaw: -18, pitch: arcP, radiusDeg: 3.8, cmd: () => CommandModel.previous() },
+            { id: 'seek_back', icon: '⏪', yaw: -9, pitch: arcP, radiusDeg: 3.8, cmd: () => CommandModel.seekBackward(10) },
+            { id: 'play_pause', icon: isPlay ? '⏸' : '▶', yaw: 0, pitch: arcP, radiusDeg: 4.5, cmd: () => CommandModel.playPause(), color: '#2563eb' },
+            { id: 'seek_fwd', icon: '⏩', yaw: 9, pitch: arcP, radiusDeg: 3.8, cmd: () => CommandModel.seekForward(10) },
+            { id: 'next', icon: '⏭', yaw: 18, pitch: arcP, radiusDeg: 3.8, cmd: () => CommandModel.next() },
+            { id: 'recenter', icon: '🎯', yaw: 27, pitch: arcP, radiusDeg: 3.8, cmd: () => CommandModel.recenter(), color: '#059669' },
+            { id: 'close_arc', icon: '✕', yaw: 0, pitch: arcP + 9, radiusDeg: 3.2, cmd: () => CommandModel.closeControls(), color: '#ef4444' }
+          ];
+          arcNodes.forEach(b => {
+            items.push({ ...b, pattern: 'A', dirWorld: sphericalToDir(b.yaw, b.pitch) });
+          });
+        }
+      } else if (state.activePattern === 'B') {
+        // Pattern B: Minimalist Radial (Default 100% Hidden, clean icons, non-overlapping)
+        if (!state.patternB_open) {
+          items.push({
+            id: 'open_radial',
+            icon: '⚡',
+            label: 'Menu',
+            pattern: 'B',
+            yaw: 0,
+            pitch: -24,
+            radiusDeg: 5.5,
+            color: '#7c3aed',
+            cmd: () => CommandModel.openControls(),
+            dirWorld: sphericalToDir(0, -24)
+          });
+        } else {
+          const anchorPitch = -20;
+          const radialR = 15.5; // Generous radial distance prevents any overlap
 
+          // Center Deadzone Close button
           items.push({
             id: 'close_radial',
-            label: '✕ Close',
+            icon: '✕',
             pattern: 'B',
             yaw: 0,
             pitch: anchorPitch,
-            radiusDeg: 4.5,
+            radiusDeg: 4.0,
             color: '#ef4444',
             cmd: () => CommandModel.closeControls(),
             dirWorld: sphericalToDir(0, anchorPitch)
           });
 
+          // 6 Compact Radial Nodes (Icon only, 60 deg apart)
           const radialNodes = [
-            { id: 'recenter', label: '🎯 Center', angleDeg: 90, cmd: () => CommandModel.recenter(), color: '#059669' },
-            { id: 'seek_fwd', label: '⏩ +10s', angleDeg: 30, cmd: () => CommandModel.seekForward(10) },
-            { id: 'next', label: '⏭ Next', angleDeg: -30, cmd: () => CommandModel.next() },
-            { id: 'play_pause', label: video.paused ? '▶ Play' : '⏸ Pause', angleDeg: -90, cmd: () => CommandModel.playPause(), color: '#2563eb' },
-            { id: 'prev', label: '⏮ Prev', angleDeg: -150, cmd: () => CommandModel.previous() },
-            { id: 'seek_back', label: '⏪ -10s', angleDeg: 150, cmd: () => CommandModel.seekBackward(10) }
+            { id: 'recenter', icon: '🎯', angleDeg: 90, cmd: () => CommandModel.recenter(), color: '#059669' },
+            { id: 'seek_fwd', icon: '⏩', angleDeg: 30, cmd: () => CommandModel.seekForward(10) },
+            { id: 'next', icon: '⏭', angleDeg: -30, cmd: () => CommandModel.next() },
+            { id: 'play_pause', icon: isPlay ? '⏸' : '▶', angleDeg: -90, cmd: () => CommandModel.playPause(), color: '#2563eb' },
+            { id: 'prev', icon: '⏮', angleDeg: -150, cmd: () => CommandModel.previous() },
+            { id: 'seek_back', icon: '⏪', angleDeg: 150, cmd: () => CommandModel.seekBackward(10) }
           ];
 
           radialNodes.forEach(rn => {
@@ -1250,62 +1256,65 @@
             const pitch = anchorPitch + radialR * Math.sin(rad);
             items.push({
               id: rn.id,
-              label: rn.label,
+              icon: rn.icon,
               pattern: 'B',
               yaw: yaw,
               pitch: pitch,
-              radiusDeg: 4.8,
+              radiusDeg: 4.2,
               color: rn.color,
               cmd: rn.cmd,
               dirWorld: sphericalToDir(yaw, pitch)
             });
           });
 
+          // Pattern Switcher
           items.push({
             id: 'pat_switch',
-            label: '🔀 A/B/C',
+            icon: '🔀',
             pattern: 'B',
-            yaw: -22,
-            pitch: anchorPitch + 12,
-            radiusDeg: 4.2,
+            yaw: -24,
+            pitch: anchorPitch + 14,
+            radiusDeg: 3.6,
             color: '#7c3aed',
             cmd: () => CommandModel.cyclePattern(),
-            dirWorld: sphericalToDir(-22, anchorPitch + 12)
+            dirWorld: sphericalToDir(-24, anchorPitch + 14)
           });
         }
       } else if (state.activePattern === 'C') {
+        // Pattern C: Video HUD (Hidden by default, clean icons)
         if (!state.patternC_open) {
           items.push({
             id: 'open_hud',
-            label: '📺 Video HUD',
+            icon: '📺',
+            label: 'HUD',
             pattern: 'C',
             yaw: 0,
-            pitch: -16,
+            pitch: -24,
             radiusDeg: 5.5,
             color: '#0891b2',
             cmd: () => CommandModel.openControls(),
-            dirWorld: sphericalToDir(0, -16)
+            dirWorld: sphericalToDir(0, -24)
           });
         } else {
-          items.push({ id: 'seek_b60', label: '-60s', pattern: 'C', yaw: -18, pitch: -7, radiusDeg: 3.8, cmd: () => CommandModel.seekBackward(60) });
-          items.push({ id: 'seek_b10', label: '-10s', pattern: 'C', yaw: -8, pitch: -7, radiusDeg: 3.8, cmd: () => CommandModel.seekBackward(10) });
-          items.push({ id: 'seek_f10', label: '+10s', pattern: 'C', yaw: 8, pitch: -7, radiusDeg: 3.8, cmd: () => CommandModel.seekForward(10) });
-          items.push({ id: 'seek_f60', label: '+60s', pattern: 'C', yaw: 18, pitch: -7, radiusDeg: 3.8, cmd: () => CommandModel.seekForward(60) });
+          items.push({ id: 'seek_b60', icon: '⏮ 60s', pattern: 'C', yaw: -18, pitch: -16, radiusDeg: 3.6, cmd: () => CommandModel.seekBackward(60) });
+          items.push({ id: 'seek_b10', icon: '⏪ 10s', pattern: 'C', yaw: -7, pitch: -16, radiusDeg: 3.6, cmd: () => CommandModel.seekBackward(10) });
+          items.push({ id: 'seek_f10', icon: '10s ⏩', pattern: 'C', yaw: 7, pitch: -16, radiusDeg: 3.6, cmd: () => CommandModel.seekForward(10) });
+          items.push({ id: 'seek_f60', icon: '60s ⏭', pattern: 'C', yaw: 18, pitch: -16, radiusDeg: 3.6, cmd: () => CommandModel.seekForward(60) });
 
-          items.push({ id: 'prev', label: '⏮ Prev', pattern: 'C', yaw: -20, pitch: -15, radiusDeg: 4.4, cmd: () => CommandModel.previous() });
-          items.push({ id: 'play_pause', label: video.paused ? '▶ Play' : '⏸ Pause', pattern: 'C', yaw: -7, pitch: -15, radiusDeg: 5.2, cmd: () => CommandModel.playPause(), color: '#2563eb' });
-          items.push({ id: 'next', label: '⏭ Next', pattern: 'C', yaw: 7, pitch: -15, radiusDeg: 4.4, cmd: () => CommandModel.next() });
-          items.push({ id: 'recenter', label: '🎯 Center', pattern: 'C', yaw: 20, pitch: -15, radiusDeg: 4.4, cmd: () => CommandModel.recenter(), color: '#059669' });
+          items.push({ id: 'prev', icon: '⏮', pattern: 'C', yaw: -18, pitch: -23, radiusDeg: 3.8, cmd: () => CommandModel.previous() });
+          items.push({ id: 'play_pause', icon: isPlay ? '⏸' : '▶', pattern: 'C', yaw: -6, pitch: -23, radiusDeg: 4.4, cmd: () => CommandModel.playPause(), color: '#2563eb' });
+          items.push({ id: 'next', icon: '⏭', pattern: 'C', yaw: 6, pitch: -23, radiusDeg: 3.8, cmd: () => CommandModel.next() });
+          items.push({ id: 'recenter', icon: '🎯', pattern: 'C', yaw: 18, pitch: -23, radiusDeg: 3.8, cmd: () => CommandModel.recenter(), color: '#059669' });
 
-          items.push({ id: 'pat_switch', label: '🔀 A/B/C', pattern: 'C', yaw: -22, pitch: -22, radiusDeg: 3.8, color: '#7c3aed', cmd: () => CommandModel.cyclePattern() });
-          items.push({ id: 'close_hud', label: '✕ Close', pattern: 'C', yaw: 22, pitch: -22, radiusDeg: 3.8, color: '#ef4444', cmd: () => CommandModel.closeControls() });
+          items.push({ id: 'pat_switch', icon: '🔀', pattern: 'C', yaw: -25, pitch: -23, radiusDeg: 3.4, color: '#7c3aed', cmd: () => CommandModel.cyclePattern() });
+          items.push({ id: 'close_hud', icon: '✕', pattern: 'C', yaw: 25, pitch: -23, radiusDeg: 3.4, color: '#ef4444', cmd: () => CommandModel.closeControls() });
         }
       }
 
       return items;
     }
 
-    // Dwell & Calibration State Machine
+    // Dwell & Interaction State Machine
     let currentHoveredItem = null;
     let dwellProgress = 0;
     let activationFlashTime = 0;
@@ -1344,6 +1353,27 @@
         return;
       }
 
+      // Auto-dismiss menu when looking away back up to the video (pitch > -6 deg)
+      if (state.patternB_open) {
+        const centerDir = sphericalToDir(0, -20);
+        const distToCenter = getGazeAngularDistanceDeg(centerDir);
+        if (distToCenter > 25) {
+          state.patternB_open = false;
+        }
+      } else if (state.patternA_open) {
+        const centerDir = sphericalToDir(0, -22);
+        const distToCenter = getGazeAngularDistanceDeg(centerDir);
+        if (distToCenter > 24) {
+          state.patternA_open = false;
+        }
+      } else if (state.patternC_open) {
+        const centerDir = sphericalToDir(0, -20);
+        const distToCenter = getGazeAngularDistanceDeg(centerDir);
+        if (distToCenter > 26) {
+          state.patternC_open = false;
+        }
+      }
+
       const items = getActiveInteractiveItems();
       let bestItem = null;
       let minAng = 999;
@@ -1356,14 +1386,6 @@
         }
       });
 
-      if (state.activePattern === 'B' && state.patternB_open) {
-        const centerDir = sphericalToDir(0, -12);
-        const distToCenter = getGazeAngularDistanceDeg(centerDir);
-        if (distToCenter > 24) {
-          state.patternB_open = false;
-        }
-      }
-
       if (bestItem) {
         if (!currentHoveredItem || currentHoveredItem.id !== bestItem.id) {
           if (currentHoveredItem) {
@@ -1374,12 +1396,14 @@
         }
 
         const elapsed = now - telemetry.hoverStartTime;
-        dwellProgress = Math.min(1.0, elapsed / state.dwellThresholdMs);
+        // Open trigger needs only 450ms for snappy response, commands use full threshold
+        const threshold = (bestItem.id.startsWith('open_')) ? 450 : state.dwellThresholdMs;
+        dwellProgress = Math.min(1.0, elapsed / threshold);
 
         if (dwellProgress >= 1.0) {
           activatedItemId = bestItem.id;
           activationFlashTime = now;
-          actionCooldownUntil = now + 400;
+          actionCooldownUntil = now + 350;
           telemetry.recordDwellComplete(state.activePattern, bestItem.id, elapsed);
           bestItem.cmd();
           dwellProgress = 0;
@@ -1395,7 +1419,7 @@
     }
 
     // ==========================================
-    // 9. Stereo Canvas UI Rendering
+    // 10. Stereo Canvas UI Rendering (Compact, Icon-only)
     // ==========================================
     function renderStereoUI(now, width, height) {
       if (!uiCtx) return;
@@ -1416,47 +1440,47 @@
         uiCtx.rect(eyeOffsetX, 0, halfW, height);
         uiCtx.clip();
 
-        // Check if in Recenter Calibration Posture Countdown
+        // 1. Recenter Calibration Modal (Full Focus in Both Eyes)
         if (state.recenterCountdown.active) {
           const elapsed = now - state.recenterCountdown.startTime;
           const dur = state.recenterCountdown.durationMs;
           const remainSec = Math.max(1, Math.ceil((dur - elapsed) / 1000));
           const progress = Math.max(0, Math.min(1, elapsed / dur));
 
-          const cardW = 340, cardH = 170;
+          const cardW = 320, cardH = 150;
           uiCtx.fillStyle = 'rgba(15, 23, 42, 0.92)';
           uiCtx.strokeStyle = '#38bdf8';
-          uiCtx.lineWidth = 2.5;
-          roundRect(uiCtx, eyeCenterX - cardW/2, eyeCenterY - cardH/2, cardW, cardH, 20, true, true);
+          uiCtx.lineWidth = 2;
+          roundRect(uiCtx, eyeCenterX - cardW/2, eyeCenterY - cardH/2, cardW, cardH, 18, true, true);
 
           uiCtx.font = 'bold 15px -apple-system, sans-serif';
           uiCtx.fillStyle = '#38bdf8';
           uiCtx.textAlign = 'center';
           uiCtx.textBaseline = 'top';
-          uiCtx.fillText(state.recenterCountdown.label, eyeCenterX, eyeCenterY - cardH/2 + 16);
+          uiCtx.fillText(state.recenterCountdown.label, eyeCenterX, eyeCenterY - cardH/2 + 15);
 
           uiCtx.font = '13px -apple-system, sans-serif';
           uiCtx.fillStyle = '#e2e8f0';
-          uiCtx.fillText('请调整好舒适坐姿，面朝正前方', eyeCenterX, eyeCenterY - cardH/2 + 40);
+          uiCtx.fillText('请调整好舒适坐姿，面朝正前方', eyeCenterX, eyeCenterY - cardH/2 + 38);
 
           const numCenterY = eyeCenterY + 22;
           uiCtx.beginPath();
-          uiCtx.arc(eyeCenterX, numCenterY, 30, 0, Math.PI * 2);
+          uiCtx.arc(eyeCenterX, numCenterY, 26, 0, Math.PI * 2);
           uiCtx.fillStyle = 'rgba(30, 41, 59, 0.9)';
           uiCtx.fill();
           uiCtx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
-          uiCtx.lineWidth = 3;
+          uiCtx.lineWidth = 2.5;
           uiCtx.stroke();
 
           uiCtx.beginPath();
           const startAngle = -Math.PI / 2;
           const endAngle = startAngle + (Math.PI * 2 * (1.0 - progress));
-          uiCtx.arc(eyeCenterX, numCenterY, 30, startAngle, endAngle);
+          uiCtx.arc(eyeCenterX, numCenterY, 26, startAngle, endAngle);
           uiCtx.strokeStyle = '#34d399';
-          uiCtx.lineWidth = 4;
+          uiCtx.lineWidth = 3.5;
           uiCtx.stroke();
 
-          uiCtx.font = 'bold 26px -apple-system, monospace';
+          uiCtx.font = 'bold 22px -apple-system, monospace';
           uiCtx.fillStyle = '#ffffff';
           uiCtx.textAlign = 'center';
           uiCtx.textBaseline = 'middle';
@@ -1466,83 +1490,73 @@
           continue;
         }
 
-        // 1. Draw In-VR Status Bar
-        const hudProj = projectWorldDirToEye(sphericalToDir(0, 18), eye, halfW, height);
-        if (hudProj) {
-          uiCtx.fillStyle = 'rgba(15, 23, 42, 0.7)';
-          uiCtx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
-          uiCtx.lineWidth = 1;
-          const panelW = 320, panelH = 34;
-          roundRect(uiCtx, hudProj.x - panelW/2, hudProj.y - panelH/2, panelW, panelH, 17, true, true);
-
-          uiCtx.font = 'bold 12px -apple-system, sans-serif';
-          uiCtx.fillStyle = '#38bdf8';
-          uiCtx.textAlign = 'left';
-          uiCtx.fillText('Pattern ' + state.activePattern + ': ' + (state.activePattern === 'A' ? 'Gaze Arc' : state.activePattern === 'B' ? 'Radial Menu' : 'Video HUD'), hudProj.x - panelW/2 + 14, hudProj.y + 4);
-
-          uiCtx.fillStyle = '#94a3b8';
-          uiCtx.textAlign = 'right';
-          uiCtx.fillText(formatTime(video.currentTime) + ' / ' + formatTime(video.duration), hudProj.x + panelW/2 - 14, hudProj.y + 4);
-        }
-
-        // 2. Draw Interactive UI Nodes
+        // 2. Draw Interactive Circular Icon Nodes (Compact & Non-overlapping)
         items.forEach(item => {
           const p = projectWorldDirToEye(item.dirWorld, eye, halfW, height);
           if (!p) return;
 
           const isHovered = (currentHoveredItem && currentHoveredItem.id === item.id);
           const isActivated = (activatedItemId === item.id && (now - activationFlashTime < 300));
-          const btnRadius = Math.max(22, (item.radiusDeg * 5.2) * (halfW / 400));
+          const btnR = Math.max(18, (item.radiusDeg * 4.4) * (halfW / 400));
 
           uiCtx.save();
 
+          // Circular background
+          uiCtx.beginPath();
+          uiCtx.arc(p.x, p.y, btnR, 0, Math.PI * 2);
+
           if (isActivated) {
-            uiCtx.fillStyle = 'rgba(16, 185, 129, 0.9)';
+            uiCtx.fillStyle = 'rgba(16, 185, 129, 0.95)';
             uiCtx.strokeStyle = '#34d399';
             uiCtx.lineWidth = 3;
           } else if (isHovered) {
-            uiCtx.fillStyle = item.color ? (item.color + 'cc') : 'rgba(37, 99, 235, 0.85)';
+            uiCtx.fillStyle = item.color ? (item.color + 'dd') : 'rgba(37, 99, 235, 0.9)';
             uiCtx.strokeStyle = '#38bdf8';
             uiCtx.lineWidth = 2.5;
             uiCtx.shadowColor = '#38bdf8';
-            uiCtx.shadowBlur = 12;
+            uiCtx.shadowBlur = 10;
           } else {
-            uiCtx.fillStyle = item.color ? (item.color + '66') : 'rgba(15, 23, 42, 0.75)';
-            uiCtx.strokeStyle = 'rgba(255, 255, 255, 0.25)';
+            uiCtx.fillStyle = item.color ? (item.color + '55') : 'rgba(15, 23, 42, 0.75)';
+            uiCtx.strokeStyle = 'rgba(255, 255, 255, 0.35)';
             uiCtx.lineWidth = 1.2;
           }
+          uiCtx.fill();
+          uiCtx.stroke();
 
-          const pillW = Math.max(btnRadius * 2.2, 70);
-          const pillH = btnRadius * 1.6;
-          roundRect(uiCtx, p.x - pillW/2, p.y - pillH/2, pillW, pillH, pillH/2, true, true);
-
+          // Dwell fill arc
           if (isHovered && dwellProgress > 0) {
-            uiCtx.fillStyle = 'rgba(255, 255, 255, 0.3)';
-            roundRect(uiCtx, p.x - pillW/2, p.y - pillH/2, pillW * dwellProgress, pillH, pillH/2, true, false);
+            uiCtx.beginPath();
+            const startAngle = -Math.PI / 2;
+            const endAngle = startAngle + (Math.PI * 2 * dwellProgress);
+            uiCtx.arc(p.x, p.y, btnR + 3, startAngle, endAngle);
+            uiCtx.strokeStyle = '#34d399';
+            uiCtx.lineWidth = 3;
+            uiCtx.stroke();
           }
 
+          // Icon glyph
           uiCtx.shadowBlur = 0;
-          uiCtx.font = 'bold ' + Math.round(btnRadius * 0.55) + 'px -apple-system, sans-serif';
+          uiCtx.font = 'bold ' + Math.round(btnR * 0.9) + 'px -apple-system, sans-serif';
           uiCtx.fillStyle = '#ffffff';
           uiCtx.textAlign = 'center';
           uiCtx.textBaseline = 'middle';
-          uiCtx.fillText(item.label, p.x, p.y);
+          uiCtx.fillText(item.icon, p.x, p.y);
 
           uiCtx.restore();
         });
 
         // 3. Feedback Toast
-        if (state.toastText && (now - state.toastTime < 2200)) {
-          const alpha = Math.min(1.0, 1.0 - (now - state.toastTime - 1400) / 800);
+        if (state.toastText && (now - state.toastTime < 2000)) {
+          const alpha = Math.min(1.0, 1.0 - (now - state.toastTime - 1200) / 800);
           if (alpha > 0) {
-            uiCtx.fillStyle = 'rgba(15, 23, 42, ' + (0.88 * alpha) + ')';
-            uiCtx.strokeStyle = 'rgba(56, 189, 248, ' + (0.85 * alpha) + ')';
-            uiCtx.lineWidth = 1.5;
-            const tw = 260, th = 34;
-            const toastY = eyeCenterY - 90;
-            roundRect(uiCtx, eyeCenterX - tw/2, toastY - th/2, tw, th, 17, true, true);
+            uiCtx.fillStyle = 'rgba(15, 23, 42, ' + (0.85 * alpha) + ')';
+            uiCtx.strokeStyle = 'rgba(56, 189, 248, ' + (0.8 * alpha) + ')';
+            uiCtx.lineWidth = 1.2;
+            const tw = 240, th = 30;
+            const toastY = eyeCenterY - 80;
+            roundRect(uiCtx, eyeCenterX - tw/2, toastY - th/2, tw, th, 15, true, true);
 
-            uiCtx.font = 'bold 13px -apple-system, sans-serif';
+            uiCtx.font = 'bold 12px -apple-system, sans-serif';
             uiCtx.fillStyle = 'rgba(255, 255, 255, ' + alpha + ')';
             uiCtx.textAlign = 'center';
             uiCtx.textBaseline = 'middle';
@@ -1550,38 +1564,38 @@
           }
         }
 
-        // 4. Center Gaze Reticle & Dwell Progress Gauge
+        // 4. Center Gaze Reticle
         const isHovering = currentHoveredItem !== null;
-        const reticleR = isHovering ? 14 : 9;
+        const reticleR = isHovering ? 12 : 7;
 
         uiCtx.beginPath();
         uiCtx.arc(eyeCenterX, eyeCenterY, reticleR, 0, Math.PI * 2);
-        uiCtx.strokeStyle = isHovering ? '#38bdf8' : 'rgba(255, 255, 255, 0.7)';
-        uiCtx.lineWidth = isHovering ? 2.5 : 1.5;
+        uiCtx.strokeStyle = isHovering ? '#38bdf8' : 'rgba(255, 255, 255, 0.6)';
+        uiCtx.lineWidth = isHovering ? 2.2 : 1.2;
         uiCtx.stroke();
 
         uiCtx.beginPath();
-        uiCtx.arc(eyeCenterX, eyeCenterY, 3, 0, Math.PI * 2);
-        uiCtx.fillStyle = isHovering ? '#38bdf8' : 'rgba(255, 255, 255, 0.9)';
+        uiCtx.arc(eyeCenterX, eyeCenterY, 2.5, 0, Math.PI * 2);
+        uiCtx.fillStyle = isHovering ? '#38bdf8' : 'rgba(255, 255, 255, 0.85)';
         uiCtx.fill();
 
         if (isHovering && dwellProgress > 0) {
           uiCtx.beginPath();
           const startAngle = -Math.PI / 2;
           const endAngle = startAngle + (Math.PI * 2 * dwellProgress);
-          uiCtx.arc(eyeCenterX, eyeCenterY, reticleR + 5, startAngle, endAngle);
+          uiCtx.arc(eyeCenterX, eyeCenterY, reticleR + 4, startAngle, endAngle);
           uiCtx.strokeStyle = '#34d399';
-          uiCtx.lineWidth = 3.5;
+          uiCtx.lineWidth = 3;
           uiCtx.stroke();
         }
 
-        if (now - activationFlashTime < 250) {
-          const pulseProgress = (now - activationFlashTime) / 250;
-          const pulseR = reticleR + pulseProgress * 24;
+        if (now - activationFlashTime < 220) {
+          const pulseProgress = (now - activationFlashTime) / 220;
+          const pulseR = reticleR + pulseProgress * 20;
           uiCtx.beginPath();
           uiCtx.arc(eyeCenterX, eyeCenterY, pulseR, 0, Math.PI * 2);
           uiCtx.strokeStyle = 'rgba(52, 211, 153, ' + (1.0 - pulseProgress) + ')';
-          uiCtx.lineWidth = 2.5;
+          uiCtx.lineWidth = 2;
           uiCtx.stroke();
         }
 
@@ -1607,7 +1621,7 @@
     }
 
     // ==========================================
-    // 10. Main Render Loop
+    // 11. Main Render Loop (High Performance)
     // ==========================================
     let lastFpsTime = performance.now();
     let frameCounter = 0;
@@ -1638,12 +1652,15 @@
       // Update Dwell State
       updateDwellInteraction(now);
 
-      // WebGL VR Projection
+      // WebGL VR 3D SBS Projection
       if (gl && program) {
-        if (video.readyState >= 2) {
+        // Hardware optimized texture upload: ONLY upload when video decoder produces a new frame!
+        if (video.readyState >= 2 && (videoFrameNeedsUpload || (video.currentTime !== lastUploadedVideoTime && !video.paused))) {
           gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
           gl.bindTexture(gl.TEXTURE_2D, videoTex);
           gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, video);
+          videoFrameNeedsUpload = false;
+          lastUploadedVideoTime = video.currentTime;
         }
 
         gl.useProgram(program);
@@ -1656,7 +1673,6 @@
         gl.uniform1i(uVideoTextureLoc, 0);
 
         gl.uniformMatrix3fv(uCamRotLoc, false, cameraMat3);
-        gl.uniform1i(uStereoModeLoc, state.stereoMode);
 
         gl.enable(gl.SCISSOR_TEST);
 
@@ -1664,13 +1680,13 @@
         const aspectPerEye = (halfW / height);
         gl.uniform1f(uAspectLoc, aspectPerEye);
 
-        // Left Eye Viewport
+        // Left Eye Viewport (Maps left half of SBS 3D Video)
         gl.viewport(0, 0, halfW, height);
         gl.scissor(0, 0, halfW, height);
         gl.uniform1i(uEyeLoc, 0);
         gl.drawArrays(gl.TRIANGLES, 0, 6);
 
-        // Right Eye Viewport
+        // Right Eye Viewport (Maps right half of SBS 3D Video)
         gl.viewport(halfW, 0, halfW, height);
         gl.scissor(halfW, 0, halfW, height);
         gl.uniform1i(uEyeLoc, 1);
@@ -1686,7 +1702,7 @@
     requestAnimationFrame(renderLoop);
 
     // ==========================================
-    // 11. UI Setup & Video Loading
+    // 12. UI Setup & Video Loading
     // ==========================================
     async function loadVideoList() {
       try {
@@ -1713,6 +1729,7 @@
       state.videoPath = relPath;
       video.src = '/video?path=' + encodeURIComponent(relPath);
       video.load();
+      videoFrameNeedsUpload = true;
       if (state.inVR) {
         video.play().catch(e => console.log('play catch:', e));
       }
@@ -1842,11 +1859,6 @@
     document.getElementById('btnVrReset').addEventListener('click', (e) => {
       e.stopPropagation();
       CommandModel.recenter();
-    });
-    document.getElementById('btnVrToggleStereo').addEventListener('click', (e) => {
-      e.stopPropagation();
-      state.stereoMode = (state.stereoMode + 1) % 3;
-      showFeedbackToast('Stereo Mode: ' + state.stereoMode);
     });
     document.getElementById('btnVrExit').addEventListener('click', (e) => {
       e.stopPropagation();
