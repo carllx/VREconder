@@ -6,7 +6,7 @@
 - **Error Handling**: Implement comprehensive error handling with meaningful messages
 - **Logging**: Use structured logging with appropriate levels (DEBUG, INFO, WARNING, ERROR)
 - **Type Safety**: Use type annotations/validation where language supports
-- **Agent-readable file size**: Hand-written source/code files must not exceed **600 physical lines**, including prototypes. Refactor by responsibility before crossing the limit. See `docs/agents/code-structure.md` for the repository-wide rule.
+- **Agent Readability**: Hand-written source/code files must not exceed **600 physical lines**, including prototypes. Split by responsibility before crossing the limit. See `docs/agents/code-structure.md`.
 
 ## Python Standards (*.py)
 
