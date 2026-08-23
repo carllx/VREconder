@@ -8,7 +8,7 @@
   <meta name="apple-mobile-web-app-title" content="VREconder">
   <meta name="apple-touch-fullscreen" content="yes">
   <link rel="manifest" href="/manifest.json">
-  <title>VREconder VR Web Player - Optimized In-Headset Controls</title>
+  <title>VREconder 3D VR Player - Zero-Occlusion Controls</title>
   <style>
     :root {
       --bg: #090d16;
@@ -310,7 +310,7 @@
         <h1>🥽 VREconder 3D VR Player (Issue #9)</h1>
         <span class="status-badge" id="badgeDisplayMode">Browser Tab</span>
       </div>
-      <div class="subtitle">3D Stereoscopic 180° SBS &bull; Hidden Minimalist In-Headset Controls</div>
+      <div class="subtitle">3D Stereoscopic 180° SBS &bull; Zero-Occlusion Bottom Floor Controls</div>
     </div>
 
     <!-- Pattern Selection -->
@@ -318,8 +318,8 @@
       <div class="label">1. Active UX Pattern Experiment</div>
       <div class="btn-grid-3" id="grpPatternSelect">
         <button class="opt-btn" data-pattern="A">Pattern A<br><span style="font-size:0.68rem;opacity:0.8;">Bottom Arc</span></button>
-        <button class="opt-btn pattern-b active" data-pattern="B">Pattern B (推荐)<br><span style="font-size:0.68rem;opacity:0.8;">Radial Menu</span></button>
-        <button class="opt-btn pattern-c" data-pattern="C">Pattern C<br><span style="font-size:0.68rem;opacity:0.8;">Video HUD</span></button>
+        <button class="opt-btn pattern-b active" data-pattern="B">Pattern B (推荐)<br><span style="font-size:0.68rem;opacity:0.8;">Floor Radial</span></button>
+        <button class="opt-btn pattern-c" data-pattern="C">Pattern C<br><span style="font-size:0.68rem;opacity:0.8;">Floor HUD</span></button>
       </div>
 
       <div class="control-row" style="margin-top:8px;">
@@ -355,7 +355,7 @@
         <span>🚀 Enter 3D VR / Start Viewing</span>
       </button>
       <div class="subtitle" style="text-align:center; margin-top:4px;">
-        观看时默认 100% 全屏无遮挡；低头看下方 ⚡ 触发点即可呼出紧凑图标菜单
+        观看时视野中心 100% 零遮挡；低头看下方即可在脚底地板区展开 3D 菜单
       </div>
     </div>
 
@@ -395,8 +395,8 @@
         </thead>
         <tbody id="telemetryTableBody">
           <tr id="row-A"><td>A (Bottom Arc)</td><td>0</td><td>0</td><td>--</td><td>--</td><td>0.0°</td></tr>
-          <tr id="row-B"><td>B (Radial Menu)</td><td>0</td><td>0</td><td>--</td><td>--</td><td>0.0°</td></tr>
-          <tr id="row-C"><td>C (Video HUD)</td><td>0</td><td>0</td><td>--</td><td>--</td><td>0.0°</td></tr>
+          <tr id="row-B"><td>B (Floor Radial)</td><td>0</td><td>0</td><td>--</td><td>--</td><td>0.0°</td></tr>
+          <tr id="row-C"><td>C (Floor HUD)</td><td>0</td><td>0</td><td>--</td><td>--</td><td>0.0°</td></tr>
         </tbody>
       </table>
     </div>
@@ -611,7 +611,7 @@
       viewport: { w: window.innerWidth, h: window.innerHeight, dpr: window.devicePixelRatio },
       headStateText: 'Center',
 
-      // Pattern States - Default 100% Hidden
+      // Pattern States - Default 100% Hidden in floor zone
       patternA_open: false,
       patternB_open: false,
       patternC_open: false,
@@ -770,7 +770,7 @@
           if (!row) return;
           const avgDwell = m.dwellTimes.length ? (m.dwellTimes.reduce((a,b)=>a+b, 0) / m.dwellTimes.length).toFixed(0) + 'ms' : '--';
           const avgTimeToCmd = m.menuToCmdTimes.length ? (m.menuToCmdTimes.reduce((a,b)=>a+b, 0) / m.menuToCmdTimes.length).toFixed(0) + 'ms' : '--';
-          const pName = p === 'A' ? 'A (Bottom Arc)' : p === 'B' ? 'B (Radial Menu)' : 'C (Video HUD)';
+          const pName = p === 'A' ? 'A (Bottom Arc)' : p === 'B' ? 'B (Floor Radial)' : 'C (Floor HUD)';
           row.innerHTML = '<td>' + pName + '</td><td>' + m.activations + '</td><td>' + m.cancels + '</td><td>' + avgDwell + '</td><td>' + avgTimeToCmd + '</td><td>' + m.travelDeg.toFixed(1) + '°</td>';
         });
       }
@@ -937,7 +937,7 @@
 
       const float PI = 3.14159265358979323846;
       const float HALF_PI = 1.57079632679489661923;
-      const float FOV = 1.65; // ~95 deg per eye
+      const float FOV = 1.65;
 
       void main() {
         vec2 ndc = (vUv - 0.5) * 2.0;
@@ -957,7 +957,6 @@
         float uLocal = 0.5 + lon / PI;
         float vLocal = 0.5 + lat / PI;
 
-        // True 3D Side-by-Side (SBS 180°): Left Eye uses [0, 0.5], Right Eye uses [0.5, 1.0]
         float sourceEye = float(uEye);
         vec2 texUv = vec2(0.5 * (uLocal + sourceEye), vLocal);
 
@@ -1016,7 +1015,6 @@
 
     // ==========================================
     // 7. Hardware Video Frame Callback & Texture Cache
-    // (Prevents GPU overload, overheating, and stuttering)
     // ==========================================
     let videoFrameNeedsUpload = false;
     let lastUploadedVideoTime = -1;
@@ -1126,14 +1124,17 @@
       else if (fy < -0.25) hState = 'Look DOWN';
       state.headStateText = hState;
 
+      const elEvt = document.getElementById('valEventCount');
       const elFwd = document.getElementById('valCamFwd');
       const elHead = document.getElementById('valHeadState');
+      if (elEvt) elEvt.textContent = state.motionEventCount;
       if (elFwd) elFwd.textContent = state.cameraForward[0].toFixed(2) + ',' + state.cameraForward[1].toFixed(2) + ',' + state.cameraForward[2].toFixed(2);
       if (elHead) elHead.textContent = hState;
     }, { passive: true });
 
     // ==========================================
-    // 9. Stereo UI Math & Compact Icon Nodes
+    // 9. Stereo UI Math with Binocular 3D Convergence Disparity
+    // (Eliminates Diplopia / 重影 / 画面散)
     // ==========================================
     const FOV_RAD = 1.65;
     const TAN_HALF_FOV = Math.tan(FOV_RAD * 0.5);
@@ -1149,7 +1150,9 @@
       ];
     }
 
+    // Projects world direction onto eye with stereoscopic convergence offset to match 3D video depth
     function projectWorldDirToEye(dirWorld, eyeIndex, halfW, height) {
+      if (!dirWorld) return null;
       const aspect = halfW / height;
       const dCam = qCameraInv.transformVector(dirWorld);
       if (dCam[2] >= -0.01) return null;
@@ -1160,87 +1163,94 @@
 
       if (Math.abs(ndcX) > 1.35 || Math.abs(ndcY) > 1.35) return null;
 
-      const px = (eyeIndex * halfW) + (ndcX * 0.5 + 0.5) * halfW;
+      // 3D Parallax Disparity: Shift left eye slightly right and right eye slightly left
+      // This produces binocular convergence at ~2m, eliminating all double-vision/ghosting!
+      const stereoDisparityPx = (eyeIndex === 0 ? +5.5 : -5.5);
+
+      const px = (eyeIndex * halfW) + (ndcX * 0.5 + 0.5) * halfW + stereoDisparityPx;
       const py = (1.0 - (ndcY * 0.5 + 0.5)) * height;
       return { x: px, y: py, ndcX, ndcY, zDepth };
     }
 
     function getGazeAngularDistanceDeg(targetDirWorld) {
+      if (!targetDirWorld) return 999;
       const fwd = state.cameraForward;
       const dot = fwd[0] * targetDirWorld[0] + fwd[1] * targetDirWorld[1] + fwd[2] * targetDirWorld[2];
       const clamped = Math.max(-1, Math.min(1, dot));
       return Math.acos(clamped) * (180 / Math.PI);
     }
 
-    // Get Compact, Non-overlapping Interactive Items
+    // ==========================================
+    // 10. Floor Zone Controls (Deep Pitch <= -32° - 100% Clear Vision Center)
+    // ==========================================
     function getActiveInteractiveItems() {
       const items = [];
       const isPlay = !video.paused;
 
+      // Floor anchor is at Pitch -34° (deep down at your feet/lap, far below the video content)
+      const floorAnchorPitch = -34;
+
       if (state.activePattern === 'A') {
-        // Pattern A: Hidden Bottom Arc (Triggered by looking down pitch <= -18 deg)
+        // Pattern A: Floor Arc
         if (!state.patternA_open) {
+          // No button in center vision! Trigger only exists in floor zone
           items.push({
             id: 'open_arc',
             icon: '⚡',
-            label: 'Controls',
             pattern: 'A',
             yaw: 0,
-            pitch: -24,
-            radiusDeg: 5.5,
+            pitch: floorAnchorPitch,
+            radiusDeg: 6.5,
             color: '#7c3aed',
             cmd: () => CommandModel.openControls(),
-            dirWorld: sphericalToDir(0, -24)
+            dirWorld: sphericalToDir(0, floorAnchorPitch)
           });
         } else {
-          const arcP = -22;
           const arcNodes = [
-            { id: 'pat_switch', icon: '🔀', yaw: -27, pitch: arcP, radiusDeg: 3.8, cmd: () => CommandModel.cyclePattern(), color: '#7c3aed' },
-            { id: 'prev', icon: '⏮', yaw: -18, pitch: arcP, radiusDeg: 3.8, cmd: () => CommandModel.previous() },
-            { id: 'seek_back', icon: '⏪', yaw: -9, pitch: arcP, radiusDeg: 3.8, cmd: () => CommandModel.seekBackward(10) },
-            { id: 'play_pause', icon: isPlay ? '⏸' : '▶', yaw: 0, pitch: arcP, radiusDeg: 4.5, cmd: () => CommandModel.playPause(), color: '#2563eb' },
-            { id: 'seek_fwd', icon: '⏩', yaw: 9, pitch: arcP, radiusDeg: 3.8, cmd: () => CommandModel.seekForward(10) },
-            { id: 'next', icon: '⏭', yaw: 18, pitch: arcP, radiusDeg: 3.8, cmd: () => CommandModel.next() },
-            { id: 'recenter', icon: '🎯', yaw: 27, pitch: arcP, radiusDeg: 3.8, cmd: () => CommandModel.recenter(), color: '#059669' },
-            { id: 'close_arc', icon: '✕', yaw: 0, pitch: arcP + 9, radiusDeg: 3.2, cmd: () => CommandModel.closeControls(), color: '#ef4444' }
+            { id: 'prev', icon: '⏮', yaw: -20, pitch: floorAnchorPitch, radiusDeg: 4.2, cmd: () => CommandModel.previous() },
+            { id: 'seek_back', icon: '⏪', yaw: -10, pitch: floorAnchorPitch, radiusDeg: 4.2, cmd: () => CommandModel.seekBackward(10) },
+            { id: 'play_pause', icon: isPlay ? '⏸' : '▶', yaw: 0, pitch: floorAnchorPitch, radiusDeg: 5.0, cmd: () => CommandModel.playPause(), color: '#2563eb' },
+            { id: 'seek_fwd', icon: '⏩', yaw: 10, pitch: floorAnchorPitch, radiusDeg: 4.2, cmd: () => CommandModel.seekForward(10) },
+            { id: 'next', icon: '⏭', yaw: 20, pitch: floorAnchorPitch, radiusDeg: 4.2, cmd: () => CommandModel.next() },
+            { id: 'recenter', icon: '🎯', yaw: 0, pitch: floorAnchorPitch + 10, radiusDeg: 4.5, cmd: () => CommandModel.recenter(), color: '#059669' },
+            { id: 'close_arc', icon: '✕', yaw: 0, pitch: floorAnchorPitch - 10, radiusDeg: 4.0, cmd: () => CommandModel.closeControls(), color: '#ef4444' }
           ];
           arcNodes.forEach(b => {
             items.push({ ...b, pattern: 'A', dirWorld: sphericalToDir(b.yaw, b.pitch) });
           });
         }
       } else if (state.activePattern === 'B') {
-        // Pattern B: Minimalist Radial (Default 100% Hidden, clean icons, non-overlapping)
+        // Pattern B: Floor Radial (Zero Occlusion, pure icons, wide separation)
         if (!state.patternB_open) {
+          // Trigger sits deep in the floor area (Pitch -34°)
           items.push({
             id: 'open_radial',
             icon: '⚡',
-            label: 'Menu',
             pattern: 'B',
             yaw: 0,
-            pitch: -24,
-            radiusDeg: 5.5,
+            pitch: floorAnchorPitch,
+            radiusDeg: 6.5,
             color: '#7c3aed',
             cmd: () => CommandModel.openControls(),
-            dirWorld: sphericalToDir(0, -24)
+            dirWorld: sphericalToDir(0, floorAnchorPitch)
           });
         } else {
-          const anchorPitch = -20;
-          const radialR = 15.5; // Generous radial distance prevents any overlap
+          const radialR = 15.0; // Wide radius separation
 
-          // Center Deadzone Close button
+          // Center Dismiss Button
           items.push({
             id: 'close_radial',
             icon: '✕',
             pattern: 'B',
             yaw: 0,
-            pitch: anchorPitch,
-            radiusDeg: 4.0,
+            pitch: floorAnchorPitch,
+            radiusDeg: 4.5,
             color: '#ef4444',
             cmd: () => CommandModel.closeControls(),
-            dirWorld: sphericalToDir(0, anchorPitch)
+            dirWorld: sphericalToDir(0, floorAnchorPitch)
           });
 
-          // 6 Compact Radial Nodes (Icon only, 60 deg apart)
+          // 6 Pure Media Controls in Radial Formation
           const radialNodes = [
             { id: 'recenter', icon: '🎯', angleDeg: 90, cmd: () => CommandModel.recenter(), color: '#059669' },
             { id: 'seek_fwd', icon: '⏩', angleDeg: 30, cmd: () => CommandModel.seekForward(10) },
@@ -1253,61 +1263,61 @@
           radialNodes.forEach(rn => {
             const rad = rn.angleDeg * (Math.PI / 180);
             const yaw = radialR * Math.cos(rad);
-            const pitch = anchorPitch + radialR * Math.sin(rad);
+            const pitch = floorAnchorPitch + radialR * Math.sin(rad);
             items.push({
               id: rn.id,
               icon: rn.icon,
               pattern: 'B',
               yaw: yaw,
               pitch: pitch,
-              radiusDeg: 4.2,
+              radiusDeg: 4.4,
               color: rn.color,
               cmd: rn.cmd,
               dirWorld: sphericalToDir(yaw, pitch)
             });
           });
-
-          // Pattern Switcher
-          items.push({
-            id: 'pat_switch',
-            icon: '🔀',
-            pattern: 'B',
-            yaw: -24,
-            pitch: anchorPitch + 14,
-            radiusDeg: 3.6,
-            color: '#7c3aed',
-            cmd: () => CommandModel.cyclePattern(),
-            dirWorld: sphericalToDir(-24, anchorPitch + 14)
-          });
         }
       } else if (state.activePattern === 'C') {
-        // Pattern C: Video HUD (Hidden by default, clean icons)
+        // Pattern C: Floor HUD (Bug-free, full dirWorld)
         if (!state.patternC_open) {
           items.push({
             id: 'open_hud',
             icon: '📺',
-            label: 'HUD',
             pattern: 'C',
             yaw: 0,
-            pitch: -24,
-            radiusDeg: 5.5,
+            pitch: floorAnchorPitch,
+            radiusDeg: 6.5,
             color: '#0891b2',
             cmd: () => CommandModel.openControls(),
-            dirWorld: sphericalToDir(0, -24)
+            dirWorld: sphericalToDir(0, floorAnchorPitch)
           });
         } else {
-          items.push({ id: 'seek_b60', icon: '⏮ 60s', pattern: 'C', yaw: -18, pitch: -16, radiusDeg: 3.6, cmd: () => CommandModel.seekBackward(60) });
-          items.push({ id: 'seek_b10', icon: '⏪ 10s', pattern: 'C', yaw: -7, pitch: -16, radiusDeg: 3.6, cmd: () => CommandModel.seekBackward(10) });
-          items.push({ id: 'seek_f10', icon: '10s ⏩', pattern: 'C', yaw: 7, pitch: -16, radiusDeg: 3.6, cmd: () => CommandModel.seekForward(10) });
-          items.push({ id: 'seek_f60', icon: '60s ⏭', pattern: 'C', yaw: 18, pitch: -16, radiusDeg: 3.6, cmd: () => CommandModel.seekForward(60) });
+          const hudNodes = [
+            { id: 'seek_b60', icon: '⏮ 60s', yaw: -18, pitch: floorAnchorPitch + 5, radiusDeg: 3.8, cmd: () => CommandModel.seekBackward(60) },
+            { id: 'seek_b10', icon: '⏪ 10s', yaw: -7, pitch: floorAnchorPitch + 5, radiusDeg: 3.8, cmd: () => CommandModel.seekBackward(10) },
+            { id: 'seek_f10', icon: '10s ⏩', yaw: 7, pitch: floorAnchorPitch + 5, radiusDeg: 3.8, cmd: () => CommandModel.seekForward(10) },
+            { id: 'seek_f60', icon: '60s ⏭', yaw: 18, pitch: floorAnchorPitch + 5, radiusDeg: 3.8, cmd: () => CommandModel.seekForward(60) },
 
-          items.push({ id: 'prev', icon: '⏮', pattern: 'C', yaw: -18, pitch: -23, radiusDeg: 3.8, cmd: () => CommandModel.previous() });
-          items.push({ id: 'play_pause', icon: isPlay ? '⏸' : '▶', pattern: 'C', yaw: -6, pitch: -23, radiusDeg: 4.4, cmd: () => CommandModel.playPause(), color: '#2563eb' });
-          items.push({ id: 'next', icon: '⏭', pattern: 'C', yaw: 6, pitch: -23, radiusDeg: 3.8, cmd: () => CommandModel.next() });
-          items.push({ id: 'recenter', icon: '🎯', pattern: 'C', yaw: 18, pitch: -23, radiusDeg: 3.8, cmd: () => CommandModel.recenter(), color: '#059669' });
+            { id: 'prev', icon: '⏮', yaw: -18, pitch: floorAnchorPitch - 6, radiusDeg: 4.2, cmd: () => CommandModel.previous() },
+            { id: 'play_pause', icon: isPlay ? '⏸' : '▶', yaw: -6, pitch: floorAnchorPitch - 6, radiusDeg: 4.8, cmd: () => CommandModel.playPause(), color: '#2563eb' },
+            { id: 'next', icon: '⏭', yaw: 6, pitch: floorAnchorPitch - 6, radiusDeg: 4.2, cmd: () => CommandModel.next() },
+            { id: 'recenter', icon: '🎯', yaw: 18, pitch: floorAnchorPitch - 6, radiusDeg: 4.2, cmd: () => CommandModel.recenter(), color: '#059669' },
+            { id: 'close_hud', icon: '✕', yaw: 0, pitch: floorAnchorPitch - 15, radiusDeg: 3.8, color: '#ef4444', cmd: () => CommandModel.closeControls() }
+          ];
 
-          items.push({ id: 'pat_switch', icon: '🔀', pattern: 'C', yaw: -25, pitch: -23, radiusDeg: 3.4, color: '#7c3aed', cmd: () => CommandModel.cyclePattern() });
-          items.push({ id: 'close_hud', icon: '✕', pattern: 'C', yaw: 25, pitch: -23, radiusDeg: 3.4, color: '#ef4444', cmd: () => CommandModel.closeControls() });
+          hudNodes.forEach(hn => {
+            items.push({
+              id: hn.id,
+              icon: hn.icon,
+              pattern: 'C',
+              yaw: hn.yaw,
+              pitch: hn.pitch,
+              radiusDeg: hn.radiusDeg,
+              color: hn.color,
+              cmd: hn.cmd,
+              dirWorld: sphericalToDir(hn.yaw, hn.pitch)
+            });
+          });
         }
       }
 
@@ -1353,25 +1363,12 @@
         return;
       }
 
-      // Auto-dismiss menu when looking away back up to the video (pitch > -6 deg)
-      if (state.patternB_open) {
-        const centerDir = sphericalToDir(0, -20);
-        const distToCenter = getGazeAngularDistanceDeg(centerDir);
-        if (distToCenter > 25) {
-          state.patternB_open = false;
-        }
-      } else if (state.patternA_open) {
-        const centerDir = sphericalToDir(0, -22);
-        const distToCenter = getGazeAngularDistanceDeg(centerDir);
-        if (distToCenter > 24) {
-          state.patternA_open = false;
-        }
-      } else if (state.patternC_open) {
-        const centerDir = sphericalToDir(0, -20);
-        const distToCenter = getGazeAngularDistanceDeg(centerDir);
-        if (distToCenter > 26) {
-          state.patternC_open = false;
-        }
+      // Natural auto-dismiss when user looks back up towards the video (Pitch >= -16 deg)
+      const lookPitch = state.cameraForward[1]; // y component
+      if (lookPitch > -0.32) { // pitch > -18.6 deg
+        if (state.patternA_open) state.patternA_open = false;
+        if (state.patternB_open) state.patternB_open = false;
+        if (state.patternC_open) state.patternC_open = false;
       }
 
       const items = getActiveInteractiveItems();
@@ -1379,6 +1376,7 @@
       let minAng = 999;
 
       items.forEach(item => {
+        if (!item.dirWorld) return;
         const ang = getGazeAngularDistanceDeg(item.dirWorld);
         if (ang <= item.radiusDeg && ang < minAng) {
           minAng = ang;
@@ -1396,8 +1394,7 @@
         }
 
         const elapsed = now - telemetry.hoverStartTime;
-        // Open trigger needs only 450ms for snappy response, commands use full threshold
-        const threshold = (bestItem.id.startsWith('open_')) ? 450 : state.dwellThresholdMs;
+        const threshold = (bestItem.id.startsWith('open_')) ? 400 : state.dwellThresholdMs;
         dwellProgress = Math.min(1.0, elapsed / threshold);
 
         if (dwellProgress >= 1.0) {
@@ -1419,7 +1416,7 @@
     }
 
     // ==========================================
-    // 10. Stereo Canvas UI Rendering (Compact, Icon-only)
+    // 11. Stereo Canvas UI Rendering (Crisp 3D Convergence)
     // ==========================================
     function renderStereoUI(now, width, height) {
       if (!uiCtx) return;
@@ -1429,7 +1426,7 @@
       const halfW = Math.floor(width / 2);
       const items = getActiveInteractiveItems();
 
-      // Render Left Eye (0) and Right Eye (1)
+      // Render Left Eye (0) and Right Eye (1) with binocular convergence parity
       for (let eye = 0; eye < 2; eye++) {
         const eyeOffsetX = eye * halfW;
         const eyeCenterX = eyeOffsetX + halfW * 0.5;
@@ -1440,7 +1437,7 @@
         uiCtx.rect(eyeOffsetX, 0, halfW, height);
         uiCtx.clip();
 
-        // 1. Recenter Calibration Modal (Full Focus in Both Eyes)
+        // 1. Recenter Calibration Modal
         if (state.recenterCountdown.active) {
           const elapsed = now - state.recenterCountdown.startTime;
           const dur = state.recenterCountdown.durationMs;
@@ -1448,7 +1445,7 @@
           const progress = Math.max(0, Math.min(1, elapsed / dur));
 
           const cardW = 320, cardH = 150;
-          uiCtx.fillStyle = 'rgba(15, 23, 42, 0.92)';
+          uiCtx.fillStyle = 'rgba(15, 23, 42, 0.94)';
           uiCtx.strokeStyle = '#38bdf8';
           uiCtx.lineWidth = 2;
           roundRect(uiCtx, eyeCenterX - cardW/2, eyeCenterY - cardH/2, cardW, cardH, 18, true, true);
@@ -1490,18 +1487,18 @@
           continue;
         }
 
-        // 2. Draw Interactive Circular Icon Nodes (Compact & Non-overlapping)
+        // 2. Draw Interactive Circular Icon Nodes (Deep floor zone, pure icons)
         items.forEach(item => {
+          if (!item.dirWorld) return;
           const p = projectWorldDirToEye(item.dirWorld, eye, halfW, height);
           if (!p) return;
 
           const isHovered = (currentHoveredItem && currentHoveredItem.id === item.id);
           const isActivated = (activatedItemId === item.id && (now - activationFlashTime < 300));
-          const btnR = Math.max(18, (item.radiusDeg * 4.4) * (halfW / 400));
+          const btnR = Math.max(20, (item.radiusDeg * 4.6) * (halfW / 400));
 
           uiCtx.save();
 
-          // Circular background
           uiCtx.beginPath();
           uiCtx.arc(p.x, p.y, btnR, 0, Math.PI * 2);
 
@@ -1516,27 +1513,27 @@
             uiCtx.shadowColor = '#38bdf8';
             uiCtx.shadowBlur = 10;
           } else {
-            uiCtx.fillStyle = item.color ? (item.color + '55') : 'rgba(15, 23, 42, 0.75)';
-            uiCtx.strokeStyle = 'rgba(255, 255, 255, 0.35)';
-            uiCtx.lineWidth = 1.2;
+            uiCtx.fillStyle = item.color ? (item.color + '66') : 'rgba(15, 23, 42, 0.8)';
+            uiCtx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
+            uiCtx.lineWidth = 1.4;
           }
           uiCtx.fill();
           uiCtx.stroke();
 
-          // Dwell fill arc
+          // Dwell progress ring
           if (isHovered && dwellProgress > 0) {
             uiCtx.beginPath();
             const startAngle = -Math.PI / 2;
             const endAngle = startAngle + (Math.PI * 2 * dwellProgress);
-            uiCtx.arc(p.x, p.y, btnR + 3, startAngle, endAngle);
+            uiCtx.arc(p.x, p.y, btnR + 3.5, startAngle, endAngle);
             uiCtx.strokeStyle = '#34d399';
-            uiCtx.lineWidth = 3;
+            uiCtx.lineWidth = 3.5;
             uiCtx.stroke();
           }
 
-          // Icon glyph
+          // Icon
           uiCtx.shadowBlur = 0;
-          uiCtx.font = 'bold ' + Math.round(btnR * 0.9) + 'px -apple-system, sans-serif';
+          uiCtx.font = 'bold ' + Math.round(btnR * 0.85) + 'px -apple-system, sans-serif';
           uiCtx.fillStyle = '#ffffff';
           uiCtx.textAlign = 'center';
           uiCtx.textBaseline = 'middle';
@@ -1549,7 +1546,7 @@
         if (state.toastText && (now - state.toastTime < 2000)) {
           const alpha = Math.min(1.0, 1.0 - (now - state.toastTime - 1200) / 800);
           if (alpha > 0) {
-            uiCtx.fillStyle = 'rgba(15, 23, 42, ' + (0.85 * alpha) + ')';
+            uiCtx.fillStyle = 'rgba(15, 23, 42, ' + (0.88 * alpha) + ')';
             uiCtx.strokeStyle = 'rgba(56, 189, 248, ' + (0.8 * alpha) + ')';
             uiCtx.lineWidth = 1.2;
             const tw = 240, th = 30;
@@ -1621,7 +1618,7 @@
     }
 
     // ==========================================
-    // 11. Main Render Loop (High Performance)
+    // 12. Main Render Loop
     // ==========================================
     let lastFpsTime = performance.now();
     let frameCounter = 0;
@@ -1649,12 +1646,11 @@
         uiCanvas.height = height;
       }
 
-      // Update Dwell State
+      // Update Dwell Interaction
       updateDwellInteraction(now);
 
       // WebGL VR 3D SBS Projection
       if (gl && program) {
-        // Hardware optimized texture upload: ONLY upload when video decoder produces a new frame!
         if (video.readyState >= 2 && (videoFrameNeedsUpload || (video.currentTime !== lastUploadedVideoTime && !video.paused))) {
           gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
           gl.bindTexture(gl.TEXTURE_2D, videoTex);
@@ -1680,13 +1676,13 @@
         const aspectPerEye = (halfW / height);
         gl.uniform1f(uAspectLoc, aspectPerEye);
 
-        // Left Eye Viewport (Maps left half of SBS 3D Video)
+        // Left Eye (Maps [0, 0.5])
         gl.viewport(0, 0, halfW, height);
         gl.scissor(0, 0, halfW, height);
         gl.uniform1i(uEyeLoc, 0);
         gl.drawArrays(gl.TRIANGLES, 0, 6);
 
-        // Right Eye Viewport (Maps right half of SBS 3D Video)
+        // Right Eye (Maps [0.5, 1.0])
         gl.viewport(halfW, 0, halfW, height);
         gl.scissor(halfW, 0, halfW, height);
         gl.uniform1i(uEyeLoc, 1);
@@ -1702,7 +1698,7 @@
     requestAnimationFrame(renderLoop);
 
     // ==========================================
-    // 12. UI Setup & Video Loading
+    // 13. UI Setup & Video Loading
     // ==========================================
     async function loadVideoList() {
       try {
@@ -1798,7 +1794,6 @@
 
     // Enter VR Button
     document.getElementById('btnEnterVR').addEventListener('click', () => {
-      // 1. MUST request DeviceOrientation SYNCHRONOUSLY at first line
       if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
         DeviceOrientationEvent.requestPermission().then((perm) => {
           state.motionPermission = perm;
@@ -1815,10 +1810,8 @@
         if (elPerm) elPerm.textContent = 'Standard';
       }
 
-      // 2. Acquire Screen WakeLock
       requestWakeLock();
 
-      // 3. Play Video & Resume Audio Context
       video.muted = false;
       video.play().catch((e) => {
         console.log('Video play error on gesture:', e);
@@ -1829,7 +1822,6 @@
         audioCtx.resume();
       }
 
-      // 4. Enter Fullscreen VR View & start initial 3s calibration
       updateScreenOrientation();
       state.inVR = true;
       uiOverlay.classList.add('hidden');
