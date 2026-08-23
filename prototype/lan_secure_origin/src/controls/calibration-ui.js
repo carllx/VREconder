@@ -1,8 +1,10 @@
 // ==========================================
 // Staged Calibration & Diagnostic UI Controls
+// (Displays Derived Cardboard FOV & Physical Screen Parameters)
 // ==========================================
 import { showFeedbackToast } from '../core/state.js';
-import { createDefaultViewerProfile } from '../core/projection-profile.js';
+import { createDefaultViewerProfile, deriveCardboardEyeGeometry } from '../core/projection-profile.js';
+import { activeScreenProfile } from '../core/screen-profile.js';
 
 export class CalibrationUI {
   constructor(options) {
@@ -13,8 +15,8 @@ export class CalibrationUI {
     this.onEnterVR = options.onEnterVR;
     this.onExitVR = options.onExitVR;
 
-    this.currentMode = 'diagnostic'; // 'diagnostic' | 'vr'
-    this.selectedEye = 0; // 0: Left, 1: Right
+    this.currentMode = 'diagnostic';
+    this.selectedEye = 0;
     this.diagnosticFovDeg = 85;
 
     this.activeVideoProfile = null;
@@ -64,6 +66,7 @@ export class CalibrationUI {
     this.valDistortK2 = document.getElementById('valDistortK2');
     this.btnSaveViewerProfile = document.getElementById('btnSaveViewerProfile');
     this.txtViewerSourceInfo = document.getElementById('txtViewerSourceInfo');
+    this.txtDerivedFov = document.getElementById('txtDerivedFov');
 
     this.bindEvents();
   }
@@ -110,25 +113,36 @@ export class CalibrationUI {
     const hp = this.activeViewerProfile;
     if (!hp) return;
 
-    if (this.selViewerPreset) this.selViewerPreset.value = hp.viewerProfileId || 'cardboard:v2';
+    if (this.selViewerPreset) this.selViewerPreset.value = hp.viewerProfileId || 'unknown:uncalibrated';
     this.updateLensBtnState();
 
-    const dist = hp.distortion || { k1: 0.34, k2: 0.55 };
+    const dist = hp.distortion || { k1: 0.0, k2: 0.0 };
     if (this.rangeDistortK1) this.rangeDistortK1.value = dist.k1 || 0;
-    if (this.valDistortK1) this.valDistortK1.textContent = (dist.k1 || 0).toFixed(2);
+    if (this.valDistortK1) this.valDistortK1.textContent = (dist.k1 || 0).toFixed(3);
 
     if (this.rangeDistortK2) this.rangeDistortK2.value = dist.k2 || 0;
-    if (this.valDistortK2) this.valDistortK2.textContent = (dist.k2 || 0).toFixed(2);
+    if (this.valDistortK2) this.valDistortK2.textContent = (dist.k2 || 0).toFixed(3);
 
     if (this.txtViewerSourceInfo) {
-      this.txtViewerSourceInfo.textContent = hp.source || 'Authoritative Specification';
+      this.txtViewerSourceInfo.textContent = hp.source || 'Device Specification';
+    }
+
+    if (this.txtDerivedFov) {
+      const geom = deriveCardboardEyeGeometry(activeScreenProfile, hp);
+      const l = geom.leftEye.fovDeg;
+      const r = geom.rightEye.fovDeg;
+      this.txtDerivedFov.innerHTML = `
+        <b>Left Eye FOV:</b> L:${l.left.toFixed(1)}° R:${l.right.toFixed(1)}° U:${l.top.toFixed(1)}° D:${l.bottom.toFixed(1)}°<br>
+        <b>Right Eye FOV:</b> L:${r.left.toFixed(1)}° R:${r.right.toFixed(1)}° U:${r.top.toFixed(1)}° D:${r.bottom.toFixed(1)}°<br>
+        <span style="opacity:0.75;">Screen: ${activeScreenProfile.deviceModel} (${(activeScreenProfile.widthMeters*1000).toFixed(1)}×${(activeScreenProfile.heightMeters*1000).toFixed(1)}mm @ ${activeScreenProfile.ppi}ppi)</span>
+      `;
     }
   }
 
   updateLensBtnState() {
     const isEnabled = (this.activeViewerProfile && this.activeViewerProfile.lensCorrectionEnabled === true);
     if (this.btnToggleLens) {
-      this.btnToggleLens.textContent = isEnabled ? '🛡️ LENS CORRECTION: ON (Cardboard Spec Pre-Warp)' : '⚪ LENS CORRECTION: OFF (Pure Rectilinear)';
+      this.btnToggleLens.textContent = isEnabled ? '🛡️ LENS CORRECTION: ON (Cardboard Screen-Space Pre-Warp)' : '⚪ LENS CORRECTION: OFF (Ideal Undistorted)';
       this.btnToggleLens.style.background = isEnabled ? '#059669' : '#475569';
     }
   }
@@ -310,8 +324,8 @@ export class CalibrationUI {
       if (!this.activeViewerProfile.distortion) this.activeViewerProfile.distortion = {};
       this.activeViewerProfile.distortion.k1 = parseFloat(this.rangeDistortK1 ? this.rangeDistortK1.value : 0);
       this.activeViewerProfile.distortion.k2 = parseFloat(this.rangeDistortK2 ? this.rangeDistortK2.value : 0);
-      if (this.valDistortK1) this.valDistortK1.textContent = this.activeViewerProfile.distortion.k1.toFixed(2);
-      if (this.valDistortK2) this.valDistortK2.textContent = this.activeViewerProfile.distortion.k2.toFixed(2);
+      if (this.valDistortK1) this.valDistortK1.textContent = this.activeViewerProfile.distortion.k1.toFixed(3);
+      if (this.valDistortK2) this.valDistortK2.textContent = this.activeViewerProfile.distortion.k2.toFixed(3);
       notifyChange();
     };
 

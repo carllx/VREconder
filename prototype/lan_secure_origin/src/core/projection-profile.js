@@ -1,7 +1,8 @@
 // ==========================================
-// Video Projection Profile & Viewer Profile Models
-// (Authoritative Cardboard Specs & Untagged Media Semantics)
+// Video Projection Profile & Cardboard Viewer Optics Derivation
+// Based on Google Open Source: googlevr/wwgc (CardboardView.js & CardboardDevice.proto)
 // ==========================================
+import { activeScreenProfile } from './screen-profile.js';
 
 export function computeMediaFingerprint(videoItem) {
   if (!videoItem) return 'unknown_media';
@@ -10,7 +11,6 @@ export function computeMediaFingerprint(videoItem) {
   return `${name.replace(/[^a-zA-Z0-9._-]/g, '_')}_${size}`;
 }
 
-// Untagged media default: unknown/unverified (Never infer 180 SBS automatically)
 export function createDefaultVideoProfile(mediaId, name = '') {
   return {
     mediaId: mediaId,
@@ -18,7 +18,7 @@ export function createDefaultVideoProfile(mediaId, name = '') {
     projection: 'unknown',       // 'unknown' | 'equirectangular-180' | 'equirectangular-360' | 'flat'
     stereoMode: 'unknown',       // 'unknown' | 'left-right' | 'top-bottom' | 'mono'
     eyeOrder: 'unknown',         // 'unknown' | 'left-right' | 'right-left'
-    fovHorizontalDeg: 180,       // Default candidate scale if 180 selected
+    fovHorizontalDeg: 180,
     fovVerticalDeg: 180,
     crop: { top: 0, bottom: 0, left: 0, right: 0 },
     pose: { yawDeg: 0, pitchDeg: 0, rollDeg: 0 },
@@ -28,54 +28,67 @@ export function createDefaultVideoProfile(mediaId, name = '') {
   };
 }
 
-// Authoritative Viewer Profiles from Google Cardboard Specifications
-// Sources:
-// - Google Cardboard v1 Spec (Google I/O 2014): inter-lens 60mm, screen-to-lens 42mm, k1=0.441, k2=0.156
-// - Google Cardboard v2 Spec (Google I/O 2015): inter-lens 64mm, screen-to-lens 39mm, k1=0.34, k2=0.55
-// - iPhone 15 Pro Physical Display: 133mm x 62mm active area, 460 PPI
-export function createDefaultViewerProfile(profileId = 'cardboard:v2') {
+export function createDefaultViewerProfile(profileId = 'unknown:uncalibrated') {
   const presets = {
-    'cardboard:v2': {
-      viewerProfileId: 'cardboard:v2',
-      name: 'Google Cardboard v2 (Official I/O 2015 Spec)',
-      source: 'https://support.google.com/cardboard/manufacturers/answer/6321873',
+    'unknown:uncalibrated': {
+      viewerProfileId: 'unknown:uncalibrated',
+      name: 'Unknown / Uncalibrated Viewer (Default)',
+      source: 'Uncalibrated Baseline (No Headset Lens Assumptions)',
+      confidence: 'uncalibrated',
       lensCorrectionEnabled: false,
-      interLensDistanceMm: 64.0,
-      screenToLensDistanceMm: 39.0,
-      screenAlignment: 'center', // optical center alignment
-      eyes: {
-        left: {
-          fov: { leftDeg: 53.0, rightDeg: 53.0, upDeg: 53.0, downDeg: 53.0 },
-          eyeFromHeadMm: [-32.0, 0.0, 0.0]
-        },
-        right: {
-          fov: { leftDeg: 53.0, rightDeg: 53.0, upDeg: 53.0, downDeg: 53.0 },
-          eyeFromHeadMm: [32.0, 0.0, 0.0]
-        }
+      screenToLensDistance: 0.0393, // 39.3 mm
+      interLensDistance: 0.0639,    // 63.9 mm
+      verticalAlignment: 'BOTTOM',  // BOTTOM | CENTER | TOP
+      trayToLensDistance: 0.0350,   // 35.0 mm
+      maxFovAngles: {
+        outerDeg: 53.0,
+        innerDeg: 53.0,
+        upperDeg: 53.0,
+        lowerDeg: 53.0
+      },
+      distortion: {
+        model: 'uncalibrated-radial',
+        k1: 0.0,
+        k2: 0.0
+      }
+    },
+    'cardboard:v2_2015': {
+      viewerProfileId: 'cardboard:v2_2015',
+      name: 'Google Cardboard v2 (Historical Ref: Google I/O 2015 Spec)',
+      source: 'Google Cardboard Device Parameters Specification (v2.0)',
+      confidence: 'historical-specification',
+      lensCorrectionEnabled: false,
+      screenToLensDistance: 0.0393, // 39.3 mm
+      interLensDistance: 0.0639,    // 63.9 mm
+      verticalAlignment: 'BOTTOM',
+      trayToLensDistance: 0.0350,   // 35.0 mm
+      maxFovAngles: {
+        outerDeg: 53.0,
+        innerDeg: 53.0,
+        upperDeg: 53.0,
+        lowerDeg: 53.0
       },
       distortion: {
         model: 'cardboard-radial-polynomial',
-        k1: 0.34,
-        k2: 0.55
+        k1: 0.33582564,
+        k2: 0.55348791
       }
     },
-    'cardboard:v1': {
-      viewerProfileId: 'cardboard:v1',
-      name: 'Google Cardboard v1 (Official I/O 2014 Spec)',
-      source: 'https://support.google.com/cardboard/manufacturers/answer/6321873',
+    'cardboard:v1_2014': {
+      viewerProfileId: 'cardboard:v1_2014',
+      name: 'Google Cardboard v1 (Historical Ref: Google I/O 2014 Spec)',
+      source: 'Google Cardboard Device Parameters Specification (v1.0)',
+      confidence: 'historical-specification',
       lensCorrectionEnabled: false,
-      interLensDistanceMm: 60.0,
-      screenToLensDistanceMm: 42.0,
-      screenAlignment: 'center',
-      eyes: {
-        left: {
-          fov: { leftDeg: 40.0, rightDeg: 40.0, upDeg: 40.0, downDeg: 40.0 },
-          eyeFromHeadMm: [-30.0, 0.0, 0.0]
-        },
-        right: {
-          fov: { leftDeg: 40.0, rightDeg: 40.0, upDeg: 40.0, downDeg: 40.0 },
-          eyeFromHeadMm: [30.0, 0.0, 0.0]
-        }
+      screenToLensDistance: 0.0420, // 42.0 mm
+      interLensDistance: 0.0600,    // 60.0 mm
+      verticalAlignment: 'BOTTOM',
+      trayToLensDistance: 0.0350,   // 35.0 mm
+      maxFovAngles: {
+        outerDeg: 40.0,
+        innerDeg: 40.0,
+        upperDeg: 40.0,
+        lowerDeg: 40.0
       },
       distortion: {
         model: 'cardboard-radial-polynomial',
@@ -83,38 +96,127 @@ export function createDefaultViewerProfile(profileId = 'cardboard:v2') {
         k2: 0.156
       }
     },
-    'custom:uncalibrated': {
-      viewerProfileId: 'custom:uncalibrated',
-      name: 'Custom / Uncalibrated Viewer (Manual Warp Tuning)',
-      source: 'User Manual Calibration',
+    'custom:calibrated': {
+      viewerProfileId: 'custom:calibrated',
+      name: 'Custom Viewer Profile (Manual Device Parameter Input)',
+      source: 'User Calibrated Optical Geometry',
+      confidence: 'user-calibrated',
       lensCorrectionEnabled: false,
-      interLensDistanceMm: 64.0,
-      screenToLensDistanceMm: 40.0,
-      screenAlignment: 'center',
-      eyes: {
-        left: {
-          fov: { leftDeg: 45.0, rightDeg: 45.0, upDeg: 45.0, downDeg: 45.0 },
-          eyeFromHeadMm: [-32.0, 0.0, 0.0]
-        },
-        right: {
-          fov: { leftDeg: 45.0, rightDeg: 45.0, upDeg: 45.0, downDeg: 45.0 },
-          eyeFromHeadMm: [32.0, 0.0, 0.0]
-        }
+      screenToLensDistance: 0.0400,
+      interLensDistance: 0.0640,
+      verticalAlignment: 'BOTTOM',
+      trayToLensDistance: 0.0350,
+      maxFovAngles: {
+        outerDeg: 50.0,
+        innerDeg: 50.0,
+        upperDeg: 50.0,
+        lowerDeg: 50.0
       },
       distortion: {
-        model: 'custom-polynomial',
-        k1: 0.20,
-        k2: 0.10
+        model: 'custom-radial-polynomial',
+        k1: 0.25,
+        k2: 0.15
       }
     }
   };
-  return presets[profileId] || presets['cardboard:v2'];
+  return presets[profileId] || presets['unknown:uncalibrated'];
+}
+
+// =========================================================================
+// Cardboard Optical Geometry Derivation
+// Ported faithfully from Google WWGC (googlevr/wwgc: www/js/CardboardView.js)
+// =========================================================================
+export function deriveCardboardEyeGeometry(screen, viewer) {
+  const s = screen || activeScreenProfile;
+  const v = viewer || createDefaultViewerProfile('unknown:uncalibrated');
+
+  const halfScreenW = s.widthMeters * 0.5;
+  const halfIpd = v.interLensDistance * 0.5;
+  const D = v.screenToLensDistance;
+
+  // 1. Physical Distances from Left Lens Center to Screen Edges
+  const eyeLeftOuterDist = halfScreenW - halfIpd; // Distance to left outer edge
+  const eyeLeftInnerDist = halfIpd;              // Distance to center divider
+
+  let eyeBottomDist = 0.0;
+  let eyeTopDist = 0.0;
+
+  if (v.verticalAlignment === 'CENTER') {
+    eyeBottomDist = s.heightMeters * 0.5;
+    eyeTopDist = s.heightMeters * 0.5;
+  } else if (v.verticalAlignment === 'TOP') {
+    const fromTop = v.trayToLensDistance + s.borderSizeMeters;
+    eyeTopDist = fromTop;
+    eyeBottomDist = s.heightMeters - fromTop;
+  } else {
+    // Default 'BOTTOM'
+    const fromBottom = v.trayToLensDistance + s.borderSizeMeters;
+    eyeBottomDist = fromBottom;
+    eyeTopDist = s.heightMeters - fromBottom;
+  }
+
+  // 2. Physical Screen Tangents clamped by Max FOV (from CardboardView.js)
+  const deg2rad = Math.PI / 180;
+  const maxTanOuter = Math.tan((v.maxFovAngles.outerDeg || 50) * deg2rad);
+  const maxTanInner = Math.tan((v.maxFovAngles.innerDeg || 50) * deg2rad);
+  const maxTanUpper = Math.tan((v.maxFovAngles.upperDeg || 50) * deg2rad);
+  const maxTanLower = Math.tan((v.maxFovAngles.lowerDeg || 50) * deg2rad);
+
+  const leftEyeTanLeft = Math.min(maxTanOuter, eyeLeftOuterDist / D);
+  const leftEyeTanRight = Math.min(maxTanInner, eyeLeftInnerDist / D);
+  const eyeTanBottom = Math.min(maxTanLower, eyeBottomDist / D);
+  const eyeTanTop = Math.min(maxTanUpper, eyeTopDist / D);
+
+  // 3. Right eye mirrors horizontal tangents across the center divider
+  const rightEyeTanLeft = leftEyeTanRight;  // Inner (facing divider)
+  const rightEyeTanRight = leftEyeTanLeft;  // Outer (facing right edge)
+
+  // 4. Optical center coordinates in Normalized Viewport Space [0, 1] per eye
+  // Left eye lens center pixel within left viewport [0, widthPx/2]
+  const leftLensCenterXPx = (halfScreenW - halfIpd) * s.pixelsPerMeter;
+  const rightLensCenterXPx = (halfIpd) * s.pixelsPerMeter; // relative to right viewport
+  const lensCenterYPx = eyeBottomDist * s.pixelsPerMeter;
+
+  const halfViewportWPx = s.widthPx * 0.5;
+  const viewportHPx = s.heightPx;
+
+  const leftLensCenterNorm = [leftLensCenterXPx / halfViewportWPx, lensCenterYPx / viewportHPx];
+  const rightLensCenterNorm = [rightLensCenterXPx / halfViewportWPx, lensCenterYPx / viewportHPx];
+
+  return {
+    screenToLensDistance: D,
+    interLensDistance: v.interLensDistance,
+    screenPixelsPerMeter: s.pixelsPerMeter,
+    leftEye: {
+      tanBounds: [leftEyeTanLeft, leftEyeTanRight, eyeTanBottom, eyeTanTop], // [left, right, bottom, top]
+      fovDeg: {
+        left: Math.atan(leftEyeTanLeft) / deg2rad,
+        right: Math.atan(leftEyeTanRight) / deg2rad,
+        bottom: Math.atan(eyeTanBottom) / deg2rad,
+        top: Math.atan(eyeTanTop) / deg2rad
+      },
+      lensCenterNorm: leftLensCenterNorm,
+      eyeFromHeadMeters: [-halfIpd, 0, 0]
+    },
+    rightEye: {
+      tanBounds: [rightEyeTanLeft, rightEyeTanRight, eyeTanBottom, eyeTanTop],
+      fovDeg: {
+        left: Math.atan(rightEyeTanLeft) / deg2rad,
+        right: Math.atan(rightEyeTanRight) / deg2rad,
+        bottom: Math.atan(eyeTanBottom) / deg2rad,
+        top: Math.atan(eyeTanTop) / deg2rad
+      },
+      lensCenterNorm: rightLensCenterNorm,
+      eyeFromHeadMeters: [halfIpd, 0, 0]
+    },
+    distortion: v.distortion || { k1: 0, k2: 0 }
+  };
 }
 
 export class ProfileStorage {
   constructor() {
     this.videoProfiles = {};
-    this.activeViewerProfile = createDefaultViewerProfile('cardboard:v2');
+    this.activeViewerProfile = createDefaultViewerProfile('unknown:uncalibrated');
     this.loadFromLocalStorage();
   }
 
@@ -125,7 +227,7 @@ export class ProfileStorage {
       const hStr = localStorage.getItem('vreconder_viewer_profile');
       if (hStr) this.activeViewerProfile = JSON.parse(hStr);
     } catch (e) {
-      console.warn('Profile local storage load warning:', e);
+      console.warn('Profile local storage warning:', e);
     }
   }
 
