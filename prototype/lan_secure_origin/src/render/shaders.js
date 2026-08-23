@@ -1,5 +1,5 @@
 // ==========================================
-// WebGL Shader Sources: Rectilinear Diagnostic View + Stereo VR with Lens Correction
+// WebGL Shader Sources: Rectilinear Diagnostic View + Cardboard Lens Pre-Warp Model
 // ==========================================
 
 export const vsSource = `
@@ -19,14 +19,14 @@ export const fsSource = `
   uniform mat3 uCamRot;
   uniform mat3 uPoseRot;
   uniform int uEye;              // 0: Left Eye, 1: Right Eye
-  uniform int uEyeSwap;          // 0: Left-Right, 1: Right-Left
-  uniform int uProjectionMode;    // 0: Equirect-180, 1: Equirect-360, 2: Flat-2D
+  uniform int uEyeSwap;          // 0: Normal, 1: Swapped
+  uniform int uProjectionMode;    // 0: Equirect-180, 1: Equirect-360, 2: Flat-2D, 3: Unknown/Unconfigured
   uniform int uStereoLayout;     // 0: Side-by-Side (SBS), 1: Top-Bottom (TB), 2: Mono
   uniform float uAspect;
   uniform float uFovRad;
   uniform vec2 uCoverageRad;     // vec2(horizontalRad, verticalRad)
   uniform vec4 uCrop;            // vec4(left, right, top, bottom)
-  uniform int uLensCorrection;   // 0: OFF (Rectilinear), 1: ON (Radial Pre-warp)
+  uniform int uLensCorrection;   // 0: OFF (Rectilinear), 1: ON (Cardboard Spec Pre-Warp)
   uniform vec2 uDistortionK;     // vec2(k1, k2)
 
   const float PI = 3.14159265358979323846;
@@ -35,26 +35,37 @@ export const fsSource = `
   void main() {
     vec2 ndc = (vUv - 0.5) * 2.0;
 
-    // Apply Lens Pre-Distortion (Brown-Conrady Radial Model)
-    if (uLensCorrection == 1) {
-      float rSq = ndc.x * ndc.x + ndc.y * ndc.y;
-      float k1 = uDistortionK.x;
-      float k2 = uDistortionK.y;
-      float distortFactor = 1.0 + k1 * rSq + k2 * rSq * rSq;
-      // Normalization scale at r=1 to avoid clipping active frame
-      float normScale = 1.0 + k1 + k2;
-      ndc = (ndc * distortFactor) / normScale;
+    // Handle Unverified / Unknown projection
+    if (uProjectionMode == 3) {
+      // Diagnostic placeholder pattern
+      float checker = mod(floor(vUv.x * 20.0) + floor(vUv.y * 20.0), 2.0);
+      gl_FragColor = mix(vec4(0.08, 0.12, 0.2, 1.0), vec4(0.15, 0.22, 0.35, 1.0), checker);
+      return;
     }
 
-    // Pinhole Rectilinear Ray Generation
+    vec3 rayCam = vec3(0.0);
     float tanHalfFov = tan(uFovRad * 0.5);
-    vec3 rayCam = normalize(vec3(ndc.x * tanHalfFov * uAspect, ndc.y * tanHalfFov, -1.0));
 
-    // Combine Head Pose and Media Pose Rotation
+    if (uLensCorrection == 1) {
+      // Official Google Cardboard Tangent-Space Lens Pre-Distortion Model
+      // Reference: Google Cardboard SDK (CardboardDistortion / LensDistortion API)
+      vec2 tanCoords = vec2(ndc.x * tanHalfFov * uAspect, ndc.y * tanHalfFov);
+      float rSq = tanCoords.x * tanCoords.x + tanCoords.y * tanCoords.y;
+      float k1 = uDistortionK.x;
+      float k2 = uDistortionK.y;
+      float distortionFactor = 1.0 + k1 * rSq + k2 * rSq * rSq;
+      vec2 distortedTan = tanCoords * distortionFactor;
+      rayCam = normalize(vec3(distortedTan.x, distortedTan.y, -1.0));
+    } else {
+      // Pure Rectilinear Pinhole Ray (Lens Correction OFF)
+      rayCam = normalize(vec3(ndc.x * tanHalfFov * uAspect, ndc.y * tanHalfFov, -1.0));
+    }
+
+    // Combine Head Tracking and Camera Pose Matrices
     vec3 dWorld = uPoseRot * (uCamRot * rayCam);
 
     if (uProjectionMode == 2) {
-      // Direct Flat pass-through
+      // Direct Flat Pass-through
       gl_FragColor = texture2D(uVideoTexture, vUv);
       return;
     }
@@ -67,19 +78,19 @@ export const fsSource = `
     float maxHalfLat = (uCoverageRad.y * 0.5);
 
     if (abs(lon) > maxHalfLon || abs(lat) > maxHalfLat) {
-      gl_FragColor = vec4(0.015, 0.02, 0.03, 1.0);
+      gl_FragColor = vec4(0.012, 0.016, 0.024, 1.0);
       return;
     }
 
-    // Map to Local Sphere UV [0, 1]
+    // Normalized UV on Source Hemisphere/Sphere
     float uLocal = 0.5 + lon / uCoverageRad.x;
     float vLocal = 0.5 + lat / uCoverageRad.y;
 
-    // Apply Crop
+    // Apply Crop/Bounds
     uLocal = uCrop.x + uLocal * (1.0 - uCrop.x - uCrop.y);
     vLocal = uCrop.z + vLocal * (1.0 - uCrop.z - uCrop.w);
 
-    // Determine Source Eye Index (handling eye swap)
+    // Determine Source Eye
     int sourceEye = uEye;
     if (uEyeSwap == 1) {
       sourceEye = (uEye == 0) ? 1 : 0;

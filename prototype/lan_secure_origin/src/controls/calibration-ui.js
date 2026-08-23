@@ -53,6 +53,7 @@ export class CalibrationUI {
     this.valPoseRoll = document.getElementById('valPoseRoll');
     this.btnResetPose = document.getElementById('btnResetPose');
     this.btnSaveVideoProfile = document.getElementById('btnSaveVideoProfile');
+    this.txtMappingStatus = document.getElementById('txtMappingStatus');
 
     // Stage B Controls
     this.selViewerPreset = document.getElementById('selViewerPreset');
@@ -62,6 +63,7 @@ export class CalibrationUI {
     this.rangeDistortK2 = document.getElementById('rangeDistortK2');
     this.valDistortK2 = document.getElementById('valDistortK2');
     this.btnSaveViewerProfile = document.getElementById('btnSaveViewerProfile');
+    this.txtViewerSourceInfo = document.getElementById('txtViewerSourceInfo');
 
     this.bindEvents();
   }
@@ -75,8 +77,8 @@ export class CalibrationUI {
     const vp = this.activeVideoProfile;
     if (!vp) return;
 
-    if (this.selProjection) this.selProjection.value = vp.projection || 'equirectangular-180';
-    if (this.selStereo) this.selStereo.value = vp.stereoMode || 'left-right';
+    if (this.selProjection) this.selProjection.value = vp.projection || 'unknown';
+    if (this.selStereo) this.selStereo.value = vp.stereoMode || 'unknown';
     if (this.selEyeOrder) this.selEyeOrder.value = vp.eyeOrder || 'left-right';
 
     const covH = vp.fovHorizontalDeg || 180;
@@ -92,6 +94,16 @@ export class CalibrationUI {
 
     if (this.rangePoseRoll) this.rangePoseRoll.value = pose.rollDeg || 0;
     if (this.valPoseRoll) this.valPoseRoll.textContent = (pose.rollDeg || 0) + '°';
+
+    if (this.txtMappingStatus) {
+      if (vp.confidence === 'unverified' || vp.projection === 'unknown') {
+        this.txtMappingStatus.textContent = '⚠️ Untagged Media (Select Candidate Projection)';
+        this.txtMappingStatus.style.color = '#f87171';
+      } else {
+        this.txtMappingStatus.textContent = `✓ Calibrated: ${vp.projection} (${vp.stereoMode})`;
+        this.txtMappingStatus.style.color = '#34d399';
+      }
+    }
   }
 
   syncStageBToUI() {
@@ -101,18 +113,22 @@ export class CalibrationUI {
     if (this.selViewerPreset) this.selViewerPreset.value = hp.viewerProfileId || 'cardboard:v2';
     this.updateLensBtnState();
 
-    const dist = hp.distortion || { k1: 0.16, k2: 0.06 };
+    const dist = hp.distortion || { k1: 0.34, k2: 0.55 };
     if (this.rangeDistortK1) this.rangeDistortK1.value = dist.k1 || 0;
     if (this.valDistortK1) this.valDistortK1.textContent = (dist.k1 || 0).toFixed(2);
 
     if (this.rangeDistortK2) this.rangeDistortK2.value = dist.k2 || 0;
     if (this.valDistortK2) this.valDistortK2.textContent = (dist.k2 || 0).toFixed(2);
+
+    if (this.txtViewerSourceInfo) {
+      this.txtViewerSourceInfo.textContent = hp.source || 'Authoritative Specification';
+    }
   }
 
   updateLensBtnState() {
     const isEnabled = (this.activeViewerProfile && this.activeViewerProfile.lensCorrectionEnabled === true);
     if (this.btnToggleLens) {
-      this.btnToggleLens.textContent = isEnabled ? '🛡️ LENS CORRECTION: ON' : '⚪ LENS CORRECTION: OFF';
+      this.btnToggleLens.textContent = isEnabled ? '🛡️ LENS CORRECTION: ON (Cardboard Spec Pre-Warp)' : '⚪ LENS CORRECTION: OFF (Pure Rectilinear)';
       this.btnToggleLens.style.background = isEnabled ? '#059669' : '#475569';
     }
   }
@@ -197,7 +213,14 @@ export class CalibrationUI {
 
     if (this.selProjection) {
       this.selProjection.addEventListener('change', (e) => {
-        if (this.activeVideoProfile) this.activeVideoProfile.projection = e.target.value;
+        if (this.activeVideoProfile) {
+          this.activeVideoProfile.projection = e.target.value;
+          if (this.activeVideoProfile.stereoMode === 'unknown') {
+            this.activeVideoProfile.stereoMode = 'left-right';
+            if (this.selStereo) this.selStereo.value = 'left-right';
+          }
+        }
+        this.syncStageAToUI();
         notifyChange();
       });
     }
@@ -205,6 +228,7 @@ export class CalibrationUI {
     if (this.selStereo) {
       this.selStereo.addEventListener('change', (e) => {
         if (this.activeVideoProfile) this.activeVideoProfile.stereoMode = e.target.value;
+        this.syncStageAToUI();
         notifyChange();
       });
     }
@@ -253,6 +277,7 @@ export class CalibrationUI {
       this.btnSaveVideoProfile.addEventListener('click', async () => {
         if (this.activeVideoProfile) {
           await this.storage.saveVideoProfile(this.activeVideoProfile);
+          this.syncStageAToUI();
           showFeedbackToast('💾 Projection Profile Saved for this Video');
         }
       });

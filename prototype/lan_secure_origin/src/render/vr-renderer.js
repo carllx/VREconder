@@ -106,7 +106,12 @@ export class VRRenderer {
     const vp = videoProfile || {};
     const hp = viewerProfile || {};
 
-    const projMode = vp.projection === 'equirectangular-360' ? 1 : (vp.projection === 'flat' ? 2 : 0);
+    let projMode = 0;
+    if (vp.projection === 'unknown') projMode = 3;
+    else if (vp.projection === 'equirectangular-360') projMode = 1;
+    else if (vp.projection === 'flat') projMode = 2;
+    else projMode = 0;
+
     const stereoLayout = vp.stereoMode === 'top-bottom' ? 1 : (vp.stereoMode === 'mono' ? 2 : 0);
     const eyeSwap = vp.eyeOrder === 'right-left' ? 1 : 0;
 
@@ -124,7 +129,7 @@ export class VRRenderer {
     gl.uniformMatrix3fv(this.locs.uPoseRot, false, poseMat);
 
     const isLensOn = (hp.lensCorrectionEnabled === true) ? 1 : 0;
-    const distK = (hp.distortion) ? [hp.distortion.k1 || 0.16, hp.distortion.k2 || 0.06] : [0, 0];
+    const distK = (hp.distortion) ? [hp.distortion.k1 || 0.34, hp.distortion.k2 || 0.55] : [0, 0];
     gl.uniform1i(this.locs.uLensCorrection, isLensOn);
     gl.uniform2f(this.locs.uDistortionK, distK[0], distK[1]);
   }
@@ -145,7 +150,7 @@ export class VRRenderer {
 
     this.bindCommonUniforms(videoProfile, viewerProfile);
 
-    // Diagnostic view uses pure rectilinear camera without lens warp
+    // Diagnostic view always uses pure rectilinear camera without lens warp
     gl.uniform1i(this.locs.uLensCorrection, 0);
     gl.uniform1f(this.locs.uFovRad, (diagnosticFovDeg * Math.PI) / 180);
     gl.uniformMatrix3fv(this.locs.uCamRot, false, cameraPoseMat3 || this.identityMat3);
@@ -174,7 +179,12 @@ export class VRRenderer {
 
     this.bindCommonUniforms(videoProfile, viewerProfile);
 
-    const fovDeg = (viewerProfile && viewerProfile.fovDeg) ? viewerProfile.fovDeg : 85;
+    // Calculate FOV from Viewer Profile eyes geometry
+    let fovDeg = 85;
+    if (viewerProfile && viewerProfile.eyes && viewerProfile.eyes.left && viewerProfile.eyes.left.fov) {
+      const f = viewerProfile.eyes.left.fov;
+      fovDeg = (f.leftDeg || 45) + (f.rightDeg || 45);
+    }
     gl.uniform1f(this.locs.uFovRad, (fovDeg * Math.PI) / 180);
     gl.uniformMatrix3fv(this.locs.uCamRot, false, headCamRotMat3 || this.identityMat3);
 

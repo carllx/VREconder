@@ -9,7 +9,7 @@
   <meta name="apple-touch-fullscreen" content="yes">
   <link rel="manifest" href="/manifest.json">
   <link rel="stylesheet" href="./styles.css">
-  <title>VREconder - Viewer Optics & Projection Calibration</title>
+  <title>VREconder - Optics & Projection Calibration</title>
 </head>
 <body>
 
@@ -50,7 +50,7 @@
         <h1>📐 Optics & Projection Calibration</h1>
         <span class="status-badge" id="badgeDisplayMode">Browser Tab</span>
       </div>
-      <div class="subtitle">Validate Source Mapping vs Headset Lens Distortion (Issue #13)</div>
+      <div class="subtitle">Validate Source Mapping vs Headset Lens Optics (Issue #13)</div>
     </div>
 
     <!-- Mode Selector: Diagnostic vs VR View -->
@@ -85,23 +85,28 @@
     <!-- Stage A: Source Mapping Profile -->
     <div class="card">
       <div style="display:flex; justify-content:space-between; align-items:center;">
-        <div class="label">Stage A — Per-Video Source Mapping</div>
+        <div>
+          <div class="label">Stage A — Source Mapping</div>
+          <div id="txtMappingStatus" style="font-size:0.72rem; font-weight:bold; color:#f87171;">⚠️ Untagged Media</div>
+        </div>
         <button class="btn-save" id="btnSaveVideoProfile">💾 Save Video Profile</button>
       </div>
 
-      <div class="control-row">
+      <div class="control-row" style="margin-top:6px;">
         <div style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap:6px;">
           <div>
-            <div class="label" style="font-size:0.66rem;">Projection</div>
+            <div class="label" style="font-size:0.66rem;">Projection Model</div>
             <select id="selProjType">
-              <option value="equirectangular-180">Equirect 180°</option>
-              <option value="equirectangular-360">Equirect 360°</option>
-              <option value="flat">Flat 2D</option>
+              <option value="unknown">-- Select Projection --</option>
+              <option value="equirectangular-180">Equirectangular 180°</option>
+              <option value="equirectangular-360">Equirectangular 360°</option>
+              <option value="flat">Flat 2D Rectilinear</option>
             </select>
           </div>
           <div>
             <div class="label" style="font-size:0.66rem;">Stereo Layout</div>
             <select id="selStereoType">
+              <option value="unknown">-- Select Stereo --</option>
               <option value="left-right">Side-by-Side (SBS)</option>
               <option value="top-bottom">Top-Bottom</option>
               <option value="mono">Mono</option>
@@ -110,15 +115,15 @@
           <div>
             <div class="label" style="font-size:0.66rem;">Eye Order</div>
             <select id="selEyeOrder">
-              <option value="left-right">Left-Right</option>
-              <option value="right-left">Swap (Right-Left)</option>
+              <option value="left-right">Left-Right (Standard)</option>
+              <option value="right-left">Right-Left (Swapped)</option>
             </select>
           </div>
         </div>
       </div>
 
       <div class="control-row" style="margin-top:6px;">
-        <div class="label">Horizontal Coverage (°):</div>
+        <div class="label">Horizontal Angular Scale (°):</div>
         <div class="slider-group">
           <input type="range" id="rangeCoverageH" min="160" max="200" step="1" value="180">
           <span class="slider-val" id="valCoverageH">180°</span>
@@ -127,7 +132,7 @@
 
       <div class="control-row" style="margin-top:6px;">
         <div style="display:flex; justify-content:space-between; align-items:center;">
-          <div class="label">Camera Pose Offset:</div>
+          <div class="label">Capture Camera Pose Level:</div>
           <button id="btnResetPose" style="background:#334155;color:#cbd5e1;border:none;border-radius:4px;padding:2px 6px;font-size:0.68rem;cursor:pointer;">Reset Pose</button>
         </div>
         <div class="slider-group">
@@ -151,36 +156,39 @@
     <!-- Stage B: Viewer Optics Profile -->
     <div class="card">
       <div style="display:flex; justify-content:space-between; align-items:center;">
-        <div class="label">Stage B — Viewer Optics & Lens Correction</div>
+        <div>
+          <div class="label">Stage B — Viewer Optics (Hardware Ground Truth)</div>
+          <div id="txtViewerSourceInfo" style="font-size:0.70rem; color:var(--muted);">Google Cardboard v2 (Official I/O 2015 Spec)</div>
+        </div>
         <button class="btn-save" id="btnSaveViewerProfile">💾 Save Viewer Profile</button>
       </div>
 
-      <div class="control-row">
-        <div class="label">Headset Profile:</div>
+      <div class="control-row" style="margin-top:6px;">
+        <div class="label">Authoritative Headset Specification:</div>
         <select id="selViewerPreset">
-          <option value="cardboard:v2">Google Cardboard V2 (k1=0.16, k2=0.06)</option>
-          <option value="vrbox:standard">Standard VR Box (k1=0.22, k2=0.10)</option>
-          <option value="custom">Custom Viewer Profile</option>
+          <option value="cardboard:v2">Google Cardboard v2 (I/O 2015 Spec: k1=0.34, k2=0.55, IPD=64mm)</option>
+          <option value="cardboard:v1">Google Cardboard v1 (I/O 2014 Spec: k1=0.441, k2=0.156, IPD=60mm)</option>
+          <option value="custom:uncalibrated">Custom / Uncalibrated Viewer (Manual Warp Tuning)</option>
         </select>
       </div>
 
       <div class="control-row" style="margin-top:6px;">
         <button id="btnToggleLens" style="width:100%;padding:10px;border-radius:8px;border:none;font-weight:bold;color:#fff;background:#475569;cursor:pointer;">
-          ⚪ LENS CORRECTION: OFF
+          ⚪ LENS CORRECTION: OFF (Pure Rectilinear)
         </button>
       </div>
 
       <div class="control-row" style="margin-top:6px;">
-        <div class="label">Lens Pre-Warp Coefficients (Brown-Conrady):</div>
+        <div class="label">Lens Pre-Warp Coefficients (Cardboard Polynomial $r' = r(1+k_1 r^2+k_2 r^4)$):</div>
         <div class="slider-group">
           <span style="width:30px;font-size:0.72rem;color:var(--muted);">k1:</span>
-          <input type="range" id="rangeDistortK1" min="-0.50" max="0.50" step="0.01" value="0.16">
-          <span class="slider-val" id="valDistortK1">0.16</span>
+          <input type="range" id="rangeDistortK1" min="-0.50" max="0.80" step="0.01" value="0.34">
+          <span class="slider-val" id="valDistortK1">0.34</span>
         </div>
         <div class="slider-group">
           <span style="width:30px;font-size:0.72rem;color:var(--muted);">k2:</span>
-          <input type="range" id="rangeDistortK2" min="-0.30" max="0.30" step="0.01" value="0.06">
-          <span class="slider-val" id="valDistortK2">0.06</span>
+          <input type="range" id="rangeDistortK2" min="-0.30" max="0.80" step="0.01" value="0.55">
+          <span class="slider-val" id="valDistortK2">0.55</span>
         </div>
       </div>
     </div>
@@ -191,7 +199,7 @@
         <span>🚀 Launch Headset Stereo VR View</span>
       </button>
       <div class="subtitle" style="text-align:center; margin-top:4px;">
-        使用已校准的 Video Projection Profile + Viewer Optics
+        在 Flat Diagnostic 确认直线几何正常后，戴入眼镜测试 Lens Correction A/B
       </div>
     </div>
   </div>

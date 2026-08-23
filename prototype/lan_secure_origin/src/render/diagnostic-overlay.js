@@ -21,20 +21,18 @@ export class DiagnosticOverlay {
     const cx = width / 2;
     const cy = height / 2;
 
-    // 1. Rectilinear Grid (Optional)
+    // 1. Rectilinear Grid
     if (this.showGrid) {
       ctx.strokeStyle = 'rgba(56, 189, 248, 0.18)';
       ctx.lineWidth = 1;
       const step = 60;
 
-      // Vertical lines
       for (let x = cx % step; x < width; x += step) {
         ctx.beginPath();
         ctx.moveTo(x, 0);
         ctx.lineTo(x, height);
         ctx.stroke();
       }
-      // Horizontal lines
       for (let y = cy % step; y < height; y += step) {
         ctx.beginPath();
         ctx.moveTo(0, y);
@@ -43,9 +41,9 @@ export class DiagnosticOverlay {
       }
     }
 
-    // 2. Plumb Vertical Guide Lines (Key for checking door frames & lockers)
+    // 2. Plumb Vertical Guide Lines (For door frames, locker doors, wall edges)
     if (this.showPlumbLines) {
-      ctx.strokeStyle = '#f59e0b'; // Amber
+      ctx.strokeStyle = '#f59e0b';
       ctx.lineWidth = 1.5;
       ctx.setLineDash([6, 4]);
 
@@ -63,7 +61,7 @@ export class DiagnosticOverlay {
 
     // 3. Horizon Reference Line (Pitch Level)
     if (this.showHorizon) {
-      ctx.strokeStyle = '#10b981'; // Green
+      ctx.strokeStyle = '#10b981';
       ctx.lineWidth = 2.0;
 
       ctx.beginPath();
@@ -71,7 +69,6 @@ export class DiagnosticOverlay {
       ctx.lineTo(width, cy);
       ctx.stroke();
 
-      // Pitch angle ticks
       ctx.fillStyle = '#10b981';
       ctx.font = '11px ui-monospace, monospace';
       ctx.textAlign = 'right';
@@ -80,7 +77,7 @@ export class DiagnosticOverlay {
 
     // 4. Center Crosshair
     if (this.showCrosshair) {
-      ctx.strokeStyle = '#ef4444'; // Red
+      ctx.strokeStyle = '#ef4444';
       ctx.lineWidth = 2.0;
 
       const sz = 24;
@@ -98,23 +95,31 @@ export class DiagnosticOverlay {
     }
 
     // 5. Diagnostic Header HUD Banner
-    ctx.fillStyle = 'rgba(15, 23, 42, 0.85)';
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
+    const vp = videoProfile || {};
+    const isUnverified = vp.confidence === 'unverified' || vp.projection === 'unknown';
+
+    ctx.fillStyle = isUnverified ? 'rgba(239, 68, 68, 0.88)' : 'rgba(15, 23, 42, 0.88)';
+    ctx.strokeStyle = isUnverified ? '#fca5a5' : 'rgba(255, 255, 255, 0.2)';
     ctx.lineWidth = 1;
-    ctx.fillRect(10, 10, 360, 85);
-    ctx.strokeRect(10, 10, 360, 85);
+    ctx.fillRect(10, 10, 380, 95);
+    ctx.strokeRect(10, 10, 380, 95);
 
     ctx.font = 'bold 13px -apple-system, sans-serif';
-    ctx.fillStyle = '#38bdf8';
+    ctx.fillStyle = '#ffffff';
     ctx.textAlign = 'left';
-    ctx.fillText(`📐 RECTILINEAR DIAGNOSTIC VIEW (${selectedEye === 0 ? 'LEFT EYE' : 'RIGHT EYE'})`, 20, 30);
+    const statusTag = isUnverified ? '⚠️ [UNVERIFIED MEDIA]' : '✓ [CALIBRATED]';
+    ctx.fillText(`📐 RECTILINEAR DIAGNOSTIC VIEW ${statusTag}`, 20, 28);
 
     ctx.font = '11px ui-monospace, monospace';
-    ctx.fillStyle = '#cbd5e1';
-    const vp = videoProfile || {};
+    ctx.fillStyle = '#f1f5f9';
+    ctx.fillText(`Eye: ${selectedEye === 0 ? 'LEFT' : 'RIGHT'} | Proj: ${vp.projection || 'unknown'} | Stereo: ${vp.stereoMode || 'unknown'}`, 20, 46);
     const pose = vp.pose || { yawDeg: 0, pitchDeg: 0, rollDeg: 0 };
-    ctx.fillText(`Proj: ${vp.projection || 'equirect-180'} | Cov: ${vp.fovHorizontalDeg || 180}°H`, 20, 48);
-    ctx.fillText(`Pose: Y:${pose.yawDeg || 0}° P:${pose.pitchDeg || 0}° R:${pose.rollDeg || 0}°`, 20, 64);
-    ctx.fillText(`Time: ${currentTime.toFixed(1)}s / ${duration.toFixed(1)}s [${isPaused ? 'FREEZE' : 'PLAY'}]`, 20, 80);
+    ctx.fillText(`Pose: Y:${pose.yawDeg || 0}° P:${pose.pitchDeg || 0}° R:${pose.rollDeg || 0}° | Cov: ${vp.fovHorizontalDeg || 180}°H`, 20, 62);
+    ctx.fillText(`Time: ${currentTime.toFixed(1)}s / ${duration.toFixed(1)}s [${isPaused ? 'FREEZE' : 'PLAY'}]`, 20, 78);
+    if (isUnverified) {
+      ctx.font = '10px -apple-system, sans-serif';
+      ctx.fillStyle = '#fef08a';
+      ctx.fillText('Select Stage A candidate projection below to begin calibration', 20, 94);
+    }
   }
 }

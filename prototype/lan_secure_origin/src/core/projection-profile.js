@@ -1,5 +1,6 @@
 // ==========================================
 // Video Projection Profile & Viewer Profile Models
+// (Authoritative Cardboard Specs & Untagged Media Semantics)
 // ==========================================
 
 export function computeMediaFingerprint(videoItem) {
@@ -9,47 +10,102 @@ export function computeMediaFingerprint(videoItem) {
   return `${name.replace(/[^a-zA-Z0-9._-]/g, '_')}_${size}`;
 }
 
+// Untagged media default: unknown/unverified (Never infer 180 SBS automatically)
 export function createDefaultVideoProfile(mediaId, name = '') {
   return {
     mediaId: mediaId,
     name: name,
-    projection: 'equirectangular-180', // 'equirectangular-180' | 'equirectangular-360' | 'flat'
-    stereoMode: 'left-right', // 'left-right' | 'top-bottom' | 'mono'
-    eyeOrder: 'left-right', // 'left-right' | 'right-left'
-    fovHorizontalDeg: 180, // 160 ~ 200 deg
+    projection: 'unknown',       // 'unknown' | 'equirectangular-180' | 'equirectangular-360' | 'flat'
+    stereoMode: 'unknown',       // 'unknown' | 'left-right' | 'top-bottom' | 'mono'
+    eyeOrder: 'unknown',         // 'unknown' | 'left-right' | 'right-left'
+    fovHorizontalDeg: 180,       // Default candidate scale if 180 selected
     fovVerticalDeg: 180,
     crop: { top: 0, bottom: 0, left: 0, right: 0 },
     pose: { yawDeg: 0, pitchDeg: 0, rollDeg: 0 },
-    confidence: 'user-calibrated',
+    confidence: 'unverified',    // 'unverified' | 'metadata-inferred' | 'user-calibrated'
+    notes: 'Awaiting Stage A calibration in Flat Diagnostic View',
     updatedAt: new Date().toISOString()
   };
 }
 
+// Authoritative Viewer Profiles from Google Cardboard Specifications
+// Sources:
+// - Google Cardboard v1 Spec (Google I/O 2014): inter-lens 60mm, screen-to-lens 42mm, k1=0.441, k2=0.156
+// - Google Cardboard v2 Spec (Google I/O 2015): inter-lens 64mm, screen-to-lens 39mm, k1=0.34, k2=0.55
+// - iPhone 15 Pro Physical Display: 133mm x 62mm active area, 460 PPI
 export function createDefaultViewerProfile(profileId = 'cardboard:v2') {
   const presets = {
     'cardboard:v2': {
       viewerProfileId: 'cardboard:v2',
-      name: 'Google Cardboard V2',
+      name: 'Google Cardboard v2 (Official I/O 2015 Spec)',
+      source: 'https://support.google.com/cardboard/manufacturers/answer/6321873',
       lensCorrectionEnabled: false,
-      fovDeg: 80, // Per-eye symmetric FOV
-      distortion: { k1: 0.16, k2: 0.06 },
-      ipdMm: 64
+      interLensDistanceMm: 64.0,
+      screenToLensDistanceMm: 39.0,
+      screenAlignment: 'center', // optical center alignment
+      eyes: {
+        left: {
+          fov: { leftDeg: 53.0, rightDeg: 53.0, upDeg: 53.0, downDeg: 53.0 },
+          eyeFromHeadMm: [-32.0, 0.0, 0.0]
+        },
+        right: {
+          fov: { leftDeg: 53.0, rightDeg: 53.0, upDeg: 53.0, downDeg: 53.0 },
+          eyeFromHeadMm: [32.0, 0.0, 0.0]
+        }
+      },
+      distortion: {
+        model: 'cardboard-radial-polynomial',
+        k1: 0.34,
+        k2: 0.55
+      }
     },
-    'vrbox:standard': {
-      viewerProfileId: 'vrbox:standard',
-      name: 'Standard VR Box / Lens HMD',
+    'cardboard:v1': {
+      viewerProfileId: 'cardboard:v1',
+      name: 'Google Cardboard v1 (Official I/O 2014 Spec)',
+      source: 'https://support.google.com/cardboard/manufacturers/answer/6321873',
       lensCorrectionEnabled: false,
-      fovDeg: 88,
-      distortion: { k1: 0.22, k2: 0.10 },
-      ipdMm: 64
+      interLensDistanceMm: 60.0,
+      screenToLensDistanceMm: 42.0,
+      screenAlignment: 'center',
+      eyes: {
+        left: {
+          fov: { leftDeg: 40.0, rightDeg: 40.0, upDeg: 40.0, downDeg: 40.0 },
+          eyeFromHeadMm: [-30.0, 0.0, 0.0]
+        },
+        right: {
+          fov: { leftDeg: 40.0, rightDeg: 40.0, upDeg: 40.0, downDeg: 40.0 },
+          eyeFromHeadMm: [30.0, 0.0, 0.0]
+        }
+      },
+      distortion: {
+        model: 'cardboard-radial-polynomial',
+        k1: 0.441,
+        k2: 0.156
+      }
     },
-    'custom': {
-      viewerProfileId: 'custom',
-      name: 'Custom Viewer Profile',
+    'custom:uncalibrated': {
+      viewerProfileId: 'custom:uncalibrated',
+      name: 'Custom / Uncalibrated Viewer (Manual Warp Tuning)',
+      source: 'User Manual Calibration',
       lensCorrectionEnabled: false,
-      fovDeg: 85,
-      distortion: { k1: 0.18, k2: 0.08 },
-      ipdMm: 64
+      interLensDistanceMm: 64.0,
+      screenToLensDistanceMm: 40.0,
+      screenAlignment: 'center',
+      eyes: {
+        left: {
+          fov: { leftDeg: 45.0, rightDeg: 45.0, upDeg: 45.0, downDeg: 45.0 },
+          eyeFromHeadMm: [-32.0, 0.0, 0.0]
+        },
+        right: {
+          fov: { leftDeg: 45.0, rightDeg: 45.0, upDeg: 45.0, downDeg: 45.0 },
+          eyeFromHeadMm: [32.0, 0.0, 0.0]
+        }
+      },
+      distortion: {
+        model: 'custom-polynomial',
+        k1: 0.20,
+        k2: 0.10
+      }
     }
   };
   return presets[profileId] || presets['cardboard:v2'];
@@ -107,6 +163,7 @@ export class ProfileStorage {
 
   async saveVideoProfile(profile) {
     if (!profile || !profile.mediaId) return;
+    profile.confidence = 'user-calibrated';
     profile.updatedAt = new Date().toISOString();
     this.videoProfiles[profile.mediaId] = profile;
     this.saveToLocalStorage();
