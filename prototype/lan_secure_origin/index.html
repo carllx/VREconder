@@ -2,80 +2,83 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>VREconder Secure LAN Origin Probe</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>VREconder Minimal Safari VR Player</title>
   <style>
     :root {
-      --bg: #0b0f19;
-      --card: #151d2e;
-      --border: #23304a;
-      --text: #f1f5f9;
+      --bg: #090d16;
+      --card: #131b2e;
+      --border: #243048;
+      --text: #f8fafc;
       --muted: #94a3b8;
-      --pass: #10b981;
-      --fail: #ef4444;
-      --warn: #f59e0b;
-      --blue: #3b82f6;
+      --blue: #2563eb;
+      --green: #10b981;
+      --red: #ef4444;
+      --purple: #8b5cf6;
     }
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
       background: var(--bg);
       color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      touch-action: none;
+      -webkit-user-select: none;
+      user-select: none;
+    }
+
+    #glCanvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      display: block;
+      z-index: 1;
+    }
+
+    /* 2D Setup & Control Overlay */
+    #uiOverlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 10;
+      background: rgba(9, 13, 22, 0.92);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
       padding: 16px;
-      line-height: 1.5;
-      -webkit-font-smoothing: antialiased;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      transition: opacity 0.25s ease, visibility 0.25s ease;
     }
-    header {
-      margin-bottom: 20px;
-      padding-bottom: 12px;
-      border-bottom: 1px solid var(--border);
+    #uiOverlay.hidden {
+      opacity: 0;
+      visibility: hidden;
+      pointer-events: none;
     }
-    h1 { font-size: 1.25rem; font-weight: 700; color: #fff; display: flex; align-items: center; gap: 8px; }
-    .subtitle { font-size: 0.85rem; color: var(--muted); margin-top: 4px; }
+
     .card {
       background: var(--card);
       border: 1px solid var(--border);
       border-radius: 12px;
-      padding: 16px;
-      margin-bottom: 16px;
+      padding: 14px;
     }
-    .card-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 12px;
-    }
-    .card-title {
-      font-size: 1rem;
-      font-weight: 600;
-      display: flex;
-      align-items: center;
-      gap: 6px;
-    }
-    .status-badge {
-      font-size: 0.75rem;
-      font-weight: 700;
-      padding: 3px 8px;
-      border-radius: 9999px;
-      text-transform: uppercase;
-    }
-    .badge-pending { background: #334155; color: var(--muted); }
-    .badge-pass { background: rgba(16, 185, 129, 0.2); color: var(--pass); border: 1px solid var(--pass); }
-    .badge-fail { background: rgba(239, 68, 68, 0.2); color: var(--fail); border: 1px solid var(--fail); }
+    h1 { font-size: 1.15rem; font-weight: 700; display: flex; align-items: center; gap: 8px; color: #fff; }
+    .subtitle { font-size: 0.8rem; color: var(--muted); margin-top: 2px; }
 
-    .kv-grid {
-      display: grid;
-      grid-template-columns: 130px 1fr;
-      gap: 6px 10px;
-      font-size: 0.85rem;
-      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-      background: rgba(0,0,0,0.25);
-      padding: 10px;
-      border-radius: 8px;
-      word-break: break-all;
+    .control-row {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      margin-top: 10px;
     }
-    .kv-key { color: var(--muted); }
-    .kv-val { color: #38bdf8; font-weight: 500; }
+    .label { font-size: 0.75rem; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
 
     select {
       width: 100%;
@@ -85,447 +88,724 @@
       padding: 10px;
       border-radius: 8px;
       font-size: 0.85rem;
-      margin-bottom: 10px;
       appearance: none;
       -webkit-appearance: none;
     }
 
-    .btn {
-      display: inline-flex;
+    .btn-group {
+      display: flex;
+      gap: 6px;
+    }
+    .btn-group button {
+      flex: 1;
+      padding: 8px 10px;
+      background: #1e293b;
+      color: var(--muted);
+      border: 1px solid #334155;
+      border-radius: 6px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .btn-group button.active {
+      background: var(--blue);
+      color: #fff;
+      border-color: var(--blue);
+    }
+
+    .btn-main {
+      width: 100%;
+      background: linear-gradient(135deg, #2563eb, #7c3aed);
+      color: #fff;
+      font-size: 1.05rem;
+      font-weight: 700;
+      padding: 14px 20px;
+      border-radius: 10px;
+      border: none;
+      cursor: pointer;
+      display: flex;
       align-items: center;
       justify-content: center;
       gap: 8px;
-      width: 100%;
-      background: var(--blue);
-      color: #fff;
-      font-weight: 600;
-      font-size: 0.95rem;
-      padding: 12px 16px;
-      border-radius: 8px;
-      border: none;
-      cursor: pointer;
-      margin-top: 10px;
-      touch-action: manipulation;
+      margin-top: 8px;
+      box-shadow: 0 4px 14px rgba(37, 99, 235, 0.4);
     }
-    .btn:active { opacity: 0.8; }
-    .btn-green { background: #059669; }
-    .btn-row { display: flex; gap: 8px; margin-top: 10px; }
-    .btn-sm { padding: 8px 12px; font-size: 0.8rem; width: auto; flex: 1; }
+    .btn-main:active { transform: scale(0.98); }
 
-    video {
-      width: 100%;
-      max-height: 220px;
-      border-radius: 8px;
-      background: #000;
-      margin-top: 10px;
-    }
-
-    .tilt-preview {
-      margin-top: 12px;
-      height: 70px;
-      background: #090d16;
-      border-radius: 8px;
-      border: 1px dashed var(--border);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      perspective: 400px;
-    }
-    .tilt-box {
-      width: 120px;
-      height: 40px;
-      background: linear-gradient(135deg, #3b82f6, #8b5cf6);
-      border-radius: 6px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 0.75rem;
-      font-weight: bold;
-      color: #fff;
-      transition: transform 0.05s linear;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.5);
-    }
-
-    #logBox {
-      max-height: 140px;
-      overflow-y: auto;
-      font-family: monospace;
-      font-size: 0.75rem;
-      color: #cbd5e1;
-      background: rgba(0,0,0,0.4);
+    .metrics-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px;
+      font-size: 0.8rem;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, monospace;
+      background: rgba(0,0,0,0.3);
       padding: 8px;
-      border-radius: 6px;
-      border: 1px solid #1e293b;
-      margin-top: 10px;
+      border-radius: 8px;
     }
-    .log-entry { margin-bottom: 3px; }
-    .log-pass { color: var(--pass); }
-    .log-fail { color: var(--fail); }
-    .log-info { color: #38bdf8; }
+    .m-item { color: var(--muted); }
+    .m-val { color: #38bdf8; font-weight: 600; }
+
+    /* In-VR Floating Controls (Tap screen in VR to show) */
+    #vrFloatingBar {
+      position: absolute;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 20;
+      display: flex;
+      gap: 8px;
+      background: rgba(15, 23, 42, 0.85);
+      border: 1px solid rgba(255,255,255,0.15);
+      padding: 8px 12px;
+      border-radius: 30px;
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      transition: opacity 0.3s ease, transform 0.3s ease;
+    }
+    #vrFloatingBar.fade-out {
+      opacity: 0;
+      pointer-events: none;
+      transform: translateX(-50%) translateY(20px);
+    }
+    .vr-btn {
+      background: #334155;
+      color: #fff;
+      border: none;
+      border-radius: 20px;
+      padding: 8px 14px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .vr-btn:active { background: #475569; }
+    .vr-btn-reset { background: #059669; }
+    .vr-btn-exit { background: #dc2626; }
+
+    /* Hidden video element */
+    #sourceVideo {
+      display: none;
+    }
   </style>
 </head>
 <body>
 
-  <header>
-    <h1>🥽 VREconder Origin Probe</h1>
-    <div class="subtitle">Secure LAN Origin &bull; DeviceOrientation &bull; HTTP Range / Seek</div>
-  </header>
+  <!-- WebGL Canvas for Stereo VR Rendering -->
+  <canvas id="glCanvas"></canvas>
+  <video id="sourceVideo" playsinline preload="metadata" crossorigin="anonymous"></video>
 
-  <!-- Section A: Secure Context -->
-  <div class="card" id="cardSecure">
-    <div class="card-header">
-      <div class="card-title">A. Secure Context</div>
-      <span class="status-badge badge-pending" id="badgeSecure">Testing</span>
-    </div>
-    <div class="kv-grid">
-      <div class="kv-key">isSecureContext:</div>
-      <div class="kv-val" id="valSecureContext">...</div>
-      <div class="kv-key">Protocol:</div>
-      <div class="kv-val" id="valProtocol">...</div>
-      <div class="kv-key">Origin:</div>
-      <div class="kv-val" id="valOrigin">...</div>
-      <div class="kv-key">Hostname:</div>
-      <div class="kv-val" id="valHostname">...</div>
-    </div>
+  <!-- In-VR Floating Quick Bar -->
+  <div id="vrFloatingBar" class="fade-out">
+    <button class="vr-btn vr-btn-reset" id="btnVrReset">🎯 Recenter View</button>
+    <button class="vr-btn" id="btnVrPlayPause">⏯ Play/Pause</button>
+    <button class="vr-btn" id="btnVrSeekBack">⏪ -1m</button>
+    <button class="vr-btn" id="btnVrSeekFwd">⏩ +1m</button>
+    <button class="vr-btn vr-btn-exit" id="btnVrExit">⚙ Exit VR</button>
   </div>
 
-  <!-- Section B: DeviceOrientation -->
-  <div class="card" id="cardOrientation">
-    <div class="card-header">
-      <div class="card-title">B. DeviceOrientation</div>
-      <span class="status-badge badge-pending" id="badgeOrientation">Idle</span>
-    </div>
-    <div class="kv-grid">
-      <div class="kv-key">API Supported:</div>
-      <div class="kv-val" id="valApiSupported">...</div>
-      <div class="kv-key">Permission:</div>
-      <div class="kv-val" id="valPermission">Not requested</div>
-      <div class="kv-key">Events Received:</div>
-      <div class="kv-val" id="valEventCount">0</div>
-      <div class="kv-key">Alpha (&alpha; yaw):</div>
-      <div class="kv-val" id="valAlpha">--</div>
-      <div class="kv-key">Beta (&beta; pitch):</div>
-      <div class="kv-val" id="valBeta">--</div>
-      <div class="kv-key">Gamma (&gamma; roll):</div>
-      <div class="kv-val" id="valGamma">--</div>
+  <!-- 2D Configuration & Setup Overlay -->
+  <div id="uiOverlay">
+    <div class="card">
+      <h1>🥽 VREconder VR Web Player</h1>
+      <div class="subtitle">Minimal Safari VR Rendering &bull; Stereo Split &bull; Head Tracking</div>
     </div>
 
-    <div class="tilt-preview">
-      <div class="tilt-box" id="tiltBox">📱 3D Orientation</div>
+    <!-- Media Selector -->
+    <div class="card">
+      <div class="label">1. VR Media Source</div>
+      <select id="videoSelect">
+        <option value="">Scanning real VR videos...</option>
+      </select>
+
+      <div class="metrics-grid" style="margin-top:8px;">
+        <div class="m-item">Video Res: <span class="m-val" id="valVideoRes">--</span></div>
+        <div class="m-item">Duration: <span class="m-val" id="valVideoDur">--</span></div>
+        <div class="m-item">Time: <span class="m-val" id="valVideoTime">0.00s</span></div>
+        <div class="m-item">HTTP Range: <span class="m-val" id="valRangeStatus">206 OK</span></div>
+      </div>
     </div>
 
-    <button class="btn" id="btnEnableMotion">🧭 1. Tap to Enable Motion (User Gesture)</button>
-  </div>
+    <!-- VR Mapping Controls -->
+    <div class="card">
+      <div class="label">2. VR Mapping (Stereo &bull; Projection &bull; Eye)</div>
+      
+      <div class="control-row">
+        <div class="label">Stereo Layout</div>
+        <div class="btn-group" id="grpStereo">
+          <button class="active" data-val="SBS">SBS (Side-by-Side)</button>
+          <button data-val="TB">TB (Top-Bottom / OU)</button>
+        </div>
+      </div>
 
-  <!-- Section C: Video Range & Seek -->
-  <div class="card" id="cardVideo">
-    <div class="card-header">
-      <div class="card-title">C. Real VR Video &bull; HTTP Range & Seek</div>
-      <span class="status-badge badge-pending" id="badgeVideo">Testing</span>
+      <div class="control-row">
+        <div class="label">Projection Geometry</div>
+        <div class="btn-group" id="grpProjection">
+          <button class="active" data-val="180">180° Hemisphere</button>
+          <button data-val="360">360° Sphere</button>
+        </div>
+      </div>
+
+      <div class="control-row">
+        <div class="label">Eye Order</div>
+        <div class="btn-group" id="grpEye">
+          <button class="active" data-val="normal">Normal (L-R)</button>
+          <button data-val="swap">Eye Swap (R-L)</button>
+        </div>
+      </div>
     </div>
 
-    <label style="font-size:0.8rem;color:var(--muted);margin-bottom:4px;display:block;">Select Real VR Video from G:\Media\VR\VR_Video_Processing\01_Download_Completed:</label>
-    <select id="videoSelect">
-      <option value="">Loading VR video list...</option>
-    </select>
-
-    <div class="kv-grid">
-      <div class="kv-key">Selected Video:</div>
-      <div class="kv-val" id="valVideoName">--</div>
-      <div class="kv-key">HTTP 206 Range:</div>
-      <div class="kv-val" id="valRangeStatus">Testing fetch...</div>
-      <div class="kv-key">Content-Range:</div>
-      <div class="kv-val" id="valContentRange">--</div>
-      <div class="kv-key">Same-Origin:</div>
-      <div class="kv-val" id="valSameOrigin">--</div>
-      <div class="kv-key">Duration:</div>
-      <div class="kv-val" id="valDuration">--</div>
-      <div class="kv-key">Current Time:</div>
-      <div class="kv-val" id="valCurrentTime">0.00s</div>
-      <div class="kv-key">Last Seek Latency:</div>
-      <div class="kv-val" id="valSeekLatency">--</div>
+    <!-- Enter VR Button -->
+    <div class="card">
+      <div class="label">3. Launch Headset View</div>
+      <button class="btn-main" id="btnEnterVR">
+        <span>🚀 4. Enter VR / Enable Motion</span>
+      </button>
+      <div class="subtitle" style="text-align:center; margin-top:6px;">
+        Turn iPhone to landscape, tap button, and insert into VR headset
+      </div>
     </div>
 
-    <video id="testVideo" playsinline controls preload="metadata"></video>
-
-    <div class="btn-row">
-      <button class="btn btn-sm" onclick="triggerSeek(10.0)">Seek 10s</button>
-      <button class="btn btn-sm" onclick="triggerSeek(60.0)">Seek 1m</button>
-      <button class="btn btn-sm" onclick="triggerSeek(300.0)">Seek 5m</button>
+    <!-- Real-time Telemetry -->
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+        <div class="label">4. Real-time Telemetry</div>
+        <button id="btnSyncTelemetry" style="background:#059669;color:#fff;border:none;border-radius:4px;padding:4px 8px;font-size:0.75rem;cursor:pointer;">📤 Sync to PC</button>
+      </div>
+      <div class="metrics-grid">
+        <div class="m-item">FPS: <span class="m-val" id="valFps">0.0</span></div>
+        <div class="m-item">Renderer: <span class="m-val">WebGL2 (Stereo Shader)</span></div>
+        <div class="m-item">Screen Angle: <span class="m-val" id="valScreenAngle">0°</span></div>
+        <div class="m-item">Motion Perm: <span class="m-val" id="valMotionPerm">--</span></div>
+        <div class="m-item">Yaw (Alpha): <span class="m-val" id="valYaw">--</span></div>
+        <div class="m-item">Pitch (Beta): <span class="m-val" id="valPitch">--</span></div>
+        <div class="m-item">Roll (Gamma): <span class="m-val" id="valRoll">--</span></div>
+        <div class="m-item">Total Seeks: <span class="m-val" id="valSeekCount">0</span></div>
+      </div>
     </div>
-  </div>
-
-  <!-- Section D: Telemetry & Actions -->
-  <div class="card">
-    <div class="card-header">
-      <div class="card-title">D. Evidence Log</div>
-      <button class="btn btn-sm btn-green" id="btnSyncTelemetry" style="margin:0;width:auto;">📤 Sync to PC</button>
-    </div>
-    <div id="logBox"></div>
   </div>
 
   <script>
+    // ==========================================
+    // 1. App State & Telemetry
+    // ==========================================
     const state = {
-      secureContext: false,
-      protocol: window.location.protocol,
-      origin: window.location.origin,
-      hostname: window.location.hostname,
-      orientationSupported: false,
-      orientationPermission: 'unknown',
-      orientationEventsCount: 0,
-      lastOrientation: { alpha: null, beta: null, gamma: null },
-      currentVideoPath: '',
-      httpRangePass: false,
-      httpRangeHeader: '',
-      videoSameOrigin: false,
-      videoLoaded: false,
+      inVR: false,
+      secureContext: window.isSecureContext === true,
+      renderer: 'WebGL2 (Custom Raymarching Stereo Equirectangular)',
+      stereo: 'SBS',       // SBS | TB
+      projection: '180',   // 180 | 360
+      eyeOrder: 'normal',  // normal | swap
+      videoPath: '',
       videoDuration: 0,
-      seeks: []
+      videoWidth: 0,
+      videoHeight: 0,
+      fps: 0,
+      renderFrameCount: 0,
+      droppedFrames: 'unavailable',
+      totalVideoFrames: 'unavailable',
+      screenAngle: 0,
+      motionPermission: 'unrequested',
+      motionEventCount: 0,
+      rawOrientation: { alpha: 0, beta: 0, gamma: 0 },
+      calibratedHeadingYaw: 0,
+      seeks: [],
+      runtimeSeconds: 0
     };
 
-    function log(msg, type = 'info') {
-      const box = document.getElementById('logBox');
-      const time = new Date().toTimeString().split(' ')[0];
-      const div = document.createElement('div');
-      div.className = `log-entry log-${type}`;
-      div.textContent = `[${time}] ${msg}`;
-      box.appendChild(div);
-      box.scrollTop = box.scrollHeight;
+    const video = document.getElementById('sourceVideo');
+    const canvas = document.getElementById('glCanvas');
+    const uiOverlay = document.getElementById('uiOverlay');
+    const vrFloatingBar = document.getElementById('vrFloatingBar');
+    const videoSelect = document.getElementById('videoSelect');
+
+    let hideBarTimeout = null;
+    function showFloatingBar() {
+      if (!state.inVR) return;
+      vrFloatingBar.classList.remove('fade-out');
+      clearTimeout(hideBarTimeout);
+      hideBarTimeout = setTimeout(() => {
+        vrFloatingBar.classList.add('fade-out');
+      }, 4000);
     }
 
-    // 1. Check Secure Context
-    function checkSecureContext() {
-      state.secureContext = window.isSecureContext === true;
-      document.getElementById('valSecureContext').textContent = state.secureContext ? 'true (PASS)' : 'false (FAIL)';
-      document.getElementById('valProtocol').textContent = state.protocol;
-      document.getElementById('valOrigin').textContent = state.origin;
-      document.getElementById('valHostname').textContent = state.hostname;
+    window.addEventListener('touchstart', showFloatingBar);
+    window.addEventListener('click', showFloatingBar);
 
-      const badge = document.getElementById('badgeSecure');
-      if (state.secureContext && state.protocol === 'https:') {
-        badge.className = 'status-badge badge-pass';
-        badge.textContent = 'PASS';
-        log(`SecureContext validated: true on ${state.origin}`, 'pass');
-      } else {
-        badge.className = 'status-badge badge-fail';
-        badge.textContent = 'FAIL';
-        log(`SecureContext failed: isSecureContext=${state.secureContext}, protocol=${state.protocol}`, 'fail');
+    // ==========================================
+    // 2. WebGL Stereo Equirectangular Shader
+    // ==========================================
+    const gl = canvas.getContext('webgl2', { alpha: false, antialias: false, powerPreference: 'high-performance' }) ||
+               canvas.getContext('webgl', { alpha: false, antialias: false, powerPreference: 'high-performance' });
+
+    if (!gl) {
+      alert('WebGL not supported on this browser context');
+    }
+
+    const vsSource = `#version 300 es
+      in vec2 aPosition;
+      out vec2 vUv;
+      void main() {
+        vUv = aPosition * 0.5 + 0.5;
+        gl.Position = vec4(aPosition, 0.0, 1.0);
       }
-    }
+    `;
 
-    // 2. Check DeviceOrientation
-    function initOrientation() {
-      state.orientationSupported = 'DeviceOrientationEvent' in window;
-      document.getElementById('valApiSupported').textContent = state.orientationSupported ? 'Yes (DeviceOrientationEvent)' : 'No';
+    const fsSource = `#version 300 es
+      precision highp float;
+      in vec2 vUv;
+      out vec4 fragColor;
 
-      const btn = document.getElementById('btnEnableMotion');
-      btn.addEventListener('click', async () => {
-        log('User tapped "Enable Motion" button...', 'info');
-        if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
-          try {
-            state.orientationPermission = 'requesting';
-            const perm = await DeviceOrientationEvent.requestPermission();
-            state.orientationPermission = perm;
-            document.getElementById('valPermission').textContent = perm;
-            if (perm === 'granted') {
-              log('DeviceOrientation permission GRANTED by user', 'pass');
-              listenOrientation();
-            } else {
-              log(`DeviceOrientation permission DENIED: ${perm}`, 'fail');
-              document.getElementById('badgeOrientation').className = 'status-badge badge-fail';
-              document.getElementById('badgeOrientation').textContent = 'DENIED';
-            }
-          } catch (err) {
-            log(`DeviceOrientation requestPermission error: ${err.message}`, 'fail');
-            document.getElementById('valPermission').textContent = 'Error: ' + err.message;
+      uniform sampler2D uVideoTexture;
+      uniform mat3 uCamRot;
+      uniform int uStereo;      // 0: SBS, 1: TB
+      uniform int uProjection;  // 0: 180, 1: 360
+      uniform int uEyeSwap;     // 0: normal, 1: swap
+      uniform int uEye;         // 0: Left Eye, 1: Right Eye
+      uniform float uAspect;    // viewport aspect ratio
+
+      const float PI = 3.14159265358979323846;
+      const float HALF_PI = 1.57079632679489661923;
+      const float TWO_PI = 6.28318530717958647692;
+      const float FOV = 1.65; // ~95 deg horizontal FOV per eye in VR box
+
+      void main() {
+        // Pixel NDC in current eye viewport [-1, 1]
+        vec2 ndc = (vUv - 0.5) * 2.0;
+
+        // Camera ray in camera space (Looking along -Z)
+        float tanHalfFov = tan(FOV * 0.5);
+        vec3 rayCam = normalize(vec3(ndc.x * tanHalfFov * uAspect, ndc.y * tanHalfFov, -1.0));
+
+        // Rotate ray by Head Tracking orientation matrix
+        vec3 ray = uCamRot * rayCam;
+
+        // Equirectangular mapping: spherical coordinates
+        float yaw = atan(ray.x, -ray.z); // [-PI, PI], 0 is center forward
+        float pitch = asin(clamp(ray.y, -1.0, 1.0)); // [-PI/2, PI/2]
+
+        float u_eye = 0.0;
+        float v_eye = (pitch / PI) + 0.5;
+
+        // Projection mapping
+        if (uProjection == 0) {
+          // 180° Dome Equirectangular
+          if (abs(yaw) > HALF_PI) {
+            // Behind 180 dome -> render dark room / floor horizon
+            fragColor = vec4(0.04, 0.06, 0.1, 1.0);
+            return;
+          }
+          u_eye = (yaw / PI) + 0.5; // [0, 1] across front 180 deg
+        } else {
+          // 360° Sphere Equirectangular
+          u_eye = (yaw / TWO_PI) + 0.5;
+        }
+
+        // Stereo eye coordinate computation
+        int effectiveEye = uEye;
+        if (uEyeSwap == 1) {
+          effectiveEye = 1 - effectiveEye;
+        }
+
+        vec2 texUv;
+        if (uStereo == 0) {
+          // SBS (Side-by-Side): Left is [0, 0.5], Right is [0.5, 1.0]
+          if (effectiveEye == 0) {
+            texUv = vec2(u_eye * 0.5, v_eye);
+          } else {
+            texUv = vec2(u_eye * 0.5 + 0.5, v_eye);
           }
         } else {
-          log('requestPermission API not required/standard event listener attaching directly', 'info');
-          state.orientationPermission = 'not_needed_standard';
-          document.getElementById('valPermission').textContent = 'Standard (No prompt needed)';
-          listenOrientation();
+          // TB / OU (Top-Bottom): Left is top [0.5, 1.0], Right is bottom [0.0, 0.5]
+          if (effectiveEye == 0) {
+            texUv = vec2(u_eye, v_eye * 0.5 + 0.5);
+          } else {
+            texUv = vec2(u_eye, v_eye * 0.5);
+          }
         }
-      });
+
+        vec4 color = texture(uVideoTexture, texUv);
+        fragColor = color;
+      }
+    `;
+
+    function createShader(gl, type, source) {
+      const shader = gl.createShader(type);
+      gl.shaderSource(shader, source);
+      gl.compileShader(shader);
+      if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+        console.error('Shader compile error:', gl.getShaderInfoLog(shader));
+        gl.deleteShader(shader);
+        return null;
+      }
+      return shader;
     }
 
-    function listenOrientation() {
-      const tiltBox = document.getElementById('tiltBox');
-      const badge = document.getElementById('badgeOrientation');
+    const vertShader = createShader(gl, gl.VERTEX_SHADER, vsSource);
+    const fragShader = createShader(gl, gl.FRAGMENT_SHADER, fsSource);
+    const program = gl.createProgram();
+    gl.attachShader(program, vertShader);
+    gl.attachShader(program, fragShader);
+    gl.linkProgram(program);
 
-      window.addEventListener('deviceorientation', (event) => {
-        state.orientationEventsCount++;
-        state.lastOrientation = {
-          alpha: event.alpha !== null ? Number(event.alpha.toFixed(2)) : null,
-          beta: event.beta !== null ? Number(event.beta.toFixed(2)) : null,
-          gamma: event.gamma !== null ? Number(event.gamma.toFixed(2)) : null,
-          absolute: event.absolute
-        };
-
-        document.getElementById('valEventCount').textContent = state.orientationEventsCount;
-        document.getElementById('valAlpha').textContent = (state.lastOrientation.alpha ?? '--') + '°';
-        document.getElementById('valBeta').textContent = (state.lastOrientation.beta ?? '--') + '°';
-        document.getElementById('valGamma').textContent = (state.lastOrientation.gamma ?? '--') + '°';
-
-        if (state.orientationEventsCount === 1) {
-          badge.className = 'status-badge badge-pass';
-          badge.textContent = 'PASS';
-          log(`Received first orientation event! (alpha=${state.lastOrientation.alpha}, beta=${state.lastOrientation.beta}, gamma=${state.lastOrientation.gamma})`, 'pass');
-          syncTelemetry();
-        }
-
-        if (event.beta !== null && event.gamma !== null) {
-          tiltBox.style.transform = `rotateX(${event.beta}deg) rotateY(${event.gamma}deg)`;
-        }
-      }, { passive: true });
+    if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+      console.error('Program link error:', gl.getProgramInfoLog(program));
     }
 
-    // 3. Load Real VR Video List & HTTP Range
-    const video = document.getElementById('testVideo');
-    const select = document.getElementById('videoSelect');
-    let seekStartTime = 0;
+    const posBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, posBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
+      -1, -1,
+       1, -1,
+      -1,  1,
+      -1,  1,
+       1, -1,
+       1,  1,
+    ]), gl.STATIC_DRAW);
 
+    const aPositionLoc = gl.getAttribLocation(program, 'aPosition');
+    const uVideoTextureLoc = gl.getUniformLocation(program, 'uVideoTexture');
+    const uCamRotLoc = gl.getUniformLocation(program, 'uCamRot');
+    const uStereoLoc = gl.getUniformLocation(program, 'uStereo');
+    const uProjectionLoc = gl.getUniformLocation(program, 'uProjection');
+    const uEyeSwapLoc = gl.getUniformLocation(program, 'uEyeSwap');
+    const uEyeLoc = gl.getUniformLocation(program, 'uEye');
+    const uAspectLoc = gl.getUniformLocation(program, 'uAspect');
+
+    // Video Texture
+    const videoTex = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, videoTex);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+
+    // Initial 1x1 black placeholder
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([0, 0, 0, 255]));
+
+    // ==========================================
+    // 3. Orientation & Head Tracking Engine
+    // ==========================================
+    let cameraRotationMatrix = [1, 0, 0,  0, 1, 0,  0, 0, 1];
+    let zeroHeadingYaw = 0; // Calibration offset
+
+    function updateScreenOrientation() {
+      if (screen.orientation && typeof screen.orientation.angle !== 'undefined') {
+        state.screenAngle = screen.orientation.angle;
+      } else if (typeof window.orientation !== 'undefined') {
+        state.screenAngle = window.orientation;
+      } else {
+        state.screenAngle = window.innerWidth > window.innerHeight ? 90 : 0;
+      }
+      document.getElementById('valScreenAngle').textContent = state.screenAngle + '°';
+    }
+    window.addEventListener('orientationchange', updateScreenOrientation);
+    window.addEventListener('resize', updateScreenOrientation);
+    updateScreenOrientation();
+
+    function computeOrientationMatrix(alphaDeg, betaDeg, gammaDeg, screenDeg) {
+      const deg2rad = Math.PI / 180;
+      const alpha = alphaDeg * deg2rad;
+      const beta = betaDeg * deg2rad;
+      const gamma = gammaDeg * deg2rad;
+      const screenAngle = screenDeg * deg2rad;
+
+      const cA = Math.cos(alpha), sA = Math.sin(alpha);
+      const cB = Math.cos(beta),  sB = Math.sin(beta);
+      const cG = Math.cos(gamma), sG = Math.sin(gamma);
+
+      // W3C device coordinates (Z-X'-Y'' intrinsic)
+      // M_device maps device frame to world (North, East, Down)
+      const m11 = cA * cG - sA * sB * sG;
+      const m12 = -cB * sA;
+      const m13 = cA * sG + cG * sA * sB;
+
+      const m21 = cG * sA + cA * sB * sG;
+      const m22 = cA * cB;
+      const m23 = sA * sG - cA * cG * sB;
+
+      const m31 = -cB * sG;
+      const m32 = sB;
+      const m33 = cB * cG;
+
+      // Screen rotation adjustment (Z-rotation by -screenAngle)
+      const cS = Math.cos(-screenAngle), sS = Math.sin(-screenAngle);
+      const r11 = m11 * cS - m12 * sS;
+      const r12 = m11 * sS + m12 * cS;
+      const r13 = m13;
+
+      const r21 = m21 * cS - m22 * sS;
+      const r22 = m21 * sS + m22 * cS;
+      const r23 = m23;
+
+      const r31 = m31 * cS - m32 * sS;
+      const r32 = m31 * sS + m32 * cS;
+      const r33 = m33;
+
+      // Convert to OpenGL Camera standard frame (Looking along -Z, +Y is Up, +X is Right)
+      // Coordinate transform: [X_cam = r11, Y_cam = r12, Z_cam = r13] etc.
+      // Matrix that rotates world ray into device camera space:
+      const camX_x = r11, camX_y = r21, camX_z = r31;
+      const camY_x = r12, camY_y = r22, camY_z = r32;
+      const camZ_x = r13, camZ_y = r23, camZ_z = r33;
+
+      // Apply Zero Heading calibration around World Y axis
+      const cZ = Math.cos(zeroHeadingYaw), sZ = Math.sin(zeroHeadingYaw);
+      // R_calibrated = R_zero * R_cam
+      return [
+        cZ * camX_x + sZ * camX_z, camX_y, -sZ * camX_x + cZ * camX_z,
+        cZ * camY_x + sZ * camY_z, camY_y, -sZ * camY_x + cZ * camY_z,
+        cZ * camZ_x + sZ * camZ_z, camZ_y, -sZ * camZ_x + cZ * camZ_z
+      ];
+    }
+
+    function resetView() {
+      // Calibrate current heading as 0° yaw forward
+      const deg2rad = Math.PI / 180;
+      const alpha = state.rawOrientation.alpha * deg2rad;
+      zeroHeadingYaw = -alpha - (state.screenAngle * deg2rad);
+      state.calibratedHeadingYaw = zeroHeadingYaw;
+      console.log('[VR] View Recentered. Offset yaw:', (zeroHeadingYaw * 180 / Math.PI).toFixed(1) + '°');
+      syncTelemetry();
+    }
+
+    window.addEventListener('deviceorientation', (e) => {
+      if (e.alpha === null) return;
+      state.motionEventCount++;
+      state.rawOrientation.alpha = e.alpha;
+      state.rawOrientation.beta = e.beta;
+      state.rawOrientation.gamma = e.gamma;
+
+      document.getElementById('valYaw').textContent = e.alpha.toFixed(1) + '°';
+      document.getElementById('valPitch').textContent = (e.beta || 0).toFixed(1) + '°';
+      document.getElementById('valRoll').textContent = (e.gamma || 0).toFixed(1) + '°';
+
+      cameraRotationMatrix = computeOrientationMatrix(e.alpha, e.beta || 0, e.gamma || 0, state.screenAngle);
+    }, { passive: true });
+
+    // ==========================================
+    // 4. Render Loop
+    // ==========================================
+    let lastTime = performance.now();
+    let frameCounter = 0;
+
+    function renderLoop(now) {
+      requestAnimationFrame(renderLoop);
+
+      // FPS calculation
+      frameCounter++;
+      if (now - lastTime >= 1000) {
+        state.fps = Number(((frameCounter * 1000) / (now - lastTime)).toFixed(1));
+        document.getElementById('valFps').textContent = state.fps.toFixed(1);
+        frameCounter = 0;
+        lastTime = now;
+        state.runtimeSeconds += 1;
+      }
+
+      // Check Quality API
+      if (video.getVideoPlaybackQuality) {
+        const q = video.getVideoPlaybackQuality();
+        state.droppedFrames = q.droppedVideoFrames;
+        state.totalVideoFrames = q.totalVideoFrames;
+      }
+
+      // Resize canvas to full native resolution
+      const width = window.innerWidth * window.devicePixelRatio;
+      const height = window.innerHeight * window.devicePixelRatio;
+      if (canvas.width !== width || canvas.height !== height) {
+        canvas.width = width;
+        canvas.height = height;
+      }
+
+      // Update Video Texture from <video>
+      if (video.readyState >= 2) {
+        gl.bindTexture(gl.TEXTURE_2D, videoTex);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, video);
+      }
+
+      gl.useProgram(program);
+      gl.enableVertexAttribArray(aPositionLoc);
+      gl.bindBuffer(gl.ARRAY_BUFFER, posBuffer);
+      gl.vertexAttribPointer(aPositionLoc, 2, gl.FLOAT, false, 0, 0);
+
+      gl.activeTexture(gl.TEXTURE0);
+      gl.bindTexture(gl.TEXTURE_2D, videoTex);
+      gl.uniform1i(uVideoTextureLoc, 0);
+
+      gl.uniformMatrix3fv(uCamRotLoc, false, cameraRotationMatrix);
+      gl.uniform1i(uStereoLoc, state.stereo === 'SBS' ? 0 : 1);
+      gl.uniform1i(uProjectionLoc, state.projection === '180' ? 0 : 1);
+      gl.uniform1i(uEyeSwapLoc, state.eyeOrder === 'swap' ? 1 : 0);
+
+      gl.enable(gl.SCISSOR_TEST);
+
+      const halfW = Math.floor(width / 2);
+      const aspectPerEye = (halfW / height);
+      gl.uniform1f(uAspectLoc, aspectPerEye);
+
+      // --- Left Eye Viewport ---
+      gl.viewport(0, 0, halfW, height);
+      gl.scissor(0, 0, halfW, height);
+      gl.uniform1i(uEyeLoc, 0);
+      gl.drawArrays(gl.TRIANGLES, 0, 6);
+
+      // --- Right Eye Viewport ---
+      gl.viewport(halfW, 0, halfW, height);
+      gl.scissor(halfW, 0, halfW, height);
+      gl.uniform1i(uEyeLoc, 1);
+      gl.drawArrays(gl.TRIANGLES, 0, 6);
+
+      gl.disable(gl.SCISSOR_TEST);
+      state.renderFrameCount++;
+    }
+
+    requestAnimationFrame(renderLoop);
+
+    // ==========================================
+    // 5. Video Loading & UI Event Handling
+    // ==========================================
     async function loadVideoList() {
       try {
         const res = await fetch('/api/videos');
         const data = await res.json();
-        select.innerHTML = '';
+        videoSelect.innerHTML = '';
         if (data.videos && data.videos.length > 0) {
-          data.videos.forEach((v, idx) => {
+          data.videos.forEach((v) => {
             const opt = document.createElement('option');
             opt.value = v.relPath;
             opt.textContent = `[${v.sizeGB}] ${v.name}`;
-            select.appendChild(opt);
+            videoSelect.appendChild(opt);
           });
-          selectVideo(data.videos[0].relPath, data.videos[0].name);
-        } else {
-          select.innerHTML = '<option value="">No MP4 videos found in G drive</option>';
+          selectVideo(data.videos[0].relPath);
         }
       } catch (err) {
-        log('Failed to fetch video list: ' + err.message, 'fail');
+        console.error('Error fetching videos:', err);
       }
     }
 
-    select.addEventListener('change', (e) => {
-      const opt = select.options[select.selectedIndex];
-      selectVideo(e.target.value, opt ? opt.textContent : e.target.value);
+    function selectVideo(relPath) {
+      state.videoPath = relPath;
+      video.src = `/video?path=${encodeURIComponent(relPath)}`;
+      video.load();
+    }
+
+    videoSelect.addEventListener('change', (e) => selectVideo(e.target.value));
+
+    video.addEventListener('loadedmetadata', () => {
+      state.videoDuration = video.duration;
+      state.videoWidth = video.videoWidth;
+      state.videoHeight = video.videoHeight;
+      document.getElementById('valVideoRes').textContent = `${video.videoWidth}x${video.videoHeight}`;
+      document.getElementById('valVideoDur').textContent = `${video.duration.toFixed(1)}s`;
     });
 
-    function selectVideo(relPath, displayName) {
-      state.currentVideoPath = relPath;
-      document.getElementById('valVideoName').textContent = displayName || relPath;
-      const videoUrl = `/video?path=${encodeURIComponent(relPath)}`;
-      video.src = videoUrl;
+    video.addEventListener('timeupdate', () => {
+      document.getElementById('valVideoTime').textContent = `${video.currentTime.toFixed(1)}s`;
+    });
 
-      const videoSrcUrl = new URL(video.src, window.location.href);
-      state.videoSameOrigin = videoSrcUrl.origin === window.location.origin;
-      document.getElementById('valSameOrigin').textContent = state.videoSameOrigin ? `true (${videoSrcUrl.origin})` : 'false';
+    let seekStart = 0;
+    video.addEventListener('seeking', () => { seekStart = performance.now(); });
+    video.addEventListener('seeked', () => {
+      const lat = performance.now() - seekStart;
+      state.seeks.push({ target: Number(video.currentTime.toFixed(1)), latencyMs: Number(lat.toFixed(1)) });
+      document.getElementById('valSeekCount').textContent = state.seeks.length;
+    });
 
-      testHttpRange(videoUrl);
-    }
-
-    async function testHttpRange(videoUrl) {
-      try {
-        log(`Testing HTTP Range for ${state.currentVideoPath} (bytes=0-1023)...`, 'info');
-        const res = await fetch(videoUrl, {
-          headers: { 'Range': 'bytes=0-1023' }
-        });
-        const contentRange = res.headers.get('Content-Range') || '--';
-        document.getElementById('valContentRange').textContent = contentRange;
-
-        if (res.status === 206) {
-          state.httpRangePass = true;
-          state.httpRangeHeader = contentRange;
-          document.getElementById('valRangeStatus').textContent = `206 Partial Content (PASS)`;
-          log(`HTTP Range verified: 206 Partial Content, Content-Range: ${contentRange}`, 'pass');
-        } else {
-          document.getElementById('valRangeStatus').textContent = `${res.status} (FAIL: expected 206)`;
-          log(`HTTP Range failed: HTTP ${res.status}`, 'fail');
+    // Mapping Button Groups
+    function setupButtonGroup(containerId, stateKey) {
+      const container = document.getElementById(containerId);
+      container.addEventListener('click', (e) => {
+        if (e.target.tagName === 'BUTTON') {
+          container.querySelectorAll('button').forEach(b => b.classList.remove('active'));
+          e.target.classList.add('active');
+          state[stateKey] = e.target.getAttribute('data-val');
+          syncTelemetry();
         }
-      } catch (err) {
-        document.getElementById('valRangeStatus').textContent = 'Error: ' + err.message;
-        log(`HTTP Range fetch error: ${err.message}`, 'fail');
-      }
+      });
     }
+    setupButtonGroup('grpStereo', 'stereo');
+    setupButtonGroup('grpProjection', 'projection');
+    setupButtonGroup('grpEye', 'eyeOrder');
 
-    // 4. Video & Seek handling
-    function initVideo() {
-      video.addEventListener('loadedmetadata', () => {
-        state.videoLoaded = true;
-        state.videoDuration = video.duration;
-        document.getElementById('valDuration').textContent = video.duration.toFixed(2) + 's';
-        log(`Video loadedmetadata: duration=${video.duration.toFixed(2)}s, dimensions=${video.videoWidth}x${video.videoHeight}`, 'pass');
-      });
-
-      video.addEventListener('timeupdate', () => {
-        document.getElementById('valCurrentTime').textContent = video.currentTime.toFixed(2) + 's';
-      });
-
-      video.addEventListener('seeking', () => {
-        seekStartTime = performance.now();
-        log(`Video seeking to ${video.currentTime.toFixed(2)}s...`, 'info');
-      });
-
-      video.addEventListener('seeked', () => {
-        const latency = performance.now() - seekStartTime;
-        document.getElementById('valSeekLatency').textContent = `${latency.toFixed(1)}ms`;
-        log(`Video seeked to ${video.currentTime.toFixed(2)}s in ${latency.toFixed(1)}ms`, 'pass');
-        state.seeks.push({ target: Number(video.currentTime.toFixed(2)), latencyMs: Number(latency.toFixed(1)) });
-        
-        const badge = document.getElementById('badgeVideo');
-        if (state.httpRangePass && state.videoLoaded && state.seeks.length > 0) {
-          badge.className = 'status-badge badge-pass';
-          badge.textContent = 'PASS';
+    // Enter VR Button
+    document.getElementById('btnEnterVR').addEventListener('click', async () => {
+      // 1. Request Motion Permission
+      if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+        try {
+          const perm = await DeviceOrientationEvent.requestPermission();
+          state.motionPermission = perm;
+          document.getElementById('valMotionPerm').textContent = perm;
+        } catch (err) {
+          state.motionPermission = 'error: ' + err.message;
         }
-        syncTelemetry();
-      });
-
-      video.addEventListener('error', (e) => {
-        const err = video.error;
-        log(`Video error code ${err ? err.code : 'unknown'}: ${err ? err.message : ''}`, 'fail');
-        document.getElementById('badgeVideo').className = 'status-badge badge-fail';
-        document.getElementById('badgeVideo').textContent = 'FAIL';
-      });
-    }
-
-    window.triggerSeek = function(targetSec) {
-      if (video.duration && targetSec > video.duration) {
-        targetSec = Math.max(0, video.duration - 5);
+      } else {
+        state.motionPermission = 'granted_standard';
+        document.getElementById('valMotionPerm').textContent = 'Standard';
       }
-      log(`Triggering manual seek to ${targetSec}s`, 'info');
-      video.currentTime = targetSec;
-      video.play().catch(e => log('Video play notice: ' + e.message, 'info'));
-    };
 
-    // 5. Telemetry Sync to PC
+      // 2. Calibrate Zero Orientation
+      updateScreenOrientation();
+      resetView();
+
+      // 3. Play Video
+      video.play().catch(e => console.log('Auto play notice:', e));
+
+      // 4. Hide 2D UI & Enter Fullscreen VR
+      state.inVR = true;
+      uiOverlay.classList.add('hidden');
+      showFloatingBar();
+      syncTelemetry();
+    });
+
+    // Floating Bar Controls
+    document.getElementById('btnVrReset').addEventListener('click', (e) => {
+      e.stopPropagation();
+      resetView();
+    });
+    document.getElementById('btnVrPlayPause').addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (video.paused) video.play(); else video.pause();
+    });
+    document.getElementById('btnVrSeekBack').addEventListener('click', (e) => {
+      e.stopPropagation();
+      video.currentTime = Math.max(0, video.currentTime - 60);
+    });
+    document.getElementById('btnVrSeekFwd').addEventListener('click', (e) => {
+      e.stopPropagation();
+      video.currentTime = Math.min(video.duration, video.currentTime + 60);
+    });
+    document.getElementById('btnVrExit').addEventListener('click', (e) => {
+      e.stopPropagation();
+      state.inVR = false;
+      uiOverlay.classList.remove('hidden');
+      vrFloatingBar.classList.add('fade-out');
+      syncTelemetry();
+    });
+
+    // Sync Telemetry
     async function syncTelemetry() {
       try {
         const payload = {
           userAgent: navigator.userAgent,
           state: {
             ...state,
-            currentTime: video.currentTime,
+            currentTime: Number(video.currentTime.toFixed(2)),
             videoPaused: video.paused
-          }
+          },
+          timestamp: new Date().toISOString()
         };
-        const res = await fetch('/api/telemetry', {
+        await fetch('/api/telemetry', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload)
         });
-        if (res.ok) {
-          log('Telemetry synced to PC server', 'info');
-        }
-      } catch (err) {
-        log('Telemetry sync error: ' + err.message, 'warn');
-      }
+      } catch (e) {}
     }
 
     document.getElementById('btnSyncTelemetry').addEventListener('click', syncTelemetry);
 
-    // Run Initial Checks
-    checkSecureContext();
-    initOrientation();
-    initVideo();
+    // Initial Load
     loadVideoList();
   </script>
 </body>
