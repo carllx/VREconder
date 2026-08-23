@@ -305,6 +305,25 @@ function handleRequest(req, res, isHttps) {
     }
   }
 
+  // Static assets (.js, .mjs, .css, .json, .png, .svg)
+  const safePath = path.normalize(path.join(__dirname, pathname));
+  if (safePath.startsWith(__dirname) && fs.existsSync(safePath) && fs.statSync(safePath).isFile()) {
+    const ext = path.extname(safePath).toLowerCase();
+    const mimeTypes = {
+      '.js': 'text/javascript; charset=utf-8',
+      '.mjs': 'text/javascript; charset=utf-8',
+      '.css': 'text/css; charset=utf-8',
+      '.json': 'application/json; charset=utf-8',
+      '.png': 'image/png',
+      '.svg': 'image/svg+xml'
+    };
+    if (mimeTypes[ext]) {
+      res.writeHead(200, { 'Content-Type': mimeTypes[ext] });
+      fs.createReadStream(safePath).pipe(res);
+      return;
+    }
+  }
+
   // Fallback for HTTP Onboarding page
   if (!isHttps) {
     res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
