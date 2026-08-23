@@ -2,7 +2,7 @@
 // Application Bootstrap & Main Loop Entry
 // ==========================================
 import { state, showFeedbackToast, isStandalone } from './core/state.js';
-import { initOrientationListeners, cameraMat3 } from './core/orientation.js';
+import { initOrientationListeners, updateScreenOrientation, cameraMat3 } from './core/orientation.js';
 import { startRecenterCalibration } from './core/recenter.js';
 import { VRRenderer } from './render/vr-renderer.js';
 import { DiagnosticOverlay } from './render/diagnostic-overlay.js';
@@ -117,9 +117,12 @@ window.addEventListener('touchstart', showFloatingBar, { passive: true });
 window.addEventListener('click', showFloatingBar);
 
 function enterVRMode() {
+  updateScreenOrientation();
+
   if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
     DeviceOrientationEvent.requestPermission().then((perm) => {
       state.motionPermission = perm;
+      updateScreenOrientation();
     }).catch(() => {});
   }
 

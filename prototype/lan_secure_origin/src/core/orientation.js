@@ -15,14 +15,20 @@ export let qCameraInv = new Quat();
 export let cameraMat3 = [1, 0, 0,  0, 1, 0,  0, 0, 1];
 
 export function updateScreenOrientation() {
-  if (screen.orientation && typeof screen.orientation.angle !== 'undefined') {
-    state.screenAngle = screen.orientation.angle;
-  } else if (typeof window.orientation !== 'undefined') {
-    state.screenAngle = window.orientation;
-  } else {
-    state.screenAngle = window.innerWidth > window.innerHeight ? 90 : 0;
+  let angle = 0;
+  if (screen.orientation && typeof screen.orientation.angle === 'number') {
+    angle = screen.orientation.angle;
+  } else if (typeof window.orientation === 'number') {
+    angle = window.orientation;
   }
-  state.viewport = { w: window.innerWidth, h: window.innerHeight, dpr: window.devicePixelRatio };
+
+  // Fallback for iOS Safari Standalone / PWA when orientation property reports 0 in landscape
+  if (angle === 0 && window.innerWidth > window.innerHeight) {
+    angle = 90;
+  }
+
+  state.screenAngle = angle;
+  state.viewport = { w: window.innerWidth, h: window.innerHeight, dpr: window.devicePixelRatio || 1 };
 }
 
 export function computePoseQuaternion(alphaDeg, betaDeg, gammaDeg, screenAngleDeg) {
@@ -40,7 +46,9 @@ export function computePoseQuaternion(alphaDeg, betaDeg, gammaDeg, screenAngleDe
 }
 
 export function initOrientationListeners(onOrientationUpdateCallback) {
-  window.addEventListener('orientationchange', updateScreenOrientation);
+  window.addEventListener('orientationchange', () => {
+    setTimeout(updateScreenOrientation, 50);
+  });
   window.addEventListener('resize', updateScreenOrientation);
   updateScreenOrientation();
 
@@ -54,7 +62,11 @@ export function initOrientationListeners(onOrientationUpdateCallback) {
     qPoseCurrent = computePoseQuaternion(e.alpha, e.beta || 0, e.gamma || 0, state.screenAngle);
     qCamera = qRefInv.clone().multiply(qPoseCurrent);
     qCameraInv = qCamera.clone().invert();
-    cameraMat3 = qCamera.toMat3ColumnMajor();
+    
+    const mat = qCamera.toMat3ColumnMajor();
+    for (let i = 0; i < 9; i++) {
+      cameraMat3[i] = mat[i];
+    }
 
     state.cameraForward = qCamera.transformVector([0, 0, -1]);
     state.cameraUp = qCamera.transformVector([0, 1, 0]);

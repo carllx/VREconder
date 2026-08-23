@@ -246,10 +246,9 @@ export class VRRenderer {
 
     const vp = videoProfile || {};
     let projMode = 0;
-    if (vp.projection === 'unknown') projMode = 3;
-    else if (vp.projection === 'equirectangular-360') projMode = 1;
+    if (vp.projection === 'equirectangular-360') projMode = 1;
     else if (vp.projection === 'flat') projMode = 2;
-    else projMode = 0;
+    else projMode = 0; // Default candidate preview mapping: Equirectangular 180°
 
     const stereoLayout = vp.stereoMode === 'top-bottom' ? 1 : (vp.stereoMode === 'mono' ? 2 : 0);
     const eyeSwap = vp.eyeOrder === 'right-left' ? 1 : 0;

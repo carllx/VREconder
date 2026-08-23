@@ -24,7 +24,7 @@ export const fsIdealSceneSource = `
   uniform int uEye;              // 0: Left Eye, 1: Right Eye
   uniform int uEyeSwap;          // 0: Normal, 1: Swapped
   uniform int uSceneType;        // 0: Video, 1: Synthetic Calibration Grid
-  uniform int uProjectionMode;    // 0: Equirect-180, 1: Equirect-360, 2: Flat-2D, 3: Unknown
+  uniform int uProjectionMode;    // 0: Equirect-180, 1: Equirect-360, 2: Flat-2D
   uniform int uStereoLayout;     // 0: SBS, 1: TB, 2: Mono
   uniform vec4 uVirtTanBounds;   // vec4(tanVirtLeft, tanVirtRight, tanVirtBottom, tanVirtTop)
   uniform vec2 uCoverageRad;     // vec2(horizontalRad, verticalRad)
@@ -38,7 +38,7 @@ export const fsIdealSceneSource = `
     float tanY = mix(-uVirtTanBounds.z, uVirtTanBounds.w, vUv.y);
     vec3 rayCam = normalize(vec3(tanX, tanY, -1.0));
 
-    // 2. Synthetic Calibration Scene (Straight Grid, 90° Corners & Asymmetric L/R Badge)
+    // 2. Synthetic Calibration Scene (Straight Grid, 90° Corners & Directional Orientation Markers)
     // Pure WebGL1 Standard Arithmetic (Zero fwidth dependency)
     if (uSceneType == 1) {
       vec2 gridPos = vec2(tanX, tanY) * 6.0;
@@ -46,13 +46,28 @@ export const fsIdealSceneSource = `
       float line = step(0.46, max(gridFract.x, gridFract.y));
 
       // Center crosshair (x=0, y=0)
-      float isCross = (abs(tanX) < 0.006 || abs(tanY) < 0.006) ? 1.0 : 0.0;
+      float isCross = (abs(tanX) < 0.005 || abs(tanY) < 0.005) ? 1.0 : 0.0;
 
       // 90-degree corner targets (orthogonal square markers at tan = ±0.35)
       float isCornerBox = ((abs(abs(tanX) - 0.35) < 0.007 && abs(tanY) <= 0.357) ||
                            (abs(abs(tanY) - 0.35) < 0.007 && abs(tanX) <= 0.357)) ? 1.0 : 0.0;
 
-      // Eye-specific Badge Color (Left: Cyan/Blue, Right: Orange/Gold)
+      // Synthetic Orientation Markers:
+      // UP Arrow at top: stem (y in [0.18, 0.28], |x| < 0.008) + head (|x| < (0.35 - y)*0.7, y in [0.28, 0.35])
+      float isUpStem = (tanY >= 0.18 && tanY <= 0.28 && abs(tanX) < 0.008) ? 1.0 : 0.0;
+      float isUpHead = (tanY >= 0.28 && tanY <= 0.35 && abs(tanX) < (0.35 - tanY) * 0.7) ? 1.0 : 0.0;
+      float isUpArrow = max(isUpStem, isUpHead);
+
+      // DOWN marker at bottom: bar at y in [-0.30, -0.26], |x| < 0.04
+      float isDownMarker = (tanY >= -0.30 && tanY <= -0.26 && abs(tanX) < 0.04) ? 1.0 : 0.0;
+
+      // LEFT marker at left: bar at x in [-0.30, -0.26], |y| < 0.04
+      float isLeftMarker = (tanX >= -0.30 && tanX <= -0.26 && abs(tanY) < 0.04) ? 1.0 : 0.0;
+
+      // RIGHT marker at right: bar at x in [0.26, 0.30], |y| < 0.04
+      float isRightMarker = (tanX >= 0.26 && tanX <= 0.30 && abs(tanY) < 0.04) ? 1.0 : 0.0;
+
+      // Eye-specific Badge Color (Left: Cyan/Blue, Right: Orange/Amber)
       vec3 eyeThemeColor = (uEye == 0) ? vec3(0.06, 0.75, 0.95) : vec3(0.95, 0.55, 0.10);
       vec3 bg = (uEye == 0) ? vec3(0.03, 0.07, 0.14) : vec3(0.12, 0.06, 0.03);
 
@@ -63,15 +78,12 @@ export const fsIdealSceneSource = `
       finalCol = mix(finalCol, vec3(1.0, 1.0, 1.0), isCornerBox);
       finalCol = mix(finalCol, vec3(1.0, 0.2, 0.2), isCross);
       finalCol = mix(finalCol, eyeThemeColor, isCenterBadge);
+      finalCol = mix(finalCol, vec3(0.2, 1.0, 0.3), isUpArrow);      // Bright Green UP Arrow
+      finalCol = mix(finalCol, vec3(1.0, 0.9, 0.2), isDownMarker);   // Yellow DOWN
+      finalCol = mix(finalCol, vec3(0.9, 0.4, 1.0), isLeftMarker);   // Purple LEFT
+      finalCol = mix(finalCol, vec3(0.3, 0.8, 1.0), isRightMarker);  // SkyBlue RIGHT
 
       gl_FragColor = vec4(finalCol, 1.0);
-      return;
-    }
-
-    // 3. Unknown / Unverified Video Warning Texture
-    if (uProjectionMode == 3) {
-      float checker = mod(floor(vUv.x * 24.0) + floor(vUv.y * 24.0), 2.0);
-      gl_FragColor = mix(vec4(0.06, 0.09, 0.16, 1.0), vec4(0.12, 0.18, 0.30, 1.0), checker);
       return;
     }
 
