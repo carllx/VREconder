@@ -37,9 +37,8 @@ export const fsIdealSceneSource = `
     float tanY = mix(-uVirtTanBounds.z, uVirtTanBounds.w, vUv.y);
     vec3 rayCam = normalize(vec3(tanX, tanY, -1.0));
 
-    // 2. Synthetic Calibration Scene (Straight Grid, 90° Corners & Crosshairs)
+    // 2. Synthetic Calibration Scene (Straight Grid, 90° Corners & Asymmetric L/R Badge)
     if (uSceneType == 1) {
-      // Perspective grid on a virtual rectilinear reference plane at z = -1.0
       vec2 gridPos = vec2(tanX, tanY) * 8.0;
       vec2 gridFract = abs(fract(gridPos - 0.5) - 0.5) / fwidth(gridPos);
       float line = min(gridFract.x, gridFract.y);
@@ -53,13 +52,17 @@ export const fsIdealSceneSource = `
       // 90-degree corner targets
       float cornerBox = (abs(abs(tanX) - 0.4) < 0.005 || abs(abs(tanY) - 0.4) < 0.005) ? 0.7 : 0.0;
 
-      vec3 bg = vec3(0.05, 0.08, 0.14);
-      vec3 gridColor = vec3(0.2, 0.6, 0.9);
-      vec3 crossColor = vec3(1.0, 0.25, 0.25);
+      // Eye-specific Badge Color (Left: Cyan/Blue, Right: Orange/Gold)
+      vec3 eyeThemeColor = (uEye == 0) ? vec3(0.06, 0.75, 0.95) : vec3(0.95, 0.55, 0.10);
+      vec3 bg = (uEye == 0) ? vec3(0.03, 0.07, 0.14) : vec3(0.12, 0.06, 0.03);
 
-      vec3 finalCol = mix(bg, gridColor, gridAlpha * 0.7);
-      finalCol = mix(finalCol, vec3(1.0, 0.8, 0.2), cornerBox);
-      finalCol = mix(finalCol, crossColor, isCross);
+      // Distinctive L / R central square marker
+      float isCenterBadge = (abs(tanX) < 0.08 && abs(tanY) < 0.08) ? 1.0 : 0.0;
+
+      vec3 finalCol = mix(bg, eyeThemeColor, gridAlpha * 0.75);
+      finalCol = mix(finalCol, vec3(1.0, 1.0, 1.0), cornerBox);
+      finalCol = mix(finalCol, vec3(1.0, 0.2, 0.2), isCross);
+      finalCol = mix(finalCol, eyeThemeColor, isCenterBadge);
 
       gl_FragColor = vec4(finalCol, 1.0);
       return;
@@ -113,44 +116,46 @@ export const fsIdealSceneSource = `
 `;
 
 // Pass 2: Google Cardboard Screen-Space Barrel Distortion Pass
-// Maps Screen Coordinates -> Optical Offset -> Radial Warp -> Virtual Eye Texture UV
+// Maps Screen Coordinates -> Optical Offset -> Radial Warp -> Per-Eye FBO Region
 export const fsDistortionPassSource = `
   precision highp float;
   varying vec2 vUv;
 
   uniform sampler2D uEyeTexture;
+  uniform int uEyeIndex;          // 0: Left Eye (samples [0, 0.5]), 1: Right Eye (samples [0.5, 1.0])
   uniform vec2 uLensCenterNorm;   // Optical center in eye viewport [0, 1]
   uniform vec4 uVirtTanBounds;    // vec4(tanVirtLeft, tanVirtRight, tanVirtBottom, tanVirtTop)
   uniform int uLensCorrection;    // 0: OFF (Ideal Undistorted), 1: ON (Cardboard Pre-Warp)
   uniform vec2 uDistortionK;      // vec2(k1, k2)
-  uniform vec2 uScreenTanScale;   // Scale from viewport pixels to physical screen tangents
+  uniform vec2 uPhysicalTanScale; // Scale from [0, 1] viewport to physical tangents
 
   void main() {
-    if (uLensCorrection == 0) {
-      // Pass-through undistorted ideal eye rendering
-      gl_FragColor = texture2D(uEyeTexture, vUv);
-      return;
+    float uEye = vUv.x;
+    float vEye = vUv.y;
+
+    if (uLensCorrection == 1) {
+      // 1. Physical Tangent Offset from Optical Lens Center
+      vec2 offsetNorm = vUv - uLensCenterNorm;
+      vec2 physTan = offsetNorm * uPhysicalTanScale;
+
+      // 2. Cardboard Radial Barrel Distortion Polynomial: r' = r * (1 + k1*r^2 + k2*r^4)
+      float rSq = dot(physTan, physTan);
+      float factor = 1.0 + uDistortionK.x * rSq + uDistortionK.y * rSq * rSq;
+      vec2 virtTan = physTan * factor;
+
+      // 3. Map Distorted Virtual Tangent to Ideal Single Eye Texture UV [0, 1]
+      uEye = (virtTan.x - (-uVirtTanBounds.x)) / (uVirtTanBounds.y + uVirtTanBounds.x);
+      vEye = (virtTan.y - (-uVirtTanBounds.z)) / (uVirtTanBounds.w + uVirtTanBounds.z);
+
+      // Vignette boundary
+      if (uEye < 0.0 || uEye > 1.0 || vEye < 0.0 || vEye > 1.0) {
+        gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0);
+        return;
+      }
     }
 
-    // 1. Physical Tangent Offset from Optical Lens Center
-    vec2 offsetNorm = vUv - uLensCenterNorm;
-    vec2 physTan = offsetNorm * uScreenTanScale;
-
-    // 2. Cardboard Radial Barrel Distortion Polynomial: r' = r * (1 + k1*r^2 + k2*r^4)
-    float rSq = dot(physTan, physTan);
-    float factor = 1.0 + uDistortionK.x * rSq + uDistortionK.y * rSq * rSq;
-    vec2 virtTan = physTan * factor;
-
-    // 3. Map Distorted Virtual Tangent to Ideal Eye Texture UV [0, 1]
-    float uEye = (virtTan.x - (-uVirtTanBounds.x)) / (uVirtTanBounds.y + uVirtTanBounds.x);
-    float vEye = (virtTan.y - (-uVirtTanBounds.z)) / (uVirtTanBounds.w + uVirtTanBounds.z);
-
-    // Vignette boundary
-    if (uEye < 0.0 || uEye > 1.0 || vEye < 0.0 || vEye > 1.0) {
-      gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0);
-      return;
-    }
-
-    gl_FragColor = texture2D(uEyeTexture, vec2(uEye, vEye));
+    // 4. Remap [0, 1] Eye UV into the specific Eye's Half of the FBO Texture (WWGC Formula: a.x * 0.5 + (left ? 0.0 : 0.5))
+    float uFbo = uEye * 0.5 + float(uEyeIndex) * 0.5;
+    gl_FragColor = texture2D(uEyeTexture, vec2(uFbo, vEye));
   }
 `;

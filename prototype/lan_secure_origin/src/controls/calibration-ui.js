@@ -1,6 +1,6 @@
 // ==========================================
 // Staged Calibration & Diagnostic UI Controls
-// (Synthetic Scene Toggle, Full Custom Viewer Inputs & URI Import)
+// (Synthetic Scene Toggle, Full Custom Viewer Inputs & JSON Import)
 // ==========================================
 import { showFeedbackToast } from '../core/state.js';
 import { createDefaultViewerProfile, deriveCardboardEyeGeometry } from '../core/projection-profile.js';
@@ -70,15 +70,15 @@ export class CalibrationUI {
     this.txtViewerSourceInfo = document.getElementById('txtViewerSourceInfo');
     this.txtDerivedFov = document.getElementById('txtDerivedFov');
 
-    // Custom Viewer Manual & Import Controls
+    // Custom Viewer Manual & JSON Import Controls
     this.customInputsArea = document.getElementById('customViewerInputs');
     this.inputScreenToLens = document.getElementById('inputScreenToLens');
     this.inputInterLens = document.getElementById('inputInterLens');
     this.selVerticalAlign = document.getElementById('selVerticalAlign');
     this.inputTrayToLens = document.getElementById('inputTrayToLens');
     this.inputMaxFov = document.getElementById('inputMaxFov');
-    this.inputUriImport = document.getElementById('inputUriImport');
-    this.btnImportUri = document.getElementById('btnImportUri');
+    this.inputJsonImport = document.getElementById('inputJsonImport');
+    this.btnImportJson = document.getElementById('btnImportJson');
 
     this.bindEvents();
   }
@@ -152,14 +152,14 @@ export class CalibrationUI {
       const geom = deriveCardboardEyeGeometry(activeScreenProfile, hp);
       const l = geom.leftEye;
       const r = geom.rightEye;
-      const statusStr = hp.isCalibrated ? '<span style="color:#34d399;">✓ [CALIBRATED PROFILE]</span>' : '<span style="color:#f87171;">⚠️ [UNCALIBRATED BASELINE]</span>';
+      const statusStr = hp.isCalibrated ? '<span style="color:#34d399;">✓ [CALIBRATED PROFILE]</span>' : '<span style="color:#f87171;">⚠️ [UNCALIBRATED BASELINE — Lens Pass Not Evaluated]</span>';
       this.txtDerivedFov.innerHTML = `
         ${statusStr}<br>
         <b>Left Eye Virt FOV:</b> L:${l.fovDeg.left.toFixed(1)}° R:${l.fovDeg.right.toFixed(1)}° U:${l.fovDeg.top.toFixed(1)}° D:${l.fovDeg.bottom.toFixed(1)}°<br>
-        <b>Phys Tangents:</b> [${l.physTanBounds[0].toFixed(3)}, ${l.physTanBounds[1].toFixed(3)}, ${l.physTanBounds[2].toFixed(3)}, ${l.physTanBounds[3].toFixed(3)}]<br>
-        <b>Virt Tangents:</b> [${l.virtTanBounds[0].toFixed(3)}, ${l.virtTanBounds[1].toFixed(3)}, ${l.virtTanBounds[2].toFixed(3)}, ${l.virtTanBounds[3].toFixed(3)}]<br>
-        <b>Lens Center:</b> [${(l.lensCenterNorm[0]*100).toFixed(1)}%, ${(l.lensCenterNorm[1]*100).toFixed(1)}%]<br>
-        <span style="opacity:0.75;">Screen: ${activeScreenProfile.deviceModel} (141.2×65.1mm, Bezel: 1.55mm)</span>
+        <b>Phys Tan:</b> [${l.physTanBounds[0].toFixed(3)}, ${l.physTanBounds[1].toFixed(3)}, ${l.physTanBounds[2].toFixed(3)}, ${l.physTanBounds[3].toFixed(3)}]<br>
+        <b>Virt Tan:</b> [${l.virtTanBounds[0].toFixed(3)}, ${l.virtTanBounds[1].toFixed(3)}, ${l.virtTanBounds[2].toFixed(3)}, ${l.virtTanBounds[3].toFixed(3)}]<br>
+        <b>Physical Tan Scale:</b> [${geom.physicalTanScale[0].toFixed(3)}, ${geom.physicalTanScale[1].toFixed(3)}]<br>
+        <span style="opacity:0.75;">Screen: ${activeScreenProfile.deviceModel} (141.2×65.1mm, Bezel Est: 3.0mm)</span>
       `;
     }
   }
@@ -399,28 +399,23 @@ export class CalibrationUI {
     if (this.inputTrayToLens) this.inputTrayToLens.addEventListener('input', updateCustomParams);
     if (this.inputMaxFov) this.inputMaxFov.addEventListener('input', updateCustomParams);
 
-    // Cardboard URI / Parameter Import
-    if (this.btnImportUri) {
-      this.btnImportUri.addEventListener('click', () => {
-        const raw = (this.inputUriImport ? this.inputUriImport.value : '').trim();
+    // JSON Parameter Import (Cardboard URI parsing unsupported in this prototype)
+    if (this.btnImportJson) {
+      this.btnImportJson.addEventListener('click', () => {
+        const raw = (this.inputJsonImport ? this.inputJsonImport.value : '').trim();
         if (!raw) return;
+        if (!raw.startsWith('{')) {
+          showFeedbackToast('⚠️ Cardboard URI Protobuf decoding not supported; please paste JSON profile');
+          return;
+        }
         try {
-          // If JSON
-          if (raw.startsWith('{')) {
-            const parsed = JSON.parse(raw);
-            this.activeViewerProfile = { ...createDefaultViewerProfile('custom:calibrated'), ...parsed, isCalibrated: true };
-          } else {
-            // Label as URI import
-            this.activeViewerProfile = createDefaultViewerProfile('custom:calibrated');
-            this.activeViewerProfile.name = 'Imported Viewer Profile';
-            this.activeViewerProfile.source = 'Cardboard URI: ' + raw.substring(0, 40) + '...';
-            this.activeViewerProfile.isCalibrated = true;
-          }
+          const parsed = JSON.parse(raw);
+          this.activeViewerProfile = { ...createDefaultViewerProfile('custom:calibrated'), ...parsed, isCalibrated: true };
           this.syncStageBToUI();
           notifyChange();
-          showFeedbackToast('✓ Viewer Profile Imported Successfully');
+          showFeedbackToast('✓ Viewer Profile JSON Imported Successfully');
         } catch (e) {
-          showFeedbackToast('⚠️ Import Error: ' + e.message);
+          showFeedbackToast('⚠️ JSON Parse Error: ' + e.message);
         }
       });
     }

@@ -1,11 +1,11 @@
 // ==========================================
 // Screen Profile & Physical Device Display Geometry
-// (Authoritative iPhone 15 Pro Physical Parameters)
+// (iPhone 15 Pro Physical Parameters)
 // ==========================================
 
 export class ScreenProfile {
   constructor() {
-    // Authoritative iPhone 15 Pro Physical Specification
+    // Authoritative Display Specifications:
     // Source: Apple Technical Specifications (iPhone 15 Pro display)
     // Resolution: 2556 x 1179 px (Landscape orientation), 460 PPI
     this.deviceModel = 'iPhone 15 Pro (iPhone15,2)';
@@ -20,13 +20,11 @@ export class ScreenProfile {
     this.metersPerPixel = metersPerInch / this.ppi;                // 0.000055217 m/px
     this.pixelsPerMeter = 1.0 / this.metersPerPixel;               // 18110.236 px/m
 
-    // Bezel Border Specification:
-    // Source: Apple Industrial Design (iPhone 15 Pro uniform display border: 1.55 mm)
-    this.borderSizeMeters = 0.00155; // 1.55 mm bottom tray bezel offset
+    // Bottom Tray Bezel Offset:
+    // Provenance: WWGC default mobile tray border fallback estimate (3.0 mm)
+    // NOTE: This is an estimated mechanical input; user calibration can adjust tray-to-lens distance.
+    this.borderSizeMeters = 0.0030; // 3.0 mm tray bezel estimate
   }
-
-  // NOTE: Physical display geometry is strictly constant for the physical iPhone 15 Pro.
-  // Runtime canvas buffer pixel dimensions are tracked separately in the renderer viewport.
 }
 
 export const activeScreenProfile = new ScreenProfile();

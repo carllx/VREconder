@@ -41,13 +41,13 @@ export function createDefaultViewerProfile(profileId = 'unknown:uncalibrated') {
       interLensDistance: 0.0639,
       verticalAlignment: 'BOTTOM',
       trayToLensDistance: 0.0350,
-      maxFovAngles: { outerDeg: 53.0, innerDeg: 53.0, upperDeg: 53.0, lowerDeg: 53.0 },
+      maxFovAngles: { outerDeg: 50.0, innerDeg: 50.0, upperDeg: 50.0, lowerDeg: 50.0 },
       distortion: { model: 'uncalibrated', k1: 0.0, k2: 0.0 }
     },
     'cardboard:v2_2015': {
       viewerProfileId: 'cardboard:v2_2015',
       name: 'Google Cardboard v2 (Historical Ref: Google I/O 2015 Spec)',
-      source: 'Google Cardboard Device Parameters Specification (v2.0, WWGC reference)',
+      source: 'Google Cardboard Device Parameters Specification (v2.0, with 50° FOV guidance)',
       confidence: 'historical-reference',
       isCalibrated: true,
       lensCorrectionEnabled: false,
@@ -55,7 +55,7 @@ export function createDefaultViewerProfile(profileId = 'unknown:uncalibrated') {
       interLensDistance: 0.0639,    // 63.9 mm
       verticalAlignment: 'BOTTOM',
       trayToLensDistance: 0.0350,   // 35.0 mm
-      maxFovAngles: { outerDeg: 53.0, innerDeg: 53.0, upperDeg: 53.0, lowerDeg: 53.0 },
+      maxFovAngles: { outerDeg: 50.0, innerDeg: 50.0, upperDeg: 50.0, lowerDeg: 50.0 },
       distortion: { model: 'cardboard-radial-polynomial', k1: 0.33582564, k2: 0.55348791 }
     },
     'cardboard:v1_2014': {
@@ -90,7 +90,6 @@ export function createDefaultViewerProfile(profileId = 'unknown:uncalibrated') {
   return presets[profileId] || presets['unknown:uncalibrated'];
 }
 
-// Cardboard Distortion polynomial function r' = r * (1 + k1*r^2 + k2*r^4)
 export function distortRadius(r, k1 = 0, k2 = 0) {
   const rSq = r * r;
   return r * (1.0 + k1 * rSq + k2 * rSq * rSq);
@@ -153,18 +152,20 @@ export function deriveCardboardEyeGeometry(screen, viewer) {
   const rightVirtTanLeft = leftVirtTanRight;
   const rightVirtTanRight = leftVirtTanLeft;
 
-  // 5. Optical center coordinates in Normalized Viewport Space [0, 1] per eye
-  const leftLensCenterXPx = (halfScreenW - halfIpd) * s.pixelsPerMeter;
-  const rightLensCenterXPx = (halfIpd) * s.pixelsPerMeter;
-  const lensCenterYPx = eyeY * s.pixelsPerMeter;
+  // 5. Optical center normalized coordinates within single eye viewport [0, 1]
+  // In physical meters: left viewport width = halfScreenW
+  const leftLensCenterNormX = eyeLeftOuterDist / halfScreenW;
+  const rightLensCenterNormX = eyeLeftInnerDist / halfScreenW;
+  const lensCenterNormY = eyeY / s.heightMeters;
 
-  const halfViewportWPx = s.widthPx * 0.5;
-  const viewportHPx = s.heightPx;
+  // 6. Tangent scale derived purely from immutable physical screen dimensions
+  const physicalTanScaleX = halfScreenW / D;
+  const physicalTanScaleY = s.heightMeters / D;
 
   return {
     screenToLensDistance: D,
     interLensDistance: v.interLensDistance,
-    screenPixelsPerMeter: s.pixelsPerMeter,
+    physicalTanScale: [physicalTanScaleX, physicalTanScaleY],
     isCalibrated: v.isCalibrated === true,
     leftEye: {
       physTanBounds: [leftPhysTanLeft, leftPhysTanRight, physTanBottom, physTanTop],
@@ -175,7 +176,7 @@ export function deriveCardboardEyeGeometry(screen, viewer) {
         bottom: Math.atan(virtTanBottom) / deg2rad,
         top: Math.atan(virtTanTop) / deg2rad
       },
-      lensCenterNorm: [leftLensCenterXPx / halfViewportWPx, lensCenterYPx / viewportHPx],
+      lensCenterNorm: [leftLensCenterNormX, lensCenterNormY],
       eyeFromHeadMeters: [-halfIpd, 0, 0]
     },
     rightEye: {
@@ -187,7 +188,7 @@ export function deriveCardboardEyeGeometry(screen, viewer) {
         bottom: Math.atan(virtTanBottom) / deg2rad,
         top: Math.atan(virtTanTop) / deg2rad
       },
-      lensCenterNorm: [rightLensCenterXPx / halfViewportWPx, lensCenterYPx / viewportHPx],
+      lensCenterNorm: [rightLensCenterNormX, lensCenterNormY],
       eyeFromHeadMeters: [halfIpd, 0, 0]
     },
     distortion: { k1, k2 }

@@ -16,7 +16,7 @@ export class VRRenderer {
     this.posBuffer = null;
     this.videoTex = null;
 
-    // Offscreen Framebuffer for Ideal Undistorted Eye Texture
+    // Offscreen Framebuffer for Ideal Undistorted Dual-Eye Texture
     this.eyeFbo = null;
     this.eyeTex = null;
     this.fboWidth = 0;
@@ -257,7 +257,7 @@ export class VRRenderer {
 
     gl.enable(gl.SCISSOR_TEST);
 
-    // Left Eye Ideal Render (using actual leftEye virtTanBounds)
+    // Left Eye Ideal Render (into left half of FBO [0, halfW])
     gl.viewport(0, 0, halfW, height);
     gl.scissor(0, 0, halfW, height);
     gl.uniform1i(sLocs.uEye, 0);
@@ -265,7 +265,7 @@ export class VRRenderer {
     gl.uniform4f(sLocs.uVirtTanBounds, lVirtTan[0], lVirtTan[1], lVirtTan[2], lVirtTan[3]);
     gl.drawArrays(gl.TRIANGLES, 0, 6);
 
-    // Right Eye Ideal Render (using actual mirrored rightEye virtTanBounds)
+    // Right Eye Ideal Render (into right half of FBO [halfW, width])
     gl.viewport(halfW, 0, halfW, height);
     gl.scissor(halfW, 0, halfW, height);
     gl.uniform1i(sLocs.uEye, 1);
@@ -282,11 +282,12 @@ export class VRRenderer {
     const dLocs = {
       aPosition: gl.getAttribLocation(this.programDistort, 'aPosition'),
       uEyeTexture: gl.getUniformLocation(this.programDistort, 'uEyeTexture'),
+      uEyeIndex: gl.getUniformLocation(this.programDistort, 'uEyeIndex'),
       uLensCenterNorm: gl.getUniformLocation(this.programDistort, 'uLensCenterNorm'),
       uVirtTanBounds: gl.getUniformLocation(this.programDistort, 'uVirtTanBounds'),
       uLensCorrection: gl.getUniformLocation(this.programDistort, 'uLensCorrection'),
       uDistortionK: gl.getUniformLocation(this.programDistort, 'uDistortionK'),
-      uScreenTanScale: gl.getUniformLocation(this.programDistort, 'uScreenTanScale')
+      uPhysicalTanScale: gl.getUniformLocation(this.programDistort, 'uPhysicalTanScale')
     };
 
     gl.enableVertexAttribArray(dLocs.aPosition);
@@ -297,7 +298,6 @@ export class VRRenderer {
     gl.bindTexture(gl.TEXTURE_2D, this.eyeTex);
     gl.uniform1i(dLocs.uEyeTexture, 0);
 
-    // Lens Correction requires calibrated viewer profile
     const isCalibrated = (viewerProfile && viewerProfile.isCalibrated === true);
     const isLensOn = (isCalibrated && viewerProfile.lensCorrectionEnabled === true) ? 1 : 0;
     const distK = isCalibrated && viewerProfile.distortion ? [viewerProfile.distortion.k1 || 0, viewerProfile.distortion.k2 || 0] : [0, 0];
@@ -305,21 +305,21 @@ export class VRRenderer {
     gl.uniform1i(dLocs.uLensCorrection, isLensOn);
     gl.uniform2f(dLocs.uDistortionK, distK[0], distK[1]);
 
-    // Scale converting normalized viewport offset [0, 1] to physical tangents
-    const tanScaleX = halfW / (eyeGeom.screenPixelsPerMeter * eyeGeom.screenToLensDistance);
-    const tanScaleY = height / (eyeGeom.screenPixelsPerMeter * eyeGeom.screenToLensDistance);
-    gl.uniform2f(dLocs.uScreenTanScale, tanScaleX, tanScaleY);
+    // Constant Physical Tangent Scale derived from ScreenProfile
+    gl.uniform2f(dLocs.uPhysicalTanScale, eyeGeom.physicalTanScale[0], eyeGeom.physicalTanScale[1]);
 
-    // Left Eye Screen Distortion Pass
+    // Left Eye Screen Distortion Pass (Draws to Left Viewport, samples FBO [0, 0.5])
     gl.viewport(0, 0, halfW, height);
     gl.scissor(0, 0, halfW, height);
+    gl.uniform1i(dLocs.uEyeIndex, 0);
     gl.uniform2f(dLocs.uLensCenterNorm, eyeGeom.leftEye.lensCenterNorm[0], eyeGeom.leftEye.lensCenterNorm[1]);
     gl.uniform4f(dLocs.uVirtTanBounds, lVirtTan[0], lVirtTan[1], lVirtTan[2], lVirtTan[3]);
     gl.drawArrays(gl.TRIANGLES, 0, 6);
 
-    // Right Eye Screen Distortion Pass
+    // Right Eye Screen Distortion Pass (Draws to Right Viewport, samples FBO [0.5, 1.0])
     gl.viewport(halfW, 0, halfW, height);
     gl.scissor(halfW, 0, halfW, height);
+    gl.uniform1i(dLocs.uEyeIndex, 1);
     gl.uniform2f(dLocs.uLensCenterNorm, eyeGeom.rightEye.lensCenterNorm[0], eyeGeom.rightEye.lensCenterNorm[1]);
     gl.uniform4f(dLocs.uVirtTanBounds, rVirtTan[0], rVirtTan[1], rVirtTan[2], rVirtTan[3]);
     gl.drawArrays(gl.TRIANGLES, 0, 6);
