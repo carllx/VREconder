@@ -12,7 +12,36 @@ const __dirname = path.dirname(__filename);
 const HTTP_PORT = 8080;
 const HTTPS_PORT = 8443;
 const CERTS_DIR = path.join(__dirname, 'certs');
-const VIDEO_PATH = path.resolve(__dirname, '../../final_probe_720P.mp4');
+const MEDIA_ROOT = 'G:\\Media\\VR\\VR_Video_Processing\\01_Download_Completed';
+
+// Scan actual VR videos from G drive
+function listRealVRVideos() {
+  const results = [];
+  function scan(dir, relDir = '') {
+    if (!fs.existsSync(dir)) return;
+    const entries = fs.readdirSync(dir, { withFileTypes: true });
+    for (const ent of entries) {
+      const fullPath = path.join(dir, ent.name);
+      const relPath = path.join(relDir, ent.name);
+      if (ent.isDirectory()) {
+        scan(fullPath, relPath);
+      } else if (ent.isFile() && /\.(mp4|mov|m4v)$/i.test(ent.name)) {
+        try {
+          const stat = fs.statSync(fullPath);
+          results.push({
+            name: ent.name,
+            relPath: relPath.replace(/\\/g, '/'),
+            fullPath: fullPath,
+            sizeBytes: stat.size,
+            sizeGB: (stat.size / (1024 * 1024 * 1024)).toFixed(2) + ' GB'
+          });
+        } catch (e) {}
+      }
+    }
+  }
+  scan(MEDIA_ROOT);
+  return results;
+}
 
 // Collect all local IPv4 addresses
 function getLocalIPs() {
@@ -126,7 +155,7 @@ function streamVideo(req, res, filePath) {
       'Access-Control-Allow-Origin': '*'
     };
 
-    console.log(`[Video] Range 206 Partial Content: bytes ${start}-${end}/${fileSize} (${chunksize} bytes)`);
+    console.log(`[Video Range 206] bytes ${start}-${end}/${fileSize} (${(chunksize / 1024).toFixed(1)} KB)`);
     res.writeHead(206, head);
     file.pipe(res);
   } else {
@@ -136,13 +165,12 @@ function streamVideo(req, res, filePath) {
       'Accept-Ranges': 'bytes',
       'Access-Control-Allow-Origin': '*'
     };
-    console.log(`[Video] Full 200 OK: ${fileSize} bytes`);
+    console.log(`[Video Full 200] ${(fileSize / (1024 * 1024)).toFixed(1)} MB`);
     res.writeHead(200, head);
     fs.createReadStream(filePath).pipe(res);
   }
 }
 
-// In-memory telemetry received from iPhone
 let latestTelemetry = null;
 
 function handleRequest(req, res, isHttps) {
@@ -205,9 +233,33 @@ function handleRequest(req, res, isHttps) {
     return;
   }
 
-  // Video streaming endpoint
-  if (pathname === '/sample.mp4') {
-    streamVideo(req, res, VIDEO_PATH);
+  // Video list from real media folder
+  if (pathname === '/api/videos') {
+    const videos = listRealVRVideos();
+    res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+    res.end(JSON.stringify({ mediaRoot: MEDIA_ROOT, count: videos.length, videos }));
+    return;
+  }
+
+  // Video streaming endpoint (supports ?path=... or default /sample.mp4)
+  if (pathname === '/video' || pathname === '/sample.mp4') {
+    const relParam = urlObj.searchParams.get('path');
+    let targetPath = '';
+    if (relParam) {
+      targetPath = path.join(MEDIA_ROOT, relParam);
+    } else {
+      const videos = listRealVRVideos();
+      if (videos.length > 0) {
+        targetPath = videos[0].fullPath;
+      }
+    }
+
+    if (targetPath && fs.existsSync(targetPath)) {
+      streamVideo(req, res, targetPath);
+    } else {
+      res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
+      res.end(`Video not found in ${MEDIA_ROOT}`);
+    }
     return;
   }
 
@@ -303,6 +355,7 @@ const httpsOptions = {
 const httpsServer = https.createServer(httpsOptions, (req, res) => handleRequest(req, res, true));
 httpsServer.listen(HTTPS_PORT, '0.0.0.0', () => {
   console.log(`[HTTPS Server] Running on https://${primaryIp}:${HTTPS_PORT} (Secure Origin Probe)`);
+  console.log(`[Media Root]   Directly streaming real VR videos from: ${MEDIA_ROOT}`);
   console.log(`\n============================================================`);
   console.log(`👉 1. On iPhone Safari, open:  http://${primaryIp}:${HTTP_PORT}`);
   console.log(`👉 2. Install CA and enable Full Trust in Settings`);

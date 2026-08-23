@@ -77,6 +77,19 @@
     .kv-key { color: var(--muted); }
     .kv-val { color: #38bdf8; font-weight: 500; }
 
+    select {
+      width: 100%;
+      background: #1e293b;
+      color: #f1f5f9;
+      border: 1px solid #334155;
+      padding: 10px;
+      border-radius: 8px;
+      font-size: 0.85rem;
+      margin-bottom: 10px;
+      appearance: none;
+      -webkit-appearance: none;
+    }
+
     .btn {
       display: inline-flex;
       align-items: center;
@@ -207,11 +220,18 @@
   <!-- Section C: Video Range & Seek -->
   <div class="card" id="cardVideo">
     <div class="card-header">
-      <div class="card-title">C. HTTP Range & Seek</div>
+      <div class="card-title">C. Real VR Video &bull; HTTP Range & Seek</div>
       <span class="status-badge badge-pending" id="badgeVideo">Testing</span>
     </div>
 
+    <label style="font-size:0.8rem;color:var(--muted);margin-bottom:4px;display:block;">Select Real VR Video from G:\Media\VR\VR_Video_Processing\01_Download_Completed:</label>
+    <select id="videoSelect">
+      <option value="">Loading VR video list...</option>
+    </select>
+
     <div class="kv-grid">
+      <div class="kv-key">Selected Video:</div>
+      <div class="kv-val" id="valVideoName">--</div>
       <div class="kv-key">HTTP 206 Range:</div>
       <div class="kv-val" id="valRangeStatus">Testing fetch...</div>
       <div class="kv-key">Content-Range:</div>
@@ -226,12 +246,12 @@
       <div class="kv-val" id="valSeekLatency">--</div>
     </div>
 
-    <video id="testVideo" playsinline controls preload="metadata" src="/sample.mp4"></video>
+    <video id="testVideo" playsinline controls preload="metadata"></video>
 
     <div class="btn-row">
-      <button class="btn btn-sm" onclick="triggerSeek(2.0)">Seek 2s</button>
-      <button class="btn btn-sm" onclick="triggerSeek(5.0)">Seek 5s</button>
-      <button class="btn btn-sm" onclick="triggerSeek(8.0)">Seek 8s</button>
+      <button class="btn btn-sm" onclick="triggerSeek(10.0)">Seek 10s</button>
+      <button class="btn btn-sm" onclick="triggerSeek(60.0)">Seek 1m</button>
+      <button class="btn btn-sm" onclick="triggerSeek(300.0)">Seek 5m</button>
     </div>
   </div>
 
@@ -254,6 +274,7 @@
       orientationPermission: 'unknown',
       orientationEventsCount: 0,
       lastOrientation: { alpha: null, beta: null, gamma: null },
+      currentVideoPath: '',
       httpRangePass: false,
       httpRangeHeader: '',
       videoSameOrigin: false,
@@ -352,22 +373,63 @@
           syncTelemetry();
         }
 
-        // Update 3D card visualization
         if (event.beta !== null && event.gamma !== null) {
           tiltBox.style.transform = `rotateX(${event.beta}deg) rotateY(${event.gamma}deg)`;
         }
       }, { passive: true });
     }
 
-    // 3. HTTP Range fetch test
-    async function testHttpRange() {
+    // 3. Load Real VR Video List & HTTP Range
+    const video = document.getElementById('testVideo');
+    const select = document.getElementById('videoSelect');
+    let seekStartTime = 0;
+
+    async function loadVideoList() {
       try {
-        log('Testing HTTP Range request for /sample.mp4 (bytes=0-1023)...', 'info');
-        const res = await fetch('/sample.mp4', {
+        const res = await fetch('/api/videos');
+        const data = await res.json();
+        select.innerHTML = '';
+        if (data.videos && data.videos.length > 0) {
+          data.videos.forEach((v, idx) => {
+            const opt = document.createElement('option');
+            opt.value = v.relPath;
+            opt.textContent = `[${v.sizeGB}] ${v.name}`;
+            select.appendChild(opt);
+          });
+          selectVideo(data.videos[0].relPath, data.videos[0].name);
+        } else {
+          select.innerHTML = '<option value="">No MP4 videos found in G drive</option>';
+        }
+      } catch (err) {
+        log('Failed to fetch video list: ' + err.message, 'fail');
+      }
+    }
+
+    select.addEventListener('change', (e) => {
+      const opt = select.options[select.selectedIndex];
+      selectVideo(e.target.value, opt ? opt.textContent : e.target.value);
+    });
+
+    function selectVideo(relPath, displayName) {
+      state.currentVideoPath = relPath;
+      document.getElementById('valVideoName').textContent = displayName || relPath;
+      const videoUrl = `/video?path=${encodeURIComponent(relPath)}`;
+      video.src = videoUrl;
+
+      const videoSrcUrl = new URL(video.src, window.location.href);
+      state.videoSameOrigin = videoSrcUrl.origin === window.location.origin;
+      document.getElementById('valSameOrigin').textContent = state.videoSameOrigin ? `true (${videoSrcUrl.origin})` : 'false';
+
+      testHttpRange(videoUrl);
+    }
+
+    async function testHttpRange(videoUrl) {
+      try {
+        log(`Testing HTTP Range for ${state.currentVideoPath} (bytes=0-1023)...`, 'info');
+        const res = await fetch(videoUrl, {
           headers: { 'Range': 'bytes=0-1023' }
         });
         const contentRange = res.headers.get('Content-Range') || '--';
-        const acceptRanges = res.headers.get('Accept-Ranges') || '--';
         document.getElementById('valContentRange').textContent = contentRange;
 
         if (res.status === 206) {
@@ -386,14 +448,7 @@
     }
 
     // 4. Video & Seek handling
-    const video = document.getElementById('testVideo');
-    let seekStartTime = 0;
-
     function initVideo() {
-      const videoSrcUrl = new URL(video.src, window.location.href);
-      state.videoSameOrigin = videoSrcUrl.origin === window.location.origin;
-      document.getElementById('valSameOrigin').textContent = state.videoSameOrigin ? `true (${videoSrcUrl.origin})` : 'false';
-
       video.addEventListener('loadedmetadata', () => {
         state.videoLoaded = true;
         state.videoDuration = video.duration;
@@ -434,7 +489,7 @@
 
     window.triggerSeek = function(targetSec) {
       if (video.duration && targetSec > video.duration) {
-        targetSec = Math.max(0, video.duration - 0.5);
+        targetSec = Math.max(0, video.duration - 5);
       }
       log(`Triggering manual seek to ${targetSec}s`, 'info');
       video.currentTime = targetSec;
@@ -471,7 +526,7 @@
     checkSecureContext();
     initOrientation();
     initVideo();
-    testHttpRange();
+    loadVideoList();
   </script>
 </body>
 </html>
