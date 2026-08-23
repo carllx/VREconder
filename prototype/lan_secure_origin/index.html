@@ -237,7 +237,7 @@
 
     <!-- Media Selector -->
     <div class="card">
-      <div class="label">1. VR Media Source</div>
+      <div class="label">1. VR Media Source (G:\Media\VR)</div>
       <select id="videoSelect">
         <option value="4K/4096_2048_crf18_avc1-Kururugi Aoi - WAVR224.mp4">[6.09 GB] 4K/4096_2048_crf18_avc1-Kururugi Aoi - WAVR224.mp4</option>
       </select>
@@ -310,7 +310,7 @@
   </div>
 
   <script>
-    // Error banner display
+    // Error banner display and auto telemetry reporting
     function showError(msg) {
       const banner = document.getElementById('errorBanner');
       if (banner) {
@@ -318,9 +318,10 @@
         banner.textContent = 'Error: ' + msg;
       }
       console.error(msg);
+      syncTelemetry('error: ' + msg);
     }
-    window.onerror = (msg, url, line) => { showError(`${msg} (${line})`); };
-    window.onunhandledrejection = (e) => { showError(e.reason ? e.reason.message : e); };
+    window.onerror = (msg, url, line) => { showError(`${msg} (L${line})`); };
+    window.onunhandledrejection = (e) => { showError(e.reason ? (e.reason.message || e.reason) : e); };
 
     // ==========================================
     // 1. App State
@@ -346,7 +347,8 @@
       rawOrientation: { alpha: 0, beta: 0, gamma: 0 },
       calibratedHeadingYaw: 0,
       seeks: [],
-      runtimeSeconds: 0
+      runtimeSeconds: 0,
+      lastError: ''
     };
 
     const video = document.getElementById('sourceVideo');
@@ -369,12 +371,11 @@
     window.addEventListener('click', showFloatingBar);
 
     // ==========================================
-    // 2. WebGL Setup (Universal WebGL 1/2)
+    // 2. WebGL Setup (Fixed gl_Position)
     // ==========================================
     let gl = null;
     try {
-      gl = canvas.getContext('webgl2', { alpha: false, antialias: false, powerPreference: 'high-performance' }) ||
-           canvas.getContext('webgl', { alpha: false, antialias: false, powerPreference: 'high-performance' }) ||
+      gl = canvas.getContext('webgl', { alpha: false, antialias: false, powerPreference: 'high-performance' }) ||
            canvas.getContext('experimental-webgl');
     } catch (e) {
       showError('WebGL init failed: ' + e.message);
@@ -389,7 +390,7 @@
       varying vec2 vUv;
       void main() {
         vUv = aPosition * 0.5 + 0.5;
-        gl.Position = vec4(aPosition, 0.0, 1.0);
+        gl_Position = vec4(aPosition, 0.0, 1.0);
       }
     `;
 
@@ -590,7 +591,7 @@
       const alpha = state.rawOrientation.alpha * deg2rad;
       zeroHeadingYaw = -alpha - (state.screenAngle * deg2rad);
       state.calibratedHeadingYaw = zeroHeadingYaw;
-      syncTelemetry();
+      syncTelemetry('resetView');
     }
 
     window.addEventListener('deviceorientation', (e) => {
@@ -751,7 +752,7 @@
           container.querySelectorAll('button').forEach(b => b.classList.remove('active'));
           btn.classList.add('active');
           state[stateKey] = btn.getAttribute('data-val');
-          syncTelemetry();
+          syncTelemetry('settingChanged:' + stateKey + '=' + state[stateKey]);
         }
       });
     }
@@ -759,37 +760,40 @@
     setupButtonGroup('grpProjection', 'projection');
     setupButtonGroup('grpEye', 'eyeOrder');
 
-    // Enter VR Button
-    document.getElementById('btnEnterVR').addEventListener('click', async () => {
-      video.muted = false;
-      try {
-        await video.play();
-      } catch (e) {
-        console.log('Video play error:', e);
-      }
-
+    // Enter VR Button - Request motion SYNCHRONOUSLY at first line of user click
+    document.getElementById('btnEnterVR').addEventListener('click', () => {
+      // 1. MUST request DeviceOrientation SYNCHRONOUSLY before any async await
       if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
-        try {
-          const perm = await DeviceOrientationEvent.requestPermission();
+        DeviceOrientationEvent.requestPermission().then((perm) => {
           state.motionPermission = perm;
           const elPerm = document.getElementById('valMotionPerm');
           if (elPerm) elPerm.textContent = perm;
-        } catch (err) {
+          syncTelemetry('motionPermission:' + perm);
+        }).catch((err) => {
           state.motionPermission = 'error: ' + err.message;
-        }
+          const elPerm = document.getElementById('valMotionPerm');
+          if (elPerm) elPerm.textContent = 'Err';
+          syncTelemetry('motionPermissionError:' + err.message);
+        });
       } else {
         state.motionPermission = 'granted_standard';
         const elPerm = document.getElementById('valMotionPerm');
         if (elPerm) elPerm.textContent = 'Standard';
       }
 
+      // 2. Play Video & unmute on gesture
+      video.muted = false;
+      video.play().catch(e => console.log('Video play:', e));
+
+      // 3. Calibrate Zero Orientation
       updateScreenOrientation();
       resetView();
 
+      // 4. Enter Fullscreen VR View
       state.inVR = true;
       uiOverlay.classList.add('hidden');
       showFloatingBar();
-      syncTelemetry();
+      syncTelemetry('enterVR');
     });
 
     // Floating Bar Controls
@@ -814,13 +818,14 @@
       state.inVR = false;
       uiOverlay.classList.remove('hidden');
       vrFloatingBar.classList.add('fade-out');
-      syncTelemetry();
+      syncTelemetry('exitVR');
     });
 
-    // Sync Telemetry
-    async function syncTelemetry() {
+    // Sync Telemetry with Event Reason
+    async function syncTelemetry(reason = 'manual') {
       try {
         const payload = {
+          reason: reason,
           userAgent: navigator.userAgent,
           state: {
             ...state,
@@ -837,7 +842,7 @@
       } catch (e) {}
     }
 
-    document.getElementById('btnSyncTelemetry').addEventListener('click', syncTelemetry);
+    document.getElementById('btnSyncTelemetry').addEventListener('click', () => syncTelemetry('userSyncButton'));
 
     // Initial Load
     selectVideo(videoSelect.value);

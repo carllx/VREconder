@@ -158,7 +158,6 @@ function streamVideo(req, res, filePath) {
       'Access-Control-Allow-Origin': '*'
     };
 
-    console.log(`[Video Range 206] bytes ${start}-${end}/${fileSize} (${(chunksize / 1024).toFixed(1)} KB)`);
     res.writeHead(206, head);
     file.pipe(res);
   } else {
@@ -168,7 +167,6 @@ function streamVideo(req, res, filePath) {
       'Accept-Ranges': 'bytes',
       'Access-Control-Allow-Origin': '*'
     };
-    console.log(`[Video Full 200] ${(fileSize / (1024 * 1024)).toFixed(1)} MB`);
     res.writeHead(200, head);
     fs.createReadStream(filePath).pipe(res);
   }
@@ -217,8 +215,11 @@ function handleRequest(req, res, isHttps) {
         latestTelemetry = JSON.parse(body);
         latestTelemetry.serverTimestamp = new Date().toISOString();
         latestTelemetry.clientIp = req.socket.remoteAddress;
-        console.log('\n[Telemetry Received from iPhone]:');
-        console.log(JSON.stringify(latestTelemetry, null, 2));
+        
+        const s = latestTelemetry.state || {};
+        const reason = latestTelemetry.reason || 'update';
+        console.log(`[VR Telemetry (${reason})] inVR: ${s.inVR} | FPS: ${s.fps} | Motion: ${s.motionPermission} (${s.motionEventCount} evts) | Angle: ${s.screenAngle}° | Time: ${s.currentTime}s | Drop: ${s.droppedFrames}/${s.totalVideoFrames} | Stereo: ${s.stereo}/${s.projection}°`);
+        
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ status: 'ok', received: true }));
       } catch (err) {
