@@ -1,0 +1,477 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>VREconder Secure LAN Origin Probe</title>
+  <style>
+    :root {
+      --bg: #0b0f19;
+      --card: #151d2e;
+      --border: #23304a;
+      --text: #f1f5f9;
+      --muted: #94a3b8;
+      --pass: #10b981;
+      --fail: #ef4444;
+      --warn: #f59e0b;
+      --blue: #3b82f6;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      padding: 16px;
+      line-height: 1.5;
+      -webkit-font-smoothing: antialiased;
+    }
+    header {
+      margin-bottom: 20px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid var(--border);
+    }
+    h1 { font-size: 1.25rem; font-weight: 700; color: #fff; display: flex; align-items: center; gap: 8px; }
+    .subtitle { font-size: 0.85rem; color: var(--muted); margin-top: 4px; }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 16px;
+      margin-bottom: 16px;
+    }
+    .card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+    .card-title {
+      font-size: 1rem;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .status-badge {
+      font-size: 0.75rem;
+      font-weight: 700;
+      padding: 3px 8px;
+      border-radius: 9999px;
+      text-transform: uppercase;
+    }
+    .badge-pending { background: #334155; color: var(--muted); }
+    .badge-pass { background: rgba(16, 185, 129, 0.2); color: var(--pass); border: 1px solid var(--pass); }
+    .badge-fail { background: rgba(239, 68, 68, 0.2); color: var(--fail); border: 1px solid var(--fail); }
+
+    .kv-grid {
+      display: grid;
+      grid-template-columns: 130px 1fr;
+      gap: 6px 10px;
+      font-size: 0.85rem;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      background: rgba(0,0,0,0.25);
+      padding: 10px;
+      border-radius: 8px;
+      word-break: break-all;
+    }
+    .kv-key { color: var(--muted); }
+    .kv-val { color: #38bdf8; font-weight: 500; }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      width: 100%;
+      background: var(--blue);
+      color: #fff;
+      font-weight: 600;
+      font-size: 0.95rem;
+      padding: 12px 16px;
+      border-radius: 8px;
+      border: none;
+      cursor: pointer;
+      margin-top: 10px;
+      touch-action: manipulation;
+    }
+    .btn:active { opacity: 0.8; }
+    .btn-green { background: #059669; }
+    .btn-row { display: flex; gap: 8px; margin-top: 10px; }
+    .btn-sm { padding: 8px 12px; font-size: 0.8rem; width: auto; flex: 1; }
+
+    video {
+      width: 100%;
+      max-height: 220px;
+      border-radius: 8px;
+      background: #000;
+      margin-top: 10px;
+    }
+
+    .tilt-preview {
+      margin-top: 12px;
+      height: 70px;
+      background: #090d16;
+      border-radius: 8px;
+      border: 1px dashed var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      perspective: 400px;
+    }
+    .tilt-box {
+      width: 120px;
+      height: 40px;
+      background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.75rem;
+      font-weight: bold;
+      color: #fff;
+      transition: transform 0.05s linear;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+    }
+
+    #logBox {
+      max-height: 140px;
+      overflow-y: auto;
+      font-family: monospace;
+      font-size: 0.75rem;
+      color: #cbd5e1;
+      background: rgba(0,0,0,0.4);
+      padding: 8px;
+      border-radius: 6px;
+      border: 1px solid #1e293b;
+      margin-top: 10px;
+    }
+    .log-entry { margin-bottom: 3px; }
+    .log-pass { color: var(--pass); }
+    .log-fail { color: var(--fail); }
+    .log-info { color: #38bdf8; }
+  </style>
+</head>
+<body>
+
+  <header>
+    <h1>🥽 VREconder Origin Probe</h1>
+    <div class="subtitle">Secure LAN Origin &bull; DeviceOrientation &bull; HTTP Range / Seek</div>
+  </header>
+
+  <!-- Section A: Secure Context -->
+  <div class="card" id="cardSecure">
+    <div class="card-header">
+      <div class="card-title">A. Secure Context</div>
+      <span class="status-badge badge-pending" id="badgeSecure">Testing</span>
+    </div>
+    <div class="kv-grid">
+      <div class="kv-key">isSecureContext:</div>
+      <div class="kv-val" id="valSecureContext">...</div>
+      <div class="kv-key">Protocol:</div>
+      <div class="kv-val" id="valProtocol">...</div>
+      <div class="kv-key">Origin:</div>
+      <div class="kv-val" id="valOrigin">...</div>
+      <div class="kv-key">Hostname:</div>
+      <div class="kv-val" id="valHostname">...</div>
+    </div>
+  </div>
+
+  <!-- Section B: DeviceOrientation -->
+  <div class="card" id="cardOrientation">
+    <div class="card-header">
+      <div class="card-title">B. DeviceOrientation</div>
+      <span class="status-badge badge-pending" id="badgeOrientation">Idle</span>
+    </div>
+    <div class="kv-grid">
+      <div class="kv-key">API Supported:</div>
+      <div class="kv-val" id="valApiSupported">...</div>
+      <div class="kv-key">Permission:</div>
+      <div class="kv-val" id="valPermission">Not requested</div>
+      <div class="kv-key">Events Received:</div>
+      <div class="kv-val" id="valEventCount">0</div>
+      <div class="kv-key">Alpha (&alpha; yaw):</div>
+      <div class="kv-val" id="valAlpha">--</div>
+      <div class="kv-key">Beta (&beta; pitch):</div>
+      <div class="kv-val" id="valBeta">--</div>
+      <div class="kv-key">Gamma (&gamma; roll):</div>
+      <div class="kv-val" id="valGamma">--</div>
+    </div>
+
+    <div class="tilt-preview">
+      <div class="tilt-box" id="tiltBox">📱 3D Orientation</div>
+    </div>
+
+    <button class="btn" id="btnEnableMotion">🧭 1. Tap to Enable Motion (User Gesture)</button>
+  </div>
+
+  <!-- Section C: Video Range & Seek -->
+  <div class="card" id="cardVideo">
+    <div class="card-header">
+      <div class="card-title">C. HTTP Range & Seek</div>
+      <span class="status-badge badge-pending" id="badgeVideo">Testing</span>
+    </div>
+
+    <div class="kv-grid">
+      <div class="kv-key">HTTP 206 Range:</div>
+      <div class="kv-val" id="valRangeStatus">Testing fetch...</div>
+      <div class="kv-key">Content-Range:</div>
+      <div class="kv-val" id="valContentRange">--</div>
+      <div class="kv-key">Same-Origin:</div>
+      <div class="kv-val" id="valSameOrigin">--</div>
+      <div class="kv-key">Duration:</div>
+      <div class="kv-val" id="valDuration">--</div>
+      <div class="kv-key">Current Time:</div>
+      <div class="kv-val" id="valCurrentTime">0.00s</div>
+      <div class="kv-key">Last Seek Latency:</div>
+      <div class="kv-val" id="valSeekLatency">--</div>
+    </div>
+
+    <video id="testVideo" playsinline controls preload="metadata" src="/sample.mp4"></video>
+
+    <div class="btn-row">
+      <button class="btn btn-sm" onclick="triggerSeek(2.0)">Seek 2s</button>
+      <button class="btn btn-sm" onclick="triggerSeek(5.0)">Seek 5s</button>
+      <button class="btn btn-sm" onclick="triggerSeek(8.0)">Seek 8s</button>
+    </div>
+  </div>
+
+  <!-- Section D: Telemetry & Actions -->
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title">D. Evidence Log</div>
+      <button class="btn btn-sm btn-green" id="btnSyncTelemetry" style="margin:0;width:auto;">📤 Sync to PC</button>
+    </div>
+    <div id="logBox"></div>
+  </div>
+
+  <script>
+    const state = {
+      secureContext: false,
+      protocol: window.location.protocol,
+      origin: window.location.origin,
+      hostname: window.location.hostname,
+      orientationSupported: false,
+      orientationPermission: 'unknown',
+      orientationEventsCount: 0,
+      lastOrientation: { alpha: null, beta: null, gamma: null },
+      httpRangePass: false,
+      httpRangeHeader: '',
+      videoSameOrigin: false,
+      videoLoaded: false,
+      videoDuration: 0,
+      seeks: []
+    };
+
+    function log(msg, type = 'info') {
+      const box = document.getElementById('logBox');
+      const time = new Date().toTimeString().split(' ')[0];
+      const div = document.createElement('div');
+      div.className = `log-entry log-${type}`;
+      div.textContent = `[${time}] ${msg}`;
+      box.appendChild(div);
+      box.scrollTop = box.scrollHeight;
+    }
+
+    // 1. Check Secure Context
+    function checkSecureContext() {
+      state.secureContext = window.isSecureContext === true;
+      document.getElementById('valSecureContext').textContent = state.secureContext ? 'true (PASS)' : 'false (FAIL)';
+      document.getElementById('valProtocol').textContent = state.protocol;
+      document.getElementById('valOrigin').textContent = state.origin;
+      document.getElementById('valHostname').textContent = state.hostname;
+
+      const badge = document.getElementById('badgeSecure');
+      if (state.secureContext && state.protocol === 'https:') {
+        badge.className = 'status-badge badge-pass';
+        badge.textContent = 'PASS';
+        log(`SecureContext validated: true on ${state.origin}`, 'pass');
+      } else {
+        badge.className = 'status-badge badge-fail';
+        badge.textContent = 'FAIL';
+        log(`SecureContext failed: isSecureContext=${state.secureContext}, protocol=${state.protocol}`, 'fail');
+      }
+    }
+
+    // 2. Check DeviceOrientation
+    function initOrientation() {
+      state.orientationSupported = 'DeviceOrientationEvent' in window;
+      document.getElementById('valApiSupported').textContent = state.orientationSupported ? 'Yes (DeviceOrientationEvent)' : 'No';
+
+      const btn = document.getElementById('btnEnableMotion');
+      btn.addEventListener('click', async () => {
+        log('User tapped "Enable Motion" button...', 'info');
+        if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+          try {
+            state.orientationPermission = 'requesting';
+            const perm = await DeviceOrientationEvent.requestPermission();
+            state.orientationPermission = perm;
+            document.getElementById('valPermission').textContent = perm;
+            if (perm === 'granted') {
+              log('DeviceOrientation permission GRANTED by user', 'pass');
+              listenOrientation();
+            } else {
+              log(`DeviceOrientation permission DENIED: ${perm}`, 'fail');
+              document.getElementById('badgeOrientation').className = 'status-badge badge-fail';
+              document.getElementById('badgeOrientation').textContent = 'DENIED';
+            }
+          } catch (err) {
+            log(`DeviceOrientation requestPermission error: ${err.message}`, 'fail');
+            document.getElementById('valPermission').textContent = 'Error: ' + err.message;
+          }
+        } else {
+          log('requestPermission API not required/standard event listener attaching directly', 'info');
+          state.orientationPermission = 'not_needed_standard';
+          document.getElementById('valPermission').textContent = 'Standard (No prompt needed)';
+          listenOrientation();
+        }
+      });
+    }
+
+    function listenOrientation() {
+      const tiltBox = document.getElementById('tiltBox');
+      const badge = document.getElementById('badgeOrientation');
+
+      window.addEventListener('deviceorientation', (event) => {
+        state.orientationEventsCount++;
+        state.lastOrientation = {
+          alpha: event.alpha !== null ? Number(event.alpha.toFixed(2)) : null,
+          beta: event.beta !== null ? Number(event.beta.toFixed(2)) : null,
+          gamma: event.gamma !== null ? Number(event.gamma.toFixed(2)) : null,
+          absolute: event.absolute
+        };
+
+        document.getElementById('valEventCount').textContent = state.orientationEventsCount;
+        document.getElementById('valAlpha').textContent = (state.lastOrientation.alpha ?? '--') + '°';
+        document.getElementById('valBeta').textContent = (state.lastOrientation.beta ?? '--') + '°';
+        document.getElementById('valGamma').textContent = (state.lastOrientation.gamma ?? '--') + '°';
+
+        if (state.orientationEventsCount === 1) {
+          badge.className = 'status-badge badge-pass';
+          badge.textContent = 'PASS';
+          log(`Received first orientation event! (alpha=${state.lastOrientation.alpha}, beta=${state.lastOrientation.beta}, gamma=${state.lastOrientation.gamma})`, 'pass');
+          syncTelemetry();
+        }
+
+        // Update 3D card visualization
+        if (event.beta !== null && event.gamma !== null) {
+          tiltBox.style.transform = `rotateX(${event.beta}deg) rotateY(${event.gamma}deg)`;
+        }
+      }, { passive: true });
+    }
+
+    // 3. HTTP Range fetch test
+    async function testHttpRange() {
+      try {
+        log('Testing HTTP Range request for /sample.mp4 (bytes=0-1023)...', 'info');
+        const res = await fetch('/sample.mp4', {
+          headers: { 'Range': 'bytes=0-1023' }
+        });
+        const contentRange = res.headers.get('Content-Range') || '--';
+        const acceptRanges = res.headers.get('Accept-Ranges') || '--';
+        document.getElementById('valContentRange').textContent = contentRange;
+
+        if (res.status === 206) {
+          state.httpRangePass = true;
+          state.httpRangeHeader = contentRange;
+          document.getElementById('valRangeStatus').textContent = `206 Partial Content (PASS)`;
+          log(`HTTP Range verified: 206 Partial Content, Content-Range: ${contentRange}`, 'pass');
+        } else {
+          document.getElementById('valRangeStatus').textContent = `${res.status} (FAIL: expected 206)`;
+          log(`HTTP Range failed: HTTP ${res.status}`, 'fail');
+        }
+      } catch (err) {
+        document.getElementById('valRangeStatus').textContent = 'Error: ' + err.message;
+        log(`HTTP Range fetch error: ${err.message}`, 'fail');
+      }
+    }
+
+    // 4. Video & Seek handling
+    const video = document.getElementById('testVideo');
+    let seekStartTime = 0;
+
+    function initVideo() {
+      const videoSrcUrl = new URL(video.src, window.location.href);
+      state.videoSameOrigin = videoSrcUrl.origin === window.location.origin;
+      document.getElementById('valSameOrigin').textContent = state.videoSameOrigin ? `true (${videoSrcUrl.origin})` : 'false';
+
+      video.addEventListener('loadedmetadata', () => {
+        state.videoLoaded = true;
+        state.videoDuration = video.duration;
+        document.getElementById('valDuration').textContent = video.duration.toFixed(2) + 's';
+        log(`Video loadedmetadata: duration=${video.duration.toFixed(2)}s, dimensions=${video.videoWidth}x${video.videoHeight}`, 'pass');
+      });
+
+      video.addEventListener('timeupdate', () => {
+        document.getElementById('valCurrentTime').textContent = video.currentTime.toFixed(2) + 's';
+      });
+
+      video.addEventListener('seeking', () => {
+        seekStartTime = performance.now();
+        log(`Video seeking to ${video.currentTime.toFixed(2)}s...`, 'info');
+      });
+
+      video.addEventListener('seeked', () => {
+        const latency = performance.now() - seekStartTime;
+        document.getElementById('valSeekLatency').textContent = `${latency.toFixed(1)}ms`;
+        log(`Video seeked to ${video.currentTime.toFixed(2)}s in ${latency.toFixed(1)}ms`, 'pass');
+        state.seeks.push({ target: Number(video.currentTime.toFixed(2)), latencyMs: Number(latency.toFixed(1)) });
+        
+        const badge = document.getElementById('badgeVideo');
+        if (state.httpRangePass && state.videoLoaded && state.seeks.length > 0) {
+          badge.className = 'status-badge badge-pass';
+          badge.textContent = 'PASS';
+        }
+        syncTelemetry();
+      });
+
+      video.addEventListener('error', (e) => {
+        const err = video.error;
+        log(`Video error code ${err ? err.code : 'unknown'}: ${err ? err.message : ''}`, 'fail');
+        document.getElementById('badgeVideo').className = 'status-badge badge-fail';
+        document.getElementById('badgeVideo').textContent = 'FAIL';
+      });
+    }
+
+    window.triggerSeek = function(targetSec) {
+      if (video.duration && targetSec > video.duration) {
+        targetSec = Math.max(0, video.duration - 0.5);
+      }
+      log(`Triggering manual seek to ${targetSec}s`, 'info');
+      video.currentTime = targetSec;
+      video.play().catch(e => log('Video play notice: ' + e.message, 'info'));
+    };
+
+    // 5. Telemetry Sync to PC
+    async function syncTelemetry() {
+      try {
+        const payload = {
+          userAgent: navigator.userAgent,
+          state: {
+            ...state,
+            currentTime: video.currentTime,
+            videoPaused: video.paused
+          }
+        };
+        const res = await fetch('/api/telemetry', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        if (res.ok) {
+          log('Telemetry synced to PC server', 'info');
+        }
+      } catch (err) {
+        log('Telemetry sync error: ' + err.message, 'warn');
+      }
+    }
+
+    document.getElementById('btnSyncTelemetry').addEventListener('click', syncTelemetry);
+
+    // Run Initial Checks
+    checkSecureContext();
+    initOrientation();
+    initVideo();
+    testHttpRange();
+  </script>
+</body>
+</html>
