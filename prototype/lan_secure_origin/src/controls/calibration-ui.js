@@ -1,6 +1,6 @@
 // ==========================================
 // Staged Calibration & Diagnostic UI Controls
-// (Displays Derived Cardboard FOV & Physical Screen Parameters)
+// (Synthetic Scene Toggle, Full Custom Viewer Inputs & URI Import)
 // ==========================================
 import { showFeedbackToast } from '../core/state.js';
 import { createDefaultViewerProfile, deriveCardboardEyeGeometry } from '../core/projection-profile.js';
@@ -11,6 +11,7 @@ export class CalibrationUI {
     this.storage = options.storage;
     this.mediaController = options.mediaController;
     this.diagnosticOverlay = options.diagnosticOverlay;
+    this.vrRenderer = options.vrRenderer;
     this.onProfileChanged = options.onProfileChanged;
     this.onEnterVR = options.onEnterVR;
     this.onExitVR = options.onExitVR;
@@ -29,6 +30,7 @@ export class CalibrationUI {
     this.panel = document.getElementById('calibrationPanel');
     this.btnModeDiagnostic = document.getElementById('btnModeDiagnostic');
     this.btnModeVR = document.getElementById('btnModeVR');
+    this.btnToggleScene = document.getElementById('btnToggleScene');
 
     // Diagnostic Toolbar buttons
     this.btnFreeze = document.getElementById('btnDiagFreeze');
@@ -67,6 +69,16 @@ export class CalibrationUI {
     this.btnSaveViewerProfile = document.getElementById('btnSaveViewerProfile');
     this.txtViewerSourceInfo = document.getElementById('txtViewerSourceInfo');
     this.txtDerivedFov = document.getElementById('txtDerivedFov');
+
+    // Custom Viewer Manual & Import Controls
+    this.customInputsArea = document.getElementById('customViewerInputs');
+    this.inputScreenToLens = document.getElementById('inputScreenToLens');
+    this.inputInterLens = document.getElementById('inputInterLens');
+    this.selVerticalAlign = document.getElementById('selVerticalAlign');
+    this.inputTrayToLens = document.getElementById('inputTrayToLens');
+    this.inputMaxFov = document.getElementById('inputMaxFov');
+    this.inputUriImport = document.getElementById('inputUriImport');
+    this.btnImportUri = document.getElementById('btnImportUri');
 
     this.bindEvents();
   }
@@ -118,32 +130,51 @@ export class CalibrationUI {
 
     const dist = hp.distortion || { k1: 0.0, k2: 0.0 };
     if (this.rangeDistortK1) this.rangeDistortK1.value = dist.k1 || 0;
-    if (this.valDistortK1) this.valDistortK1.textContent = (dist.k1 || 0).toFixed(3);
+    if (this.valDistortK1) this.valDistortK1.textContent = (dist.k1 || 0).toFixed(4);
 
     if (this.rangeDistortK2) this.rangeDistortK2.value = dist.k2 || 0;
-    if (this.valDistortK2) this.valDistortK2.textContent = (dist.k2 || 0).toFixed(3);
+    if (this.valDistortK2) this.valDistortK2.textContent = (dist.k2 || 0).toFixed(4);
 
     if (this.txtViewerSourceInfo) {
       this.txtViewerSourceInfo.textContent = hp.source || 'Device Specification';
     }
 
+    if (this.customInputsArea) {
+      this.customInputsArea.style.display = (hp.viewerProfileId === 'custom:calibrated') ? 'block' : 'none';
+      if (this.inputScreenToLens) this.inputScreenToLens.value = ((hp.screenToLensDistance || 0.04) * 1000).toFixed(1);
+      if (this.inputInterLens) this.inputInterLens.value = ((hp.interLensDistance || 0.064) * 1000).toFixed(1);
+      if (this.selVerticalAlign) this.selVerticalAlign.value = hp.verticalAlignment || 'BOTTOM';
+      if (this.inputTrayToLens) this.inputTrayToLens.value = ((hp.trayToLensDistance || 0.035) * 1000).toFixed(1);
+      if (this.inputMaxFov) this.inputMaxFov.value = (hp.maxFovAngles ? hp.maxFovAngles.outerDeg : 50) || 50;
+    }
+
     if (this.txtDerivedFov) {
       const geom = deriveCardboardEyeGeometry(activeScreenProfile, hp);
-      const l = geom.leftEye.fovDeg;
-      const r = geom.rightEye.fovDeg;
+      const l = geom.leftEye;
+      const r = geom.rightEye;
+      const statusStr = hp.isCalibrated ? '<span style="color:#34d399;">✓ [CALIBRATED PROFILE]</span>' : '<span style="color:#f87171;">⚠️ [UNCALIBRATED BASELINE]</span>';
       this.txtDerivedFov.innerHTML = `
-        <b>Left Eye FOV:</b> L:${l.left.toFixed(1)}° R:${l.right.toFixed(1)}° U:${l.top.toFixed(1)}° D:${l.bottom.toFixed(1)}°<br>
-        <b>Right Eye FOV:</b> L:${r.left.toFixed(1)}° R:${r.right.toFixed(1)}° U:${r.top.toFixed(1)}° D:${r.bottom.toFixed(1)}°<br>
-        <span style="opacity:0.75;">Screen: ${activeScreenProfile.deviceModel} (${(activeScreenProfile.widthMeters*1000).toFixed(1)}×${(activeScreenProfile.heightMeters*1000).toFixed(1)}mm @ ${activeScreenProfile.ppi}ppi)</span>
+        ${statusStr}<br>
+        <b>Left Eye Virt FOV:</b> L:${l.fovDeg.left.toFixed(1)}° R:${l.fovDeg.right.toFixed(1)}° U:${l.fovDeg.top.toFixed(1)}° D:${l.fovDeg.bottom.toFixed(1)}°<br>
+        <b>Phys Tangents:</b> [${l.physTanBounds[0].toFixed(3)}, ${l.physTanBounds[1].toFixed(3)}, ${l.physTanBounds[2].toFixed(3)}, ${l.physTanBounds[3].toFixed(3)}]<br>
+        <b>Virt Tangents:</b> [${l.virtTanBounds[0].toFixed(3)}, ${l.virtTanBounds[1].toFixed(3)}, ${l.virtTanBounds[2].toFixed(3)}, ${l.virtTanBounds[3].toFixed(3)}]<br>
+        <b>Lens Center:</b> [${(l.lensCenterNorm[0]*100).toFixed(1)}%, ${(l.lensCenterNorm[1]*100).toFixed(1)}%]<br>
+        <span style="opacity:0.75;">Screen: ${activeScreenProfile.deviceModel} (141.2×65.1mm, Bezel: 1.55mm)</span>
       `;
     }
   }
 
   updateLensBtnState() {
-    const isEnabled = (this.activeViewerProfile && this.activeViewerProfile.lensCorrectionEnabled === true);
+    const isCalibrated = (this.activeViewerProfile && this.activeViewerProfile.isCalibrated === true);
+    const isEnabled = (isCalibrated && this.activeViewerProfile.lensCorrectionEnabled === true);
     if (this.btnToggleLens) {
-      this.btnToggleLens.textContent = isEnabled ? '🛡️ LENS CORRECTION: ON (Cardboard Screen-Space Pre-Warp)' : '⚪ LENS CORRECTION: OFF (Ideal Undistorted)';
-      this.btnToggleLens.style.background = isEnabled ? '#059669' : '#475569';
+      if (!isCalibrated) {
+        this.btnToggleLens.textContent = '⚪ LENS CORRECTION: OFF (Uncalibrated Baseline)';
+        this.btnToggleLens.style.background = '#475569';
+      } else {
+        this.btnToggleLens.textContent = isEnabled ? '🛡️ LENS CORRECTION: ON (Cardboard Screen Pre-Warp)' : '⚪ LENS CORRECTION: OFF (Ideal Undistorted)';
+        this.btnToggleLens.style.background = isEnabled ? '#059669' : '#475569';
+      }
     }
   }
 
@@ -164,6 +195,18 @@ export class CalibrationUI {
         this.btnModeVR.classList.add('active');
         if (this.btnModeDiagnostic) this.btnModeDiagnostic.classList.remove('active');
         if (this.onEnterVR) this.onEnterVR();
+      });
+    }
+
+    // Toggle Scene Type (Video vs Synthetic Calibration Grid)
+    if (this.btnToggleScene) {
+      this.btnToggleScene.addEventListener('click', () => {
+        if (this.vrRenderer) {
+          this.vrRenderer.sceneType = (this.vrRenderer.sceneType === 0) ? 1 : 0;
+          this.btnToggleScene.textContent = (this.vrRenderer.sceneType === 1) ? '▦ Scene: Synthetic Grid' : '🎬 Scene: Video Source';
+          this.btnToggleScene.classList.toggle('active', this.vrRenderer.sceneType === 1);
+          showFeedbackToast(`Scene: ${this.vrRenderer.sceneType === 1 ? 'Synthetic Calibration Grid' : 'Video Source'}`);
+        }
       });
     }
 
@@ -311,7 +354,10 @@ export class CalibrationUI {
 
     if (this.btnToggleLens) {
       this.btnToggleLens.addEventListener('click', () => {
-        if (!this.activeViewerProfile) this.activeViewerProfile = createDefaultViewerProfile();
+        if (!this.activeViewerProfile || !this.activeViewerProfile.isCalibrated) {
+          showFeedbackToast('⚠️ Select or Import a Calibrated Viewer Profile first');
+          return;
+        }
         this.activeViewerProfile.lensCorrectionEnabled = !this.activeViewerProfile.lensCorrectionEnabled;
         this.updateLensBtnState();
         showFeedbackToast(`Lens Correction: ${this.activeViewerProfile.lensCorrectionEnabled ? 'ON' : 'OFF'}`);
@@ -324,13 +370,60 @@ export class CalibrationUI {
       if (!this.activeViewerProfile.distortion) this.activeViewerProfile.distortion = {};
       this.activeViewerProfile.distortion.k1 = parseFloat(this.rangeDistortK1 ? this.rangeDistortK1.value : 0);
       this.activeViewerProfile.distortion.k2 = parseFloat(this.rangeDistortK2 ? this.rangeDistortK2.value : 0);
-      if (this.valDistortK1) this.valDistortK1.textContent = this.activeViewerProfile.distortion.k1.toFixed(3);
-      if (this.valDistortK2) this.valDistortK2.textContent = this.activeViewerProfile.distortion.k2.toFixed(3);
+      if (this.valDistortK1) this.valDistortK1.textContent = this.activeViewerProfile.distortion.k1.toFixed(4);
+      if (this.valDistortK2) this.valDistortK2.textContent = this.activeViewerProfile.distortion.k2.toFixed(4);
+      this.syncStageBToUI();
       notifyChange();
     };
 
     if (this.rangeDistortK1) this.rangeDistortK1.addEventListener('input', updateDistort);
     if (this.rangeDistortK2) this.rangeDistortK2.addEventListener('input', updateDistort);
+
+    // Custom Profile Manual Input listeners
+    const updateCustomParams = () => {
+      if (!this.activeViewerProfile) return;
+      this.activeViewerProfile.screenToLensDistance = parseFloat(this.inputScreenToLens.value || 40) / 1000;
+      this.activeViewerProfile.interLensDistance = parseFloat(this.inputInterLens.value || 64) / 1000;
+      this.activeViewerProfile.verticalAlignment = this.selVerticalAlign.value || 'BOTTOM';
+      this.activeViewerProfile.trayToLensDistance = parseFloat(this.inputTrayToLens.value || 35) / 1000;
+      const fovVal = parseFloat(this.inputMaxFov.value || 50);
+      this.activeViewerProfile.maxFovAngles = { outerDeg: fovVal, innerDeg: fovVal, upperDeg: fovVal, lowerDeg: fovVal };
+      this.activeViewerProfile.isCalibrated = true;
+      this.syncStageBToUI();
+      notifyChange();
+    };
+
+    if (this.inputScreenToLens) this.inputScreenToLens.addEventListener('input', updateCustomParams);
+    if (this.inputInterLens) this.inputInterLens.addEventListener('input', updateCustomParams);
+    if (this.selVerticalAlign) this.selVerticalAlign.addEventListener('change', updateCustomParams);
+    if (this.inputTrayToLens) this.inputTrayToLens.addEventListener('input', updateCustomParams);
+    if (this.inputMaxFov) this.inputMaxFov.addEventListener('input', updateCustomParams);
+
+    // Cardboard URI / Parameter Import
+    if (this.btnImportUri) {
+      this.btnImportUri.addEventListener('click', () => {
+        const raw = (this.inputUriImport ? this.inputUriImport.value : '').trim();
+        if (!raw) return;
+        try {
+          // If JSON
+          if (raw.startsWith('{')) {
+            const parsed = JSON.parse(raw);
+            this.activeViewerProfile = { ...createDefaultViewerProfile('custom:calibrated'), ...parsed, isCalibrated: true };
+          } else {
+            // Label as URI import
+            this.activeViewerProfile = createDefaultViewerProfile('custom:calibrated');
+            this.activeViewerProfile.name = 'Imported Viewer Profile';
+            this.activeViewerProfile.source = 'Cardboard URI: ' + raw.substring(0, 40) + '...';
+            this.activeViewerProfile.isCalibrated = true;
+          }
+          this.syncStageBToUI();
+          notifyChange();
+          showFeedbackToast('✓ Viewer Profile Imported Successfully');
+        } catch (e) {
+          showFeedbackToast('⚠️ Import Error: ' + e.message);
+        }
+      });
+    }
 
     if (this.btnSaveViewerProfile) {
       this.btnSaveViewerProfile.addEventListener('click', async () => {

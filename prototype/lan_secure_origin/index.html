@@ -23,6 +23,7 @@
 
   <!-- Diagnostic Quick Toolbar (Floating at Top) -->
   <div id="diagnosticToolbar">
+    <button class="tool-btn" id="btnToggleScene">🎬 Scene: Video</button>
     <button class="tool-btn" id="btnDiagFreeze">⏸ Freeze</button>
     <button class="tool-btn" id="btnDiagSeekBack5">⏪ -5s</button>
     <button class="tool-btn" id="btnDiagSeekBack1">◀ -1s</button>
@@ -164,7 +165,7 @@
       </div>
 
       <div class="control-row" style="margin-top:6px;">
-        <div class="label">Viewer Profile Preset:</div>
+        <div class="label">Viewer Profile:</div>
         <select id="selViewerPreset">
           <option value="unknown:uncalibrated">Unknown / Uncalibrated Viewer (Default)</option>
           <option value="cardboard:v2_2015">Google Cardboard v2 (Historical Ref: Google I/O 2015 Spec)</option>
@@ -173,18 +174,56 @@
         </select>
       </div>
 
+      <!-- Custom Profile Inputs & URI Import Box -->
+      <div id="customViewerInputs" style="display:none; background:rgba(0,0,0,0.25); padding:8px; border-radius:6px; margin-top:6px;">
+        <div style="font-size:0.68rem; font-weight:bold; color:#38bdf8; margin-bottom:4px;">Manual Device Parameters:</div>
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:6px;">
+          <div>
+            <div class="label" style="font-size:0.62rem;">Screen-to-Lens (mm)</div>
+            <input type="number" id="inputScreenToLens" value="39.3" step="0.1" style="width:100%; background:#1e293b; color:#fff; border:1px solid #334155; padding:4px 6px; border-radius:4px; font-size:0.75rem;">
+          </div>
+          <div>
+            <div class="label" style="font-size:0.62rem;">Inter-Lens IPD (mm)</div>
+            <input type="number" id="inputInterLens" value="63.9" step="0.1" style="width:100%; background:#1e293b; color:#fff; border:1px solid #334155; padding:4px 6px; border-radius:4px; font-size:0.75rem;">
+          </div>
+          <div>
+            <div class="label" style="font-size:0.62rem;">Vertical Align</div>
+            <select id="selVerticalAlign" style="padding:4px 6px; font-size:0.75rem;">
+              <option value="BOTTOM">BOTTOM</option>
+              <option value="CENTER">CENTER</option>
+              <option value="TOP">TOP</option>
+            </select>
+          </div>
+          <div>
+            <div class="label" style="font-size:0.62rem;">Tray-to-Lens (mm)</div>
+            <input type="number" id="inputTrayToLens" value="35.0" step="0.1" style="width:100%; background:#1e293b; color:#fff; border:1px solid #334155; padding:4px 6px; border-radius:4px; font-size:0.75rem;">
+          </div>
+        </div>
+        <div style="margin-top:6px;">
+          <div class="label" style="font-size:0.62rem;">Max FOV Angle (deg)</div>
+          <input type="number" id="inputMaxFov" value="53.0" step="0.5" style="width:100%; background:#1e293b; color:#fff; border:1px solid #334155; padding:4px 6px; border-radius:4px; font-size:0.75rem;">
+        </div>
+        <div style="margin-top:6px;">
+          <div class="label" style="font-size:0.62rem;">Cardboard URI / JSON Profile Import:</div>
+          <div style="display:flex; gap:4px; margin-top:2px;">
+            <input type="text" id="inputUriImport" placeholder="http://google.com/cardboard/cfg?p=... or JSON" style="flex:1; background:#1e293b; color:#fff; border:1px solid #334155; padding:4px 6px; border-radius:4px; font-size:0.72rem;">
+            <button id="btnImportUri" style="background:#0284c7; color:#fff; border:none; border-radius:4px; padding:4px 8px; font-size:0.72rem; cursor:pointer;">Import</button>
+          </div>
+        </div>
+      </div>
+
       <!-- Derived FOV & Screen Display -->
-      <div id="txtDerivedFov" style="font-size:0.70rem; background:rgba(0,0,0,0.3); padding:6px 8px; border-radius:6px; margin-top:6px; font-family:ui-monospace, monospace; line-height:1.4;">
+      <div id="txtDerivedFov" style="font-size:0.68rem; background:rgba(0,0,0,0.3); padding:6px 8px; border-radius:6px; margin-top:6px; font-family:ui-monospace, monospace; line-height:1.4;">
       </div>
 
       <div class="control-row" style="margin-top:6px;">
         <button id="btnToggleLens" style="width:100%;padding:10px;border-radius:8px;border:none;font-weight:bold;color:#fff;background:#475569;cursor:pointer;">
-          ⚪ LENS CORRECTION: OFF (Ideal Undistorted)
+          ⚪ LENS CORRECTION: OFF (Uncalibrated Baseline)
         </button>
       </div>
 
       <div class="control-row" style="margin-top:6px;">
-        <div class="label">Cardboard Distortion Polynomial ($r' = r(1 + k_1 r^2 + k_2 r^4)$):</div>
+        <div class="label">Distortion Polynomial ($r' = r(1 + k_1 r^2 + k_2 r^4)$):</div>
         <div class="slider-group">
           <span style="width:30px;font-size:0.72rem;color:var(--muted);">k1:</span>
           <input type="range" id="rangeDistortK1" min="-0.50" max="0.80" step="0.005" value="0.0">

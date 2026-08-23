@@ -22,6 +22,7 @@ export class VRRenderer {
     this.fboWidth = 0;
     this.fboHeight = 0;
 
+    this.sceneType = 0; // 0: Video, 1: Synthetic Calibration Grid
     this.identityMat3 = [1, 0, 0,  0, 1, 0,  0, 0, 1];
     this.initWebGL();
   }
@@ -128,7 +129,7 @@ export class VRRenderer {
     return q.toMat3ColumnMajor();
   }
 
-  // Diagnostic Mode: Single Fullscreen Rectilinear View (No Headset Lens Distortion)
+  // Diagnostic Mode: Single Fullscreen Rectilinear View
   renderDiagnosticView(width, height, videoProfile, viewerProfile, selectedEye = 0, cameraPoseMat3 = null, diagnosticFovDeg = 85) {
     const gl = this.gl;
     if (!gl || !this.programScene) return;
@@ -144,9 +145,10 @@ export class VRRenderer {
       uPoseRot: gl.getUniformLocation(this.programScene, 'uPoseRot'),
       uEye: gl.getUniformLocation(this.programScene, 'uEye'),
       uEyeSwap: gl.getUniformLocation(this.programScene, 'uEyeSwap'),
+      uSceneType: gl.getUniformLocation(this.programScene, 'uSceneType'),
       uProjectionMode: gl.getUniformLocation(this.programScene, 'uProjectionMode'),
       uStereoLayout: gl.getUniformLocation(this.programScene, 'uStereoLayout'),
-      uTanBounds: gl.getUniformLocation(this.programScene, 'uTanBounds'),
+      uVirtTanBounds: gl.getUniformLocation(this.programScene, 'uVirtTanBounds'),
       uCoverageRad: gl.getUniformLocation(this.programScene, 'uCoverageRad'),
       uCrop: gl.getUniformLocation(this.programScene, 'uCrop')
     };
@@ -173,18 +175,18 @@ export class VRRenderer {
     const crop = vp.crop || { left: 0, right: 0, top: 0, bottom: 0 };
     const poseMat = this.computePoseMatrix(vp.pose);
 
-    // Symmetric Tan bounds for flat rectilinear inspection
     const aspect = width / height;
     const tanHalfV = Math.tan((diagnosticFovDeg * 0.5 * Math.PI) / 180);
     const tanHalfH = tanHalfV * aspect;
 
+    gl.uniform1i(locs.uSceneType, this.sceneType);
     gl.uniform1i(locs.uProjectionMode, projMode);
     gl.uniform1i(locs.uStereoLayout, stereoLayout);
     gl.uniform1i(locs.uEyeSwap, eyeSwap);
     gl.uniform1i(locs.uEye, selectedEye);
     gl.uniform2f(locs.uCoverageRad, covH, covV);
     gl.uniform4f(locs.uCrop, crop.left || 0, crop.right || 0, crop.top || 0, crop.bottom || 0);
-    gl.uniform4f(locs.uTanBounds, tanHalfH, tanHalfH, tanHalfV, tanHalfV);
+    gl.uniform4f(locs.uVirtTanBounds, tanHalfH, tanHalfH, tanHalfV, tanHalfV);
     gl.uniformMatrix3fv(locs.uPoseRot, false, poseMat);
     gl.uniformMatrix3fv(locs.uCamRot, false, cameraPoseMat3 || this.identityMat3);
 
@@ -196,7 +198,6 @@ export class VRRenderer {
     const gl = this.gl;
     if (!gl || !this.programScene || !this.programDistort) return;
 
-    activeScreenProfile.updateFromViewport(window.innerWidth, window.innerHeight, window.devicePixelRatio || 1);
     const eyeGeom = deriveCardboardEyeGeometry(activeScreenProfile, viewerProfile);
     const halfW = Math.floor(width / 2);
 
@@ -215,9 +216,10 @@ export class VRRenderer {
       uPoseRot: gl.getUniformLocation(this.programScene, 'uPoseRot'),
       uEye: gl.getUniformLocation(this.programScene, 'uEye'),
       uEyeSwap: gl.getUniformLocation(this.programScene, 'uEyeSwap'),
+      uSceneType: gl.getUniformLocation(this.programScene, 'uSceneType'),
       uProjectionMode: gl.getUniformLocation(this.programScene, 'uProjectionMode'),
       uStereoLayout: gl.getUniformLocation(this.programScene, 'uStereoLayout'),
-      uTanBounds: gl.getUniformLocation(this.programScene, 'uTanBounds'),
+      uVirtTanBounds: gl.getUniformLocation(this.programScene, 'uVirtTanBounds'),
       uCoverageRad: gl.getUniformLocation(this.programScene, 'uCoverageRad'),
       uCrop: gl.getUniformLocation(this.programScene, 'uCrop')
     };
@@ -244,6 +246,7 @@ export class VRRenderer {
     const crop = vp.crop || { left: 0, right: 0, top: 0, bottom: 0 };
     const poseMat = this.computePoseMatrix(vp.pose);
 
+    gl.uniform1i(sLocs.uSceneType, this.sceneType);
     gl.uniform1i(sLocs.uProjectionMode, projMode);
     gl.uniform1i(sLocs.uStereoLayout, stereoLayout);
     gl.uniform1i(sLocs.uEyeSwap, eyeSwap);
@@ -254,20 +257,20 @@ export class VRRenderer {
 
     gl.enable(gl.SCISSOR_TEST);
 
-    // Left Eye Ideal Render (using actual leftEye tanBounds)
+    // Left Eye Ideal Render (using actual leftEye virtTanBounds)
     gl.viewport(0, 0, halfW, height);
     gl.scissor(0, 0, halfW, height);
     gl.uniform1i(sLocs.uEye, 0);
-    const lTan = eyeGeom.leftEye.tanBounds;
-    gl.uniform4f(sLocs.uTanBounds, lTan[0], lTan[1], lTan[2], lTan[3]);
+    const lVirtTan = eyeGeom.leftEye.virtTanBounds;
+    gl.uniform4f(sLocs.uVirtTanBounds, lVirtTan[0], lVirtTan[1], lVirtTan[2], lVirtTan[3]);
     gl.drawArrays(gl.TRIANGLES, 0, 6);
 
-    // Right Eye Ideal Render (using actual mirrored rightEye tanBounds)
+    // Right Eye Ideal Render (using actual mirrored rightEye virtTanBounds)
     gl.viewport(halfW, 0, halfW, height);
     gl.scissor(halfW, 0, halfW, height);
     gl.uniform1i(sLocs.uEye, 1);
-    const rTan = eyeGeom.rightEye.tanBounds;
-    gl.uniform4f(sLocs.uTanBounds, rTan[0], rTan[1], rTan[2], rTan[3]);
+    const rVirtTan = eyeGeom.rightEye.virtTanBounds;
+    gl.uniform4f(sLocs.uVirtTanBounds, rVirtTan[0], rVirtTan[1], rVirtTan[2], rVirtTan[3]);
     gl.drawArrays(gl.TRIANGLES, 0, 6);
 
     // ==========================================
@@ -280,7 +283,7 @@ export class VRRenderer {
       aPosition: gl.getAttribLocation(this.programDistort, 'aPosition'),
       uEyeTexture: gl.getUniformLocation(this.programDistort, 'uEyeTexture'),
       uLensCenterNorm: gl.getUniformLocation(this.programDistort, 'uLensCenterNorm'),
-      uTanBounds: gl.getUniformLocation(this.programDistort, 'uTanBounds'),
+      uVirtTanBounds: gl.getUniformLocation(this.programDistort, 'uVirtTanBounds'),
       uLensCorrection: gl.getUniformLocation(this.programDistort, 'uLensCorrection'),
       uDistortionK: gl.getUniformLocation(this.programDistort, 'uDistortionK'),
       uScreenTanScale: gl.getUniformLocation(this.programDistort, 'uScreenTanScale')
@@ -294,14 +297,15 @@ export class VRRenderer {
     gl.bindTexture(gl.TEXTURE_2D, this.eyeTex);
     gl.uniform1i(dLocs.uEyeTexture, 0);
 
-    const isLensOn = (viewerProfile && viewerProfile.lensCorrectionEnabled === true) ? 1 : 0;
-    const distK = viewerProfile && viewerProfile.distortion ? [viewerProfile.distortion.k1 || 0, viewerProfile.distortion.k2 || 0] : [0, 0];
+    // Lens Correction requires calibrated viewer profile
+    const isCalibrated = (viewerProfile && viewerProfile.isCalibrated === true);
+    const isLensOn = (isCalibrated && viewerProfile.lensCorrectionEnabled === true) ? 1 : 0;
+    const distK = isCalibrated && viewerProfile.distortion ? [viewerProfile.distortion.k1 || 0, viewerProfile.distortion.k2 || 0] : [0, 0];
 
     gl.uniform1i(dLocs.uLensCorrection, isLensOn);
     gl.uniform2f(dLocs.uDistortionK, distK[0], distK[1]);
 
     // Scale converting normalized viewport offset [0, 1] to physical tangents
-    // tanX = (xPx / pixelsPerMeter) / screenToLensDistance = xNorm * (halfViewportWPx / (pixelsPerMeter * D))
     const tanScaleX = halfW / (eyeGeom.screenPixelsPerMeter * eyeGeom.screenToLensDistance);
     const tanScaleY = height / (eyeGeom.screenPixelsPerMeter * eyeGeom.screenToLensDistance);
     gl.uniform2f(dLocs.uScreenTanScale, tanScaleX, tanScaleY);
@@ -310,14 +314,14 @@ export class VRRenderer {
     gl.viewport(0, 0, halfW, height);
     gl.scissor(0, 0, halfW, height);
     gl.uniform2f(dLocs.uLensCenterNorm, eyeGeom.leftEye.lensCenterNorm[0], eyeGeom.leftEye.lensCenterNorm[1]);
-    gl.uniform4f(dLocs.uTanBounds, lTan[0], lTan[1], lTan[2], lTan[3]);
+    gl.uniform4f(dLocs.uVirtTanBounds, lVirtTan[0], lVirtTan[1], lVirtTan[2], lVirtTan[3]);
     gl.drawArrays(gl.TRIANGLES, 0, 6);
 
     // Right Eye Screen Distortion Pass
     gl.viewport(halfW, 0, halfW, height);
     gl.scissor(halfW, 0, halfW, height);
     gl.uniform2f(dLocs.uLensCenterNorm, eyeGeom.rightEye.lensCenterNorm[0], eyeGeom.rightEye.lensCenterNorm[1]);
-    gl.uniform4f(dLocs.uTanBounds, rTan[0], rTan[1], rTan[2], rTan[3]);
+    gl.uniform4f(dLocs.uVirtTanBounds, rVirtTan[0], rVirtTan[1], rVirtTan[2], rVirtTan[3]);
     gl.drawArrays(gl.TRIANGLES, 0, 6);
 
     gl.disable(gl.SCISSOR_TEST);

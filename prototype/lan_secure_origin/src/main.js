@@ -84,6 +84,7 @@ const calibrationUI = new CalibrationUI({
   storage: profileStorage,
   mediaController: mediaController,
   diagnosticOverlay: diagnosticOverlay,
+  vrRenderer: vrRenderer,
   onProfileChanged: (vProfile, hProfile) => {
     activeVideoProfile = vProfile;
   },
