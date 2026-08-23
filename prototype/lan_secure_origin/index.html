@@ -24,7 +24,7 @@
       background: var(--bg);
       color: var(--text);
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-      touch-action: none;
+      touch-action: manipulation;
       -webkit-user-select: none;
       user-select: none;
     }
@@ -98,14 +98,15 @@
     }
     .btn-group button {
       flex: 1;
-      padding: 8px 10px;
+      padding: 10px 8px;
       background: #1e293b;
-      color: var(--muted);
+      color: #94a3b8;
       border: 1px solid #334155;
       border-radius: 6px;
-      font-size: 0.8rem;
+      font-size: 0.82rem;
       font-weight: 600;
       cursor: pointer;
+      touch-action: manipulation;
     }
     .btn-group button.active {
       background: var(--blue);
@@ -119,7 +120,7 @@
       color: #fff;
       font-size: 1.05rem;
       font-weight: 700;
-      padding: 14px 20px;
+      padding: 15px 20px;
       border-radius: 10px;
       border: none;
       cursor: pointer;
@@ -129,6 +130,7 @@
       gap: 8px;
       margin-top: 8px;
       box-shadow: 0 4px 14px rgba(37, 99, 235, 0.4);
+      touch-action: manipulation;
     }
     .btn-main:active { transform: scale(0.98); }
 
@@ -144,6 +146,17 @@
     }
     .m-item { color: var(--muted); }
     .m-val { color: #38bdf8; font-weight: 600; }
+
+    #errorBanner {
+      display: none;
+      background: rgba(239, 68, 68, 0.2);
+      border: 1px solid var(--red);
+      color: #fca5a5;
+      padding: 10px;
+      border-radius: 8px;
+      font-size: 0.8rem;
+      word-break: break-all;
+    }
 
     /* In-VR Floating Controls (Tap screen in VR to show) */
     #vrFloatingBar {
@@ -172,27 +185,29 @@
       color: #fff;
       border: none;
       border-radius: 20px;
-      padding: 8px 14px;
-      font-size: 0.8rem;
+      padding: 10px 16px;
+      font-size: 0.85rem;
       font-weight: 600;
       cursor: pointer;
       display: flex;
       align-items: center;
       gap: 4px;
+      touch-action: manipulation;
     }
     .vr-btn:active { background: #475569; }
     .vr-btn-reset { background: #059669; }
     .vr-btn-exit { background: #dc2626; }
 
-    /* Keep video active in WebKit background without display:none */
+    /* Keep video active without display:none */
     #sourceVideo {
       position: fixed;
-      top: -9999px;
-      left: -9999px;
-      width: 16px;
-      height: 16px;
+      top: 0;
+      left: 0;
+      width: 1px;
+      height: 1px;
       opacity: 0.01;
       pointer-events: none;
+      z-index: -1;
     }
   </style>
 </head>
@@ -213,6 +228,8 @@
 
   <!-- 2D Configuration & Setup Overlay -->
   <div id="uiOverlay">
+    <div id="errorBanner"></div>
+
     <div class="card">
       <h1>🥽 VREconder VR Web Player</h1>
       <div class="subtitle">Minimal Safari VR Rendering &bull; Stereo Split &bull; Head Tracking</div>
@@ -281,7 +298,7 @@
       </div>
       <div class="metrics-grid">
         <div class="m-item">FPS: <span class="m-val" id="valFps">0.0</span></div>
-        <div class="m-item">Renderer: <span class="m-val">WebGL2 (Stereo Shader)</span></div>
+        <div class="m-item">Renderer: <span class="m-val" id="valRenderer">WebGL Stereo Shader</span></div>
         <div class="m-item">Screen Angle: <span class="m-val" id="valScreenAngle">0°</span></div>
         <div class="m-item">Motion Perm: <span class="m-val" id="valMotionPerm">--</span></div>
         <div class="m-item">Yaw (Alpha): <span class="m-val" id="valYaw">--</span></div>
@@ -293,13 +310,25 @@
   </div>
 
   <script>
+    // Error banner display
+    function showError(msg) {
+      const banner = document.getElementById('errorBanner');
+      if (banner) {
+        banner.style.display = 'block';
+        banner.textContent = 'Error: ' + msg;
+      }
+      console.error(msg);
+    }
+    window.onerror = (msg, url, line) => { showError(`${msg} (${line})`); };
+    window.onunhandledrejection = (e) => { showError(e.reason ? e.reason.message : e); };
+
     // ==========================================
-    // 1. App State & Telemetry
+    // 1. App State
     // ==========================================
     const state = {
       inVR: false,
       secureContext: window.isSecureContext === true,
-      renderer: 'WebGL2 (Custom Raymarching Stereo Equirectangular)',
+      renderer: 'WebGL Stereo Raymarching',
       stereo: 'SBS',       // SBS | TB
       projection: '180',   // 180 | 360
       eyeOrder: 'normal',  // normal | swap
@@ -336,32 +365,37 @@
       }, 4000);
     }
 
-    window.addEventListener('touchstart', showFloatingBar);
+    window.addEventListener('touchstart', showFloatingBar, { passive: true });
     window.addEventListener('click', showFloatingBar);
 
     // ==========================================
-    // 2. WebGL Stereo Equirectangular Shader
+    // 2. WebGL Setup (Universal WebGL 1/2)
     // ==========================================
-    const gl = canvas.getContext('webgl2', { alpha: false, antialias: false, powerPreference: 'high-performance' }) ||
-               canvas.getContext('webgl', { alpha: false, antialias: false, powerPreference: 'high-performance' });
-
-    if (!gl) {
-      alert('WebGL not supported on this browser context');
+    let gl = null;
+    try {
+      gl = canvas.getContext('webgl2', { alpha: false, antialias: false, powerPreference: 'high-performance' }) ||
+           canvas.getContext('webgl', { alpha: false, antialias: false, powerPreference: 'high-performance' }) ||
+           canvas.getContext('experimental-webgl');
+    } catch (e) {
+      showError('WebGL init failed: ' + e.message);
     }
 
-    const vsSource = `#version 300 es
-      in vec2 aPosition;
-      out vec2 vUv;
+    if (!gl) {
+      showError('WebGL not supported on this device');
+    }
+
+    const vsSource = `
+      attribute vec2 aPosition;
+      varying vec2 vUv;
       void main() {
         vUv = aPosition * 0.5 + 0.5;
         gl.Position = vec4(aPosition, 0.0, 1.0);
       }
     `;
 
-    const fsSource = `#version 300 es
+    const fsSource = `
       precision highp float;
-      in vec2 vUv;
-      out vec4 fragColor;
+      varying vec2 vUv;
 
       uniform sampler2D uVideoTexture;
       uniform mat3 uCamRot;
@@ -374,41 +408,30 @@
       const float PI = 3.14159265358979323846;
       const float HALF_PI = 1.57079632679489661923;
       const float TWO_PI = 6.28318530717958647692;
-      const float FOV = 1.65; // ~95 deg horizontal FOV per eye in VR box
+      const float FOV = 1.65; // ~95 deg horizontal FOV per eye
 
       void main() {
-        // Pixel NDC in current eye viewport [-1, 1]
         vec2 ndc = (vUv - 0.5) * 2.0;
-
-        // Camera ray in camera space (Looking along -Z)
         float tanHalfFov = tan(FOV * 0.5);
         vec3 rayCam = normalize(vec3(ndc.x * tanHalfFov * uAspect, ndc.y * tanHalfFov, -1.0));
-
-        // Rotate ray by Head Tracking orientation matrix
         vec3 ray = uCamRot * rayCam;
 
-        // Equirectangular mapping: spherical coordinates
-        float yaw = atan(ray.x, -ray.z); // [-PI, PI], 0 is center forward
-        float pitch = asin(clamp(ray.y, -1.0, 1.0)); // [-PI/2, PI/2]
+        float yaw = atan(ray.x, -ray.z);
+        float pitch = asin(clamp(ray.y, -1.0, 1.0));
 
         float u_eye = 0.0;
         float v_eye = (pitch / PI) + 0.5;
 
-        // Projection mapping
         if (uProjection == 0) {
-          // 180° Dome Equirectangular
           if (abs(yaw) > HALF_PI) {
-            // Behind 180 dome -> render dark room / floor horizon
-            fragColor = vec4(0.04, 0.06, 0.1, 1.0);
+            gl_FragColor = vec4(0.03, 0.05, 0.08, 1.0);
             return;
           }
-          u_eye = (yaw / PI) + 0.5; // [0, 1] across front 180 deg
+          u_eye = (yaw / PI) + 0.5;
         } else {
-          // 360° Sphere Equirectangular
           u_eye = (yaw / TWO_PI) + 0.5;
         }
 
-        // Stereo eye coordinate computation
         int effectiveEye = uEye;
         if (uEyeSwap == 1) {
           effectiveEye = 1 - effectiveEye;
@@ -416,14 +439,12 @@
 
         vec2 texUv;
         if (uStereo == 0) {
-          // SBS (Side-by-Side): Left is [0, 0.5], Right is [0.5, 1.0]
           if (effectiveEye == 0) {
             texUv = vec2(u_eye * 0.5, v_eye);
           } else {
             texUv = vec2(u_eye * 0.5 + 0.5, v_eye);
           }
         } else {
-          // TB / OU (Top-Bottom): Left is top [0.5, 1.0], Right is bottom [0.0, 0.5]
           if (effectiveEye == 0) {
             texUv = vec2(u_eye, v_eye * 0.5 + 0.5);
           } else {
@@ -431,64 +452,75 @@
           }
         }
 
-        vec4 color = texture(uVideoTexture, texUv);
-        fragColor = color;
+        gl_FragColor = texture2D(uVideoTexture, texUv);
       }
     `;
 
-    function createShader(gl, type, source) {
-      const shader = gl.createShader(type);
-      gl.shaderSource(shader, source);
-      gl.compileShader(shader);
-      if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
-        console.error('Shader compile error:', gl.getShaderInfoLog(shader));
-        gl.deleteShader(shader);
+    function createShader(glCtx, type, source) {
+      const shader = glCtx.createShader(type);
+      glCtx.shaderSource(shader, source);
+      glCtx.compileShader(shader);
+      if (!glCtx.getShaderParameter(shader, glCtx.COMPILE_STATUS)) {
+        showError('Shader compile error: ' + glCtx.getShaderInfoLog(shader));
+        glCtx.deleteShader(shader);
         return null;
       }
       return shader;
     }
 
-    const vertShader = createShader(gl, gl.VERTEX_SHADER, vsSource);
-    const fragShader = createShader(gl, gl.FRAGMENT_SHADER, fsSource);
-    const program = gl.createProgram();
-    gl.attachShader(program, vertShader);
-    gl.attachShader(program, fragShader);
-    gl.linkProgram(program);
+    let program = null;
+    let aPositionLoc = -1, uVideoTextureLoc = null, uCamRotLoc = null, uStereoLoc = null, uProjectionLoc = null, uEyeSwapLoc = null, uEyeLoc = null, uAspectLoc = null;
+    let posBuffer = null;
+    let videoTex = null;
 
-    const posBuffer = gl.createBuffer();
-    gl.bindBuffer(gl.ARRAY_BUFFER, posBuffer);
-    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
-      -1, -1,
-       1, -1,
-      -1,  1,
-      -1,  1,
-       1, -1,
-       1,  1,
-    ]), gl.STATIC_DRAW);
+    if (gl) {
+      const vertShader = createShader(gl, gl.VERTEX_SHADER, vsSource);
+      const fragShader = createShader(gl, gl.FRAGMENT_SHADER, fsSource);
+      if (vertShader && fragShader) {
+        program = gl.createProgram();
+        gl.attachShader(program, vertShader);
+        gl.attachShader(program, fragShader);
+        gl.linkProgram(program);
 
-    const aPositionLoc = gl.getAttribLocation(program, 'aPosition');
-    const uVideoTextureLoc = gl.getUniformLocation(program, 'uVideoTexture');
-    const uCamRotLoc = gl.getUniformLocation(program, 'uCamRot');
-    const uStereoLoc = gl.getUniformLocation(program, 'uStereo');
-    const uProjectionLoc = gl.getUniformLocation(program, 'uProjection');
-    const uEyeSwapLoc = gl.getUniformLocation(program, 'uEyeSwap');
-    const uEyeLoc = gl.getUniformLocation(program, 'uEye');
-    const uAspectLoc = gl.getUniformLocation(program, 'uAspect');
+        if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+          showError('Program link error: ' + gl.getProgramInfoLog(program));
+        }
 
-    // Video Texture
-    const videoTex = gl.createTexture();
-    gl.bindTexture(gl.TEXTURE_2D, videoTex);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([10, 15, 25, 255]));
+        posBuffer = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, posBuffer);
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
+          -1, -1,
+           1, -1,
+          -1,  1,
+          -1,  1,
+           1, -1,
+           1,  1,
+        ]), gl.STATIC_DRAW);
+
+        aPositionLoc = gl.getAttribLocation(program, 'aPosition');
+        uVideoTextureLoc = gl.getUniformLocation(program, 'uVideoTexture');
+        uCamRotLoc = gl.getUniformLocation(program, 'uCamRot');
+        uStereoLoc = gl.getUniformLocation(program, 'uStereo');
+        uProjectionLoc = gl.getUniformLocation(program, 'uProjection');
+        uEyeSwapLoc = gl.getUniformLocation(program, 'uEyeSwap');
+        uEyeLoc = gl.getUniformLocation(program, 'uEye');
+        uAspectLoc = gl.getUniformLocation(program, 'uAspect');
+
+        videoTex = gl.createTexture();
+        gl.bindTexture(gl.TEXTURE_2D, videoTex);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([10, 15, 25, 255]));
+      }
+    }
 
     // ==========================================
     // 3. Orientation & Head Tracking Engine
     // ==========================================
     let cameraRotationMatrix = [1, 0, 0,  0, 1, 0,  0, 0, 1];
-    let zeroHeadingYaw = 0; // Calibration offset
+    let zeroHeadingYaw = 0;
 
     function updateScreenOrientation() {
       if (screen.orientation && typeof screen.orientation.angle !== 'undefined') {
@@ -498,7 +530,8 @@
       } else {
         state.screenAngle = window.innerWidth > window.innerHeight ? 90 : 0;
       }
-      document.getElementById('valScreenAngle').textContent = state.screenAngle + '°';
+      const el = document.getElementById('valScreenAngle');
+      if (el) el.textContent = state.screenAngle + '°';
     }
     window.addEventListener('orientationchange', updateScreenOrientation);
     window.addEventListener('resize', updateScreenOrientation);
@@ -515,7 +548,6 @@
       const cB = Math.cos(beta),  sB = Math.sin(beta);
       const cG = Math.cos(gamma), sG = Math.sin(gamma);
 
-      // W3C device coordinates (Z-X'-Y'' intrinsic)
       const m11 = cA * cG - sA * sB * sG;
       const m12 = -cB * sA;
       const m13 = cA * sG + cG * sA * sB;
@@ -528,7 +560,6 @@
       const m32 = sB;
       const m33 = cB * cG;
 
-      // Screen rotation adjustment (Z-rotation by -screenAngle)
       const cS = Math.cos(-screenAngle), sS = Math.sin(-screenAngle);
       const r11 = m11 * cS - m12 * sS;
       const r12 = m11 * sS + m12 * cS;
@@ -542,12 +573,10 @@
       const r32 = m31 * sS + m32 * cS;
       const r33 = m33;
 
-      // Convert to OpenGL Camera frame (Looking along -Z, +Y Up, +X Right)
       const camX_x = r11, camX_y = r21, camX_z = r31;
       const camY_x = r12, camY_y = r22, camY_z = r32;
       const camZ_x = r13, camZ_y = r23, camZ_z = r33;
 
-      // Apply Zero Heading calibration around World Y axis
       const cZ = Math.cos(zeroHeadingYaw), sZ = Math.sin(zeroHeadingYaw);
       return [
         cZ * camX_x + sZ * camX_z, camX_y, -sZ * camX_x + cZ * camX_z,
@@ -571,9 +600,12 @@
       state.rawOrientation.beta = e.beta;
       state.rawOrientation.gamma = e.gamma;
 
-      document.getElementById('valYaw').textContent = e.alpha.toFixed(1) + '°';
-      document.getElementById('valPitch').textContent = (e.beta || 0).toFixed(1) + '°';
-      document.getElementById('valRoll').textContent = (e.gamma || 0).toFixed(1) + '°';
+      const elYaw = document.getElementById('valYaw');
+      const elPitch = document.getElementById('valPitch');
+      const elRoll = document.getElementById('valRoll');
+      if (elYaw) elYaw.textContent = e.alpha.toFixed(1) + '°';
+      if (elPitch) elPitch.textContent = (e.beta || 0).toFixed(1) + '°';
+      if (elRoll) elRoll.textContent = (e.gamma || 0).toFixed(1) + '°';
 
       cameraRotationMatrix = computeOrientationMatrix(e.alpha, e.beta || 0, e.gamma || 0, state.screenAngle);
     }, { passive: true });
@@ -587,24 +619,24 @@
     function renderLoop(now) {
       requestAnimationFrame(renderLoop);
 
-      // FPS calculation
       frameCounter++;
       if (now - lastTime >= 1000) {
         state.fps = Number(((frameCounter * 1000) / (now - lastTime)).toFixed(1));
-        document.getElementById('valFps').textContent = state.fps.toFixed(1);
+        const elFps = document.getElementById('valFps');
+        if (elFps) elFps.textContent = state.fps.toFixed(1);
         frameCounter = 0;
         lastTime = now;
         state.runtimeSeconds += 1;
       }
 
-      // Check Quality API
       if (video.getVideoPlaybackQuality) {
         const q = video.getVideoPlaybackQuality();
         state.droppedFrames = q.droppedVideoFrames;
         state.totalVideoFrames = q.totalVideoFrames;
       }
 
-      // Resize canvas to full native resolution
+      if (!gl || !program) return;
+
       const width = window.innerWidth * window.devicePixelRatio;
       const height = window.innerHeight * window.devicePixelRatio;
       if (canvas.width !== width || canvas.height !== height) {
@@ -612,7 +644,6 @@
         canvas.height = height;
       }
 
-      // Update Video Texture from <video>
       if (video.readyState >= 2) {
         gl.bindTexture(gl.TEXTURE_2D, videoTex);
         gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, video);
@@ -682,7 +713,6 @@
     function selectVideo(relPath) {
       state.videoPath = relPath;
       video.src = `/video?path=${encodeURIComponent(relPath)}`;
-      // Do not call video.load() synchronously without user gesture on iOS
     }
 
     videoSelect.addEventListener('change', (e) => selectVideo(e.target.value));
@@ -691,12 +721,15 @@
       state.videoDuration = video.duration;
       state.videoWidth = video.videoWidth;
       state.videoHeight = video.videoHeight;
-      document.getElementById('valVideoRes').textContent = `${video.videoWidth}x${video.videoHeight}`;
-      document.getElementById('valVideoDur').textContent = `${video.duration.toFixed(1)}s`;
+      const elRes = document.getElementById('valVideoRes');
+      const elDur = document.getElementById('valVideoDur');
+      if (elRes) elRes.textContent = `${video.videoWidth}x${video.videoHeight}`;
+      if (elDur) elDur.textContent = `${video.duration.toFixed(1)}s`;
     });
 
     video.addEventListener('timeupdate', () => {
-      document.getElementById('valVideoTime').textContent = `${video.currentTime.toFixed(1)}s`;
+      const elTime = document.getElementById('valVideoTime');
+      if (elTime) elTime.textContent = `${video.currentTime.toFixed(1)}s`;
     });
 
     let seekStart = 0;
@@ -704,17 +737,20 @@
     video.addEventListener('seeked', () => {
       const lat = performance.now() - seekStart;
       state.seeks.push({ target: Number(video.currentTime.toFixed(1)), latencyMs: Number(lat.toFixed(1)) });
-      document.getElementById('valSeekCount').textContent = state.seeks.length;
+      const elCount = document.getElementById('valSeekCount');
+      if (elCount) elCount.textContent = state.seeks.length;
     });
 
     // Mapping Button Groups
     function setupButtonGroup(containerId, stateKey) {
       const container = document.getElementById(containerId);
+      if (!container) return;
       container.addEventListener('click', (e) => {
-        if (e.target.tagName === 'BUTTON') {
+        const btn = e.target.closest('button');
+        if (btn) {
           container.querySelectorAll('button').forEach(b => b.classList.remove('active'));
-          e.target.classList.add('active');
-          state[stateKey] = e.target.getAttribute('data-val');
+          btn.classList.add('active');
+          state[stateKey] = btn.getAttribute('data-val');
           syncTelemetry();
         }
       });
@@ -725,33 +761,31 @@
 
     // Enter VR Button
     document.getElementById('btnEnterVR').addEventListener('click', async () => {
-      // 1. Unmute & Play Video on user gesture
       video.muted = false;
       try {
         await video.play();
       } catch (e) {
-        console.log('Video play catch:', e);
+        console.log('Video play error:', e);
       }
 
-      // 2. Request Motion Permission
       if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
         try {
           const perm = await DeviceOrientationEvent.requestPermission();
           state.motionPermission = perm;
-          document.getElementById('valMotionPerm').textContent = perm;
+          const elPerm = document.getElementById('valMotionPerm');
+          if (elPerm) elPerm.textContent = perm;
         } catch (err) {
           state.motionPermission = 'error: ' + err.message;
         }
       } else {
         state.motionPermission = 'granted_standard';
-        document.getElementById('valMotionPerm').textContent = 'Standard';
+        const elPerm = document.getElementById('valMotionPerm');
+        if (elPerm) elPerm.textContent = 'Standard';
       }
 
-      // 3. Calibrate Zero Orientation
       updateScreenOrientation();
       resetView();
 
-      // 4. Hide 2D UI & Enter Fullscreen VR
       state.inVR = true;
       uiOverlay.classList.add('hidden');
       showFloatingBar();
