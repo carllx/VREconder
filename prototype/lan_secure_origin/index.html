@@ -345,6 +345,13 @@
       constructor(x = 0, y = 0, z = 0, w = 1) {
         this.x = x; this.y = y; this.z = z; this.w = w;
       }
+      clone() {
+        return new Quat(this.x, this.y, this.z, this.w);
+      }
+      copy(q) {
+        this.x = q.x; this.y = q.y; this.z = q.z; this.w = q.w;
+        return this;
+      }
       setFromEuler(x, y, z, order = 'YXZ') {
         const c1 = Math.cos(x / 2), c2 = Math.cos(y / 2), c3 = Math.cos(z / 2);
         const s1 = Math.sin(x / 2), s2 = Math.sin(y / 2), s3 = Math.sin(z / 2);
