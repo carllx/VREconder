@@ -52,10 +52,10 @@
       width: 100vw;
       height: 100vh;
       z-index: 10;
-      background: rgba(9, 13, 22, 0.94);
+      background: rgba(9, 13, 22, 0.95);
       backdrop-filter: blur(12px);
       -webkit-backdrop-filter: blur(12px);
-      padding: 16px;
+      padding: 14px;
       overflow-y: auto;
       display: flex;
       flex-direction: column;
@@ -74,8 +74,8 @@
       border-radius: 12px;
       padding: 12px 14px;
     }
-    h1 { font-size: 1.15rem; font-weight: 700; display: flex; align-items: center; gap: 8px; color: #fff; }
-    .subtitle { font-size: 0.8rem; color: var(--muted); margin-top: 2px; }
+    h1 { font-size: 1.1rem; font-weight: 700; display: flex; align-items: center; gap: 8px; color: #fff; }
+    .subtitle { font-size: 0.78rem; color: var(--muted); margin-top: 2px; }
 
     .status-badge {
       display: inline-block;
@@ -88,12 +88,12 @@
     .badge-browser { background: #78350f; color: #fbbf24; }
 
     .pwa-instruction {
-      background: rgba(37, 99, 235, 0.12);
-      border: 1px solid rgba(59, 130, 246, 0.3);
+      background: rgba(245, 158, 11, 0.12);
+      border: 1px solid rgba(245, 158, 11, 0.35);
       padding: 10px;
       border-radius: 8px;
       font-size: 0.8rem;
-      color: #93c5fd;
+      color: #fde68a;
       line-height: 1.4;
     }
 
@@ -115,6 +115,32 @@
       font-size: 0.85rem;
       appearance: none;
       -webkit-appearance: none;
+    }
+
+    /* Comparison Probe Container */
+    .compare-container {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-top: 8px;
+    }
+    .compare-box {
+      background: #0f172a;
+      border: 1px solid #334155;
+      border-radius: 8px;
+      padding: 6px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+    }
+    .compare-title { font-size: 0.7rem; color: var(--muted); font-weight: bold; }
+    .compare-preview {
+      width: 100%;
+      height: 110px;
+      object-fit: contain;
+      background: #000;
+      border-radius: 4px;
     }
 
     .diag-btn-grid {
@@ -227,23 +253,12 @@
     .vr-btn:active { background: #475569; }
     .vr-btn-reset { background: #059669; }
     .vr-btn-exit { background: #dc2626; }
-
-    #sourceVideo {
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 1px;
-      height: 1px;
-      opacity: 0.01;
-      pointer-events: none;
-      z-index: -1;
-    }
   </style>
 </head>
 <body>
 
+  <!-- Background WebGL Stereo VR Canvas -->
   <canvas id="glCanvas"></canvas>
-  <video id="sourceVideo" playsinline preload="metadata" crossorigin="anonymous" muted></video>
 
   <!-- In-VR Floating Quick Bar (Tap screen in VR to reveal) -->
   <div id="vrFloatingBar" class="fade-out">
@@ -262,16 +277,38 @@
         <h1>🥽 VREconder Minimal VR Player</h1>
         <span class="status-badge" id="badgeDisplayMode">Browser Tab</span>
       </div>
-      <div class="subtitle">W3C DeviceOrientation &bull; Full-Pose Recenter &bull; 180° SBS Diagnostic</div>
+      <div class="subtitle">W3C DeviceOrientation &bull; UNPACK_FLIP_Y Isolation &bull; Full-Pose Recenter</div>
     </div>
 
     <!-- Home Screen Standalone Check -->
     <div class="pwa-instruction" id="pwaBox">
-      <b>📱 iOS 全屏要求（Home Screen Standalone）</b>：<br>
-      若当前为普通 Safari 标签页，请点击 Safari 底部【<b>分享</b>】&rarr;【<b>添加到主屏幕</b>】。从主屏幕启动将彻底抹除 Safari 地址栏与底部导航栏。
+      <b>⚠️ 要求：请从 iPhone 桌面图标启动</b><br>
+      当前运行在 Safari 浏览器标签中。请点击 Safari 底部【<b>分享</b>】&rarr;【<b>添加到主屏幕</b>】。从桌面图标打开即可实现无工具栏沉浸启动！
     </div>
 
-    <!-- Media Source -->
+    <!-- Isolation Test A: Ground-Truth Video vs Flat WebGL Quad -->
+    <div class="card">
+      <div style="display:flex; justify-content:space-between; align-items:center;">
+        <div class="label">🔬 A. Texture Orientation Isolation Test</div>
+        <button id="btnToggleFlipY" style="background:#2563eb;color:#fff;border:none;border-radius:4px;padding:3px 8px;font-size:0.75rem;cursor:pointer;">
+          FLIP_Y: <span id="valFlipY">TRUE (Canonical)</span>
+        </button>
+      </div>
+      <div class="subtitle" style="margin-top:2px;">对比左侧原生 &lt;video&gt; 与右侧 WebGL 纹理 Quad（两者方向必须 100% 一致）：</div>
+
+      <div class="compare-container">
+        <div class="compare-box">
+          <div class="compare-title">1. Raw &lt;video&gt; (Ground Truth)</div>
+          <video id="sourceVideo" class="compare-preview" playsinline preload="metadata" crossorigin="anonymous" muted controls></video>
+        </div>
+        <div class="compare-box">
+          <div class="compare-title">2. WebGL Flat Quad (GPU Upload)</div>
+          <canvas id="flatCanvas" class="compare-preview"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <!-- Media Source Selection -->
     <div class="card">
       <div class="label">1. VR Media Source (G:\Media\VR)</div>
       <select id="videoSelect">
@@ -343,7 +380,7 @@
     window.onunhandledrejection = (e) => { showError(e.reason ? (e.reason.message || e.reason) : e); };
 
     // ==========================================
-    // 1. Math: Quaternion & Vector3 Library
+    // 1. Math: Quaternion Library
     // ==========================================
     class Quat {
       constructor(x = 0, y = 0, z = 0, w = 1) {
@@ -361,7 +398,6 @@
         return this;
       }
       invert() {
-        // For unit quaternions, inverse is conjugate
         this.x = -this.x; this.y = -this.y; this.z = -this.z;
         return this;
       }
@@ -426,7 +462,8 @@
       inVR: false,
       standalone: isStandalone,
       secureContext: window.isSecureContext === true,
-      stereoMode: 0, // 0: LEFT_MONO (Step 1), 1: SBS_NORMAL (Step 2), 2: SBS_SWAP (Step 3), 3: TB_NORMAL, 4: TB_SWAP, 5: 360_SBS
+      unpackFlipY: true, // Canonical WebGL texture upload invariant
+      stereoMode: 0,     // 0: LEFT_MONO (Step 1), 1: SBS_NORMAL (Step 2), 2: SBS_SWAP (Step 3), 3: TB_NORMAL, 4: TB_SWAP, 5: 360_SBS
       videoPath: '4K/4096_2048_crf18_avc1-Kururugi Aoi - WAVR224.mp4',
       videoDuration: 0,
       videoWidth: 0,
@@ -451,6 +488,7 @@
 
     const video = document.getElementById('sourceVideo');
     const canvas = document.getElementById('glCanvas');
+    const flatCanvas = document.getElementById('flatCanvas');
     const uiOverlay = document.getElementById('uiOverlay');
     const vrFloatingBar = document.getElementById('vrFloatingBar');
     const videoSelect = document.getElementById('videoSelect');
@@ -491,6 +529,9 @@
       showError('WebGL init failed: ' + e.message);
     }
 
+    // Flat Quad WebGL Context for 2D Isolation Comparison
+    let flatGl = flatCanvas.getContext('webgl');
+
     const vsSource = `
       attribute vec2 aPosition;
       varying vec2 vUv;
@@ -500,6 +541,7 @@
       }
     `;
 
+    // Canonical 180° SBS / Equirectangular Shader
     const fsSource = `
       precision highp float;
       varying vec2 vUv;
@@ -527,7 +569,8 @@
         float lat = asin(clamp(d.y, -1.0, 1.0)); // [-PI/2, PI/2]
 
         float uLocal = 0.0;
-        float vLocal = 0.5 + lat / PI; // +90 deg lat -> 1.0 (top), -90 deg lat -> 0.0 (bottom)
+        // Canonical OpenGL UV: vLocal = 0.5 + lat/PI (matches UNPACK_FLIP_Y_WEBGL = true)
+        float vLocal = 0.5 + lat / PI;
 
         if (uStereoMode == 5) {
           // 360° Sphere Equirectangular
@@ -570,6 +613,16 @@
         }
 
         gl_FragColor = texture2D(uVideoTexture, texUv);
+      }
+    `;
+
+    // Flat Quad Fragment Shader for 2D Isolation Probe
+    const fsFlatSource = `
+      precision mediump float;
+      varying vec2 vUv;
+      uniform sampler2D uTexture;
+      void main() {
+        gl_FragColor = texture2D(uTexture, vUv);
       }
     `;
 
@@ -625,6 +678,28 @@
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
         gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([10, 15, 25, 255]));
       }
+    }
+
+    // Flat Quad Program Setup
+    let flatProgram = null, flatPosBuffer = null, flatTex = null;
+    if (flatGl) {
+      const vSh = createShader(flatGl, flatGl.VERTEX_SHADER, vsSource);
+      const fSh = createShader(flatGl, flatGl.FRAGMENT_SHADER, fsFlatSource);
+      flatProgram = flatGl.createProgram();
+      flatGl.attachShader(flatProgram, vSh);
+      flatGl.attachShader(flatProgram, fSh);
+      flatGl.linkProgram(flatProgram);
+
+      flatPosBuffer = flatGl.createBuffer();
+      flatGl.bindBuffer(flatGl.ARRAY_BUFFER, flatPosBuffer);
+      flatGl.bufferData(flatGl.ARRAY_BUFFER, new Float32Array([-1,-1, 1,-1, -1,1, -1,1, 1,-1, 1,1]), flatGl.STATIC_DRAW);
+
+      flatTex = flatGl.createTexture();
+      flatGl.bindTexture(flatGl.TEXTURE_2D, flatTex);
+      flatGl.texParameteri(flatGl.TEXTURE_2D, flatGl.TEXTURE_WRAP_S, flatGl.CLAMP_TO_EDGE);
+      flatGl.texParameteri(flatGl.TEXTURE_2D, flatGl.TEXTURE_WRAP_T, flatGl.CLAMP_TO_EDGE);
+      flatGl.texParameteri(flatGl.TEXTURE_2D, flatGl.TEXTURE_MIN_FILTER, flatGl.LINEAR);
+      flatGl.texParameteri(flatGl.TEXTURE_2D, flatGl.TEXTURE_MAG_FILTER, flatGl.LINEAR);
     }
 
     // ==========================================
@@ -733,7 +808,7 @@
     }, { passive: true });
 
     // ==========================================
-    // 5. Render Loop
+    // 5. Render Loop & Texture Upload Invariant
     // ==========================================
     let lastTime = performance.now();
     let frameCounter = 0;
@@ -759,6 +834,21 @@
         if (elDrop) elDrop.textContent = `${q.droppedVideoFrames}/${q.totalVideoFrames}`;
       }
 
+      // Render Flat Quad Preview when 2D Overlay is active
+      if (!state.inVR && flatGl && flatProgram && video.readyState >= 2) {
+        flatGl.pixelStorei(flatGl.UNPACK_FLIP_Y_WEBGL, state.unpackFlipY);
+        flatGl.bindTexture(flatGl.TEXTURE_2D, flatTex);
+        flatGl.texImage2D(flatGl.TEXTURE_2D, 0, flatGl.RGBA, flatGl.RGBA, flatGl.UNSIGNED_BYTE, video);
+
+        flatGl.viewport(0, 0, flatCanvas.width, flatCanvas.height);
+        flatGl.useProgram(flatProgram);
+        const aPos = flatGl.getAttribLocation(flatProgram, 'aPosition');
+        flatGl.enableVertexAttribArray(aPos);
+        flatGl.bindBuffer(flatGl.ARRAY_BUFFER, flatPosBuffer);
+        flatGl.vertexAttribPointer(aPos, 2, flatGl.FLOAT, false, 0, 0);
+        flatGl.drawArrays(flatGl.TRIANGLES, 0, 6);
+      }
+
       if (!gl || !program) return;
 
       const width = window.innerWidth * window.devicePixelRatio;
@@ -768,7 +858,9 @@
         canvas.height = height;
       }
 
+      // Canonical Video Upload with UNPACK_FLIP_Y_WEBGL
       if (video.readyState >= 2) {
+        gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, state.unpackFlipY);
         gl.bindTexture(gl.TEXTURE_2D, videoTex);
         gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, video);
       }
@@ -810,8 +902,18 @@
     requestAnimationFrame(renderLoop);
 
     // ==========================================
-    // 6. Video Loading & UI Event Handling
+    // 6. UI Controls & Isolation Toggle
     // ==========================================
+    // Toggle UNPACK_FLIP_Y_WEBGL for Isolation Test
+    const btnToggleFlipY = document.getElementById('btnToggleFlipY');
+    const valFlipY = document.getElementById('valFlipY');
+    btnToggleFlipY.addEventListener('click', () => {
+      state.unpackFlipY = !state.unpackFlipY;
+      valFlipY.textContent = state.unpackFlipY ? 'TRUE (Canonical)' : 'FALSE (Inverted)';
+      btnToggleFlipY.style.background = state.unpackFlipY ? '#2563eb' : '#dc2626';
+      syncTelemetry('toggleFlipY:' + state.unpackFlipY);
+    });
+
     async function loadVideoList() {
       try {
         const res = await fetch('/api/videos');
