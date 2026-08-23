@@ -213,6 +213,7 @@
     }
     .vr-btn:active { background: #475569; }
     .vr-btn-reset { background: #059669; }
+    .vr-btn-play { background: #2563eb; }
     .vr-btn-exit { background: #dc2626; }
 
     #sourceVideo {
@@ -231,13 +232,13 @@
 
   <!-- Background WebGL Stereo VR Canvas -->
   <canvas id="glCanvas"></canvas>
-  <video id="sourceVideo" playsinline preload="metadata" crossorigin="anonymous" muted></video>
+  <video id="sourceVideo" playsinline preload="auto" crossorigin="anonymous" muted loop></video>
 
   <!-- In-VR Floating Quick Bar (Tap screen in VR to reveal) -->
   <div id="vrFloatingBar" class="fade-out">
     <button class="vr-btn vr-btn-reset" id="btnVrReset">🎯 Recenter View</button>
+    <button class="vr-btn vr-btn-play" id="btnVrPlayPause">⏯ Play/Pause</button>
     <button class="vr-btn" id="btnVrToggleStereo">🔀 Step L/R</button>
-    <button class="vr-btn" id="btnVrPlayPause">⏯ Play/Pause</button>
     <button class="vr-btn vr-btn-exit" id="btnVrExit">⚙ Exit VR</button>
   </div>
 
@@ -264,7 +265,7 @@
         <div class="m-item">Res: <span class="m-val" id="valVideoRes">--</span></div>
         <div class="m-item">Dur: <span class="m-val" id="valVideoDur">--</span></div>
         <div class="m-item">Time: <span class="m-val" id="valVideoTime">0.00s</span></div>
-        <div class="m-item">Range: <span class="m-val" id="valRangeStatus">206 OK</span></div>
+        <div class="m-item">Status: <span class="m-val" id="valPlayStatus">Paused</span></div>
       </div>
     </div>
 
@@ -283,7 +284,7 @@
     <div class="card">
       <div class="label">3. Launch VR Headset View</div>
       <button class="btn-main" id="btnEnterVR">
-        <span>🚀 Enter VR / Recenter & Enable Motion</span>
+        <span>🚀 Enter VR / Play & Enable Motion</span>
       </button>
       <div class="subtitle" style="text-align:center; margin-top:6px;">
         手机打横并立起（面向正前方），点击按钮戴入 VR 眼镜
@@ -382,7 +383,6 @@
           iz * qw + iw * -qz + ix * -qy - iy * -qx
         ];
       }
-      // True Column-Major 3x3 Matrix for WebGL uniformMatrix3fv (dWorld = M * dCamera)
       toMat3ColumnMajor() {
         const x = this.x, y = this.y, z = this.z, w = this.w;
         const x2 = x + x, y2 = y + y, z2 = z + z;
@@ -458,6 +458,13 @@
     window.addEventListener('touchstart', showFloatingBar, { passive: true });
     window.addEventListener('click', showFloatingBar);
 
+    // Tap anywhere in VR to resume if paused
+    window.addEventListener('touchend', () => {
+      if (state.inVR && video.paused) {
+        video.play().catch(() => {});
+      }
+    }, { passive: true });
+
     // ==========================================
     // 3. WebGL Setup & Canonical Shader
     // ==========================================
@@ -478,7 +485,6 @@
       }
     `;
 
-    // Canonical 180° SBS / Equirectangular Shader with Camera-to-World Matrix
     const fsSource = `
       precision highp float;
       varying vec2 vUv;
@@ -599,7 +605,7 @@
     const qCameraCorrect = new Quat(-Math.SQRT1_2, 0, 0, Math.SQRT1_2); // -90 deg around X (device top -> camera -Z)
     const qScreenZ = new Quat();
     let qPoseCurrent = new Quat();
-    let qRefInv = new Quat(); // Saved on reset
+    let qRefInv = new Quat();
     let qCamera = new Quat();
 
     let cameraMat3 = [1, 0, 0,  0, 1, 0,  0, 0, 1];
@@ -650,10 +656,7 @@
         state.screenAngle
       );
 
-      // qRefInv = inverse(qPose)
       qRefInv = qPoseCurrent.clone().invert();
-
-      // qCamera at reset = qRefInv * qPose = Identity
       qCamera = qRefInv.clone().multiply(qPoseCurrent);
       cameraMat3 = qCamera.toMat3ColumnMajor();
 
@@ -813,9 +816,15 @@
     function selectVideo(relPath) {
       state.videoPath = relPath;
       video.src = `/video?path=${encodeURIComponent(relPath)}`;
+      video.load();
+      if (state.inVR) {
+        video.play().catch(e => console.log('play catch:', e));
+      }
     }
 
-    videoSelect.addEventListener('change', (e) => selectVideo(e.target.value));
+    videoSelect.addEventListener('change', (e) => {
+      selectVideo(e.target.value);
+    });
 
     video.addEventListener('loadedmetadata', () => {
       state.videoDuration = video.duration;
@@ -830,6 +839,21 @@
     video.addEventListener('timeupdate', () => {
       const elTime = document.getElementById('valVideoTime');
       if (elTime) elTime.textContent = `${video.currentTime.toFixed(1)}s`;
+    });
+
+    video.addEventListener('play', () => {
+      const elStat = document.getElementById('valPlayStatus');
+      if (elStat) { elStat.textContent = 'Playing'; elStat.style.color = '#34d399'; }
+    });
+
+    video.addEventListener('pause', () => {
+      const elStat = document.getElementById('valPlayStatus');
+      if (elStat) { elStat.textContent = 'Paused'; elStat.style.color = '#fbbf24'; }
+    });
+
+    video.addEventListener('error', (e) => {
+      const err = video.error ? `${video.error.code}: ${video.error.message}` : 'unknown error';
+      showError('Video decode error: ' + err);
     });
 
     // Stereo Diagnosis Selector
@@ -865,9 +889,14 @@
         if (elPerm) elPerm.textContent = 'Standard';
       }
 
-      // 2. Play Video on gesture
+      // 2. Play Video on user click
       video.muted = false;
-      video.play().catch(e => console.log('Video play:', e));
+      video.play().catch((e) => {
+        console.log('Video play error on gesture:', e);
+        // Fallback muted play if audio policy blocks
+        video.muted = true;
+        video.play().catch(e2 => console.log('Muted play error:', e2));
+      });
 
       // 3. Recenter Pose at entry
       updateScreenOrientation();
@@ -885,6 +914,15 @@
       e.stopPropagation();
       recenterPose();
     });
+    document.getElementById('btnVrPlayPause').addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (video.paused) {
+        video.play().catch(e => console.log('Play error:', e));
+      } else {
+        video.pause();
+      }
+      syncTelemetry('togglePlayPause');
+    });
     document.getElementById('btnVrToggleStereo').addEventListener('click', (e) => {
       e.stopPropagation();
       state.stereoMode = (state.stereoMode + 1) % 3;
@@ -892,10 +930,6 @@
       const activeBtn = grpStereoMode.querySelector(`button[data-val="${state.stereoMode}"]`);
       if (activeBtn) activeBtn.classList.add('active');
       syncTelemetry('cycleStereoMode:' + state.stereoMode);
-    });
-    document.getElementById('btnVrPlayPause').addEventListener('click', (e) => {
-      e.stopPropagation();
-      if (video.paused) video.play(); else video.pause();
     });
     document.getElementById('btnVrExit').addEventListener('click', (e) => {
       e.stopPropagation();
