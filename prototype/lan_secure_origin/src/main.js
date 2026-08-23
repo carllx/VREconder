@@ -85,6 +85,7 @@ const calibrationUI = new CalibrationUI({
   mediaController: mediaController,
   diagnosticOverlay: diagnosticOverlay,
   vrRenderer: vrRenderer,
+  commandModel: commandModel,
   onProfileChanged: (vProfile, hProfile) => {
     activeVideoProfile = vProfile;
   },
@@ -251,9 +252,30 @@ function renderLoop(now) {
 
     renderStereoUI(uiCtx, gazeEngine, commandModel, video, now, width, height);
   }
+
+  mediaController.recordRenderedFrame();
 }
 
 requestAnimationFrame(renderLoop);
+
+// Periodic Live Telemetry Sync to PC Controller (every 600ms)
+setInterval(() => {
+  if (state.pcConnected) {
+    const payload = {
+      type: 'telemetry_sync',
+      fps: state.fps,
+      mediaName: state.videoPath ? state.videoPath.split('/').pop() : '--',
+      mediaStatus: state.firstFrameTimings.statusText || 'Ready',
+      devStatus: state.inVR ? `In VR (Stage ${state.calibrationStage})` : `Diagnostic (Stage ${state.calibrationStage})`,
+      timings: state.firstFrameTimings
+    };
+    fetch('/api/calibration/control', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    }).catch(() => {});
+  }
+}, 600);
 
 // Initial Video List Load
 mediaController.loadVideoList();

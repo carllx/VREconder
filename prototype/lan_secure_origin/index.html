@@ -52,19 +52,26 @@
         <span class="status-badge" id="badgeDisplayMode">Browser Tab</span>
       </div>
       <div class="subtitle">Validate Source Mapping vs Headset Lens Optics (Issue #13)</div>
+      <div style="margin-top:6px; font-size:0.72rem; color:#38bdf8; background:rgba(2,132,199,0.15); padding:4px 8px; border-radius:6px; border:1px solid rgba(56,189,248,0.3);">
+        💻 PC Controller: 打开 <code>/controller.html</code> 戴镜实时调参
+      </div>
     </div>
 
     <!-- Mode Selector: Diagnostic vs VR View -->
     <div class="card">
-      <div class="label">Operating Mode</div>
-      <div class="btn-grid-2">
+      <div class="label">Calibration Stage</div>
+      <div class="btn-grid-3" style="margin-top:4px;">
         <button class="opt-btn active" id="btnModeDiagnostic">
-          <b>📐 Flat Diagnostic View</b><br>
-          <span style="font-size:0.68rem;opacity:0.8;">Rectilinear / Straight Line Audit</span>
+          <b>Stage A</b><br>
+          <span style="font-size:0.65rem;opacity:0.85;">Flat Diagnostic</span>
+        </button>
+        <button class="opt-btn" id="btnToggleScene">
+          <b>Stage B</b><br>
+          <span style="font-size:0.65rem;opacity:0.85;">Synthetic Grid</span>
         </button>
         <button class="opt-btn" id="btnModeVR">
-          <b>🥽 Headset Stereo VR</b><br>
-          <span style="font-size:0.68rem;opacity:0.8;">In-Headset Stereo & Lens A/B</span>
+          <b>Stage C</b><br>
+          <span style="font-size:0.65rem;opacity:0.85;">Video Verify</span>
         </button>
       </div>
     </div>
@@ -209,7 +216,6 @@
             <input type="text" id="inputJsonImport" placeholder='Paste JSON {"screenToLensDistance":0.04,...}' style="flex:1; background:#1e293b; color:#fff; border:1px solid #334155; padding:4px 6px; border-radius:4px; font-size:0.72rem;">
             <button id="btnImportJson" style="background:#0284c7; color:#fff; border:none; border-radius:4px; padding:4px 8px; font-size:0.72rem; cursor:pointer;">Import</button>
           </div>
-          <div style="font-size:0.60rem; color:var(--muted); margin-top:2px;">(Cardboard URI Protobuf decoding disabled; paste JSON profile)</div>
         </div>
       </div>
 

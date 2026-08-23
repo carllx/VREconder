@@ -1,5 +1,6 @@
 // ==========================================
 // 2D Stereo UI Overlay & Reticle Rendering
+// (Suppressed during Optics Calibration Stage B & C to prevent visual contamination)
 // ==========================================
 import { state } from '../core/state.js';
 import { qCameraInv } from '../core/orientation.js';
@@ -20,9 +21,7 @@ export function projectWorldDirToEye(dirWorld, eyeIndex, halfW, height) {
 
   if (Math.abs(ndcX) > 1.35 || Math.abs(ndcY) > 1.35) return null;
 
-  // 3D Parallax Disparity: Shift left eye inward and right eye inward
   const stereoDisparityPx = (eyeIndex === 0 ? +5.5 : -5.5);
-
   const px = (eyeIndex * halfW) + (ndcX * 0.5 + 0.5) * halfW + stereoDisparityPx;
   const py = (1.0 - (ndcY * 0.5 + 0.5)) * height;
   return { x: px, y: py, ndcX, ndcY, zDepth };
@@ -51,7 +50,7 @@ export function renderStereoUI(uiCtx, gazeEngine, commandModel, videoElement, no
   if (!state.inVR) return;
 
   const halfW = Math.floor(width / 2);
-  const items = getActiveInteractiveItems(commandModel, videoElement);
+  const isOpticsMode = (state.calibrationStage === 'B' || state.calibrationStage === 'C');
 
   for (let eye = 0; eye < 2; eye++) {
     const eyeOffsetX = eye * halfW;
@@ -63,7 +62,7 @@ export function renderStereoUI(uiCtx, gazeEngine, commandModel, videoElement, no
     uiCtx.rect(eyeOffsetX, 0, halfW, height);
     uiCtx.clip();
 
-    // 1. Recenter Calibration Modal
+    // 1. Recenter Calibration Modal (Always allowed when active)
     if (state.recenterCountdown.active) {
       const elapsed = now - state.recenterCountdown.startTime;
       const dur = state.recenterCountdown.durationMs;
@@ -113,7 +112,49 @@ export function renderStereoUI(uiCtx, gazeEngine, commandModel, videoElement, no
       continue;
     }
 
-    // 2. Draw Interactive Circular Icon Nodes
+    // 2. Loading Buffer Splash Indicator in VR Stage C
+    if (state.calibrationStage === 'C' && !state.firstFrameTimings.ready) {
+      uiCtx.fillStyle = 'rgba(15, 23, 42, 0.85)';
+      uiCtx.strokeStyle = '#38bdf8';
+      uiCtx.lineWidth = 1.5;
+      const tw = 260, th = 40;
+      roundRect(uiCtx, eyeCenterX - tw/2, eyeCenterY - th/2, tw, th, 10, true, true);
+
+      uiCtx.font = 'bold 12px -apple-system, monospace';
+      uiCtx.fillStyle = '#38bdf8';
+      uiCtx.textAlign = 'center';
+      uiCtx.textBaseline = 'middle';
+      uiCtx.fillText('⏳ ' + (state.firstFrameTimings.statusText || 'Loading Frame...'), eyeCenterX, eyeCenterY);
+      uiCtx.restore();
+      continue;
+    }
+
+    // In Optics Experiment Stage B & C: Completely suppress legacy playback UI & gaze nodes
+    if (isOpticsMode) {
+      // Show subtle feedback toast if triggered from PC controller
+      if (state.toastText && (now - state.toastTime < 2000)) {
+        const alpha = Math.min(1.0, 1.0 - (now - state.toastTime - 1200) / 800);
+        if (alpha > 0) {
+          uiCtx.fillStyle = 'rgba(15, 23, 42, ' + (0.88 * alpha) + ')';
+          uiCtx.strokeStyle = 'rgba(56, 189, 248, ' + (0.8 * alpha) + ')';
+          uiCtx.lineWidth = 1.2;
+          const tw = 240, th = 30;
+          const toastY = eyeCenterY - 100;
+          roundRect(uiCtx, eyeCenterX - tw/2, toastY - th/2, tw, th, 15, true, true);
+
+          uiCtx.font = 'bold 12px -apple-system, sans-serif';
+          uiCtx.fillStyle = 'rgba(255, 255, 255, ' + alpha + ')';
+          uiCtx.textAlign = 'center';
+          uiCtx.textBaseline = 'middle';
+          uiCtx.fillText(state.toastText, eyeCenterX, toastY);
+        }
+      }
+      uiCtx.restore();
+      continue;
+    }
+
+    // 3. Draw Interactive Circular Icon Nodes (Only in non-calibration general playback)
+    const items = getActiveInteractiveItems(commandModel, videoElement);
     items.forEach(item => {
       if (!item.dirWorld) return;
       const p = projectWorldDirToEye(item.dirWorld, eye, halfW, height);
@@ -124,7 +165,6 @@ export function renderStereoUI(uiCtx, gazeEngine, commandModel, videoElement, no
       const btnR = Math.max(20, (item.radiusDeg * 4.6) * (halfW / 400));
 
       uiCtx.save();
-
       uiCtx.beginPath();
       uiCtx.arc(p.x, p.y, btnR, 0, Math.PI * 2);
 
@@ -162,28 +202,8 @@ export function renderStereoUI(uiCtx, gazeEngine, commandModel, videoElement, no
       uiCtx.textAlign = 'center';
       uiCtx.textBaseline = 'middle';
       uiCtx.fillText(item.icon, p.x, p.y);
-
       uiCtx.restore();
     });
-
-    // 3. Feedback Toast
-    if (state.toastText && (now - state.toastTime < 2000)) {
-      const alpha = Math.min(1.0, 1.0 - (now - state.toastTime - 1200) / 800);
-      if (alpha > 0) {
-        uiCtx.fillStyle = 'rgba(15, 23, 42, ' + (0.88 * alpha) + ')';
-        uiCtx.strokeStyle = 'rgba(56, 189, 248, ' + (0.8 * alpha) + ')';
-        uiCtx.lineWidth = 1.2;
-        const tw = 240, th = 30;
-        const toastY = eyeCenterY - 80;
-        roundRect(uiCtx, eyeCenterX - tw/2, toastY - th/2, tw, th, 15, true, true);
-
-        uiCtx.font = 'bold 12px -apple-system, sans-serif';
-        uiCtx.fillStyle = 'rgba(255, 255, 255, ' + alpha + ')';
-        uiCtx.textAlign = 'center';
-        uiCtx.textBaseline = 'middle';
-        uiCtx.fillText(state.toastText, eyeCenterX, toastY);
-      }
-    }
 
     // 4. Center Gaze Reticle
     const isHovering = gazeEngine.currentHoveredItem !== null;
@@ -199,26 +219,6 @@ export function renderStereoUI(uiCtx, gazeEngine, commandModel, videoElement, no
     uiCtx.arc(eyeCenterX, eyeCenterY, 2.5, 0, Math.PI * 2);
     uiCtx.fillStyle = isHovering ? '#38bdf8' : 'rgba(255, 255, 255, 0.85)';
     uiCtx.fill();
-
-    if (isHovering && gazeEngine.dwellProgress > 0) {
-      uiCtx.beginPath();
-      const startAngle = -Math.PI / 2;
-      const endAngle = startAngle + (Math.PI * 2 * gazeEngine.dwellProgress);
-      uiCtx.arc(eyeCenterX, eyeCenterY, reticleR + 4, startAngle, endAngle);
-      uiCtx.strokeStyle = '#34d399';
-      uiCtx.lineWidth = 3;
-      uiCtx.stroke();
-    }
-
-    if (now - gazeEngine.activationFlashTime < 220) {
-      const pulseProgress = (now - gazeEngine.activationFlashTime) / 220;
-      const pulseR = reticleR + pulseProgress * 20;
-      uiCtx.beginPath();
-      uiCtx.arc(eyeCenterX, eyeCenterY, pulseR, 0, Math.PI * 2);
-      uiCtx.strokeStyle = 'rgba(52, 211, 153, ' + (1.0 - pulseProgress) + ')';
-      uiCtx.lineWidth = 2;
-      uiCtx.stroke();
-    }
 
     uiCtx.restore();
   }

@@ -14,6 +14,19 @@ const HTTPS_PORT = 8443;
 const CERTS_DIR = path.join(__dirname, 'certs');
 const MEDIA_ROOT = 'G:\\Media\\VR\\VR_Video_Processing\\01_Download_Completed';
 
+// Calibration SSE live event streaming to connected devices (PC <-> iPhone)
+const sseClients = new Set();
+function broadcastCalibrationEvent(payload) {
+  const msg = `data: ${JSON.stringify(payload)}\n\n`;
+  for (const client of sseClients) {
+    try {
+      client.write(msg);
+    } catch (e) {
+      sseClients.delete(client);
+    }
+  }
+}
+
 // Scan actual VR videos from G drive and cache in memory
 let cachedVideos = [];
 function scanRealVRVideos() {
@@ -216,6 +229,38 @@ function handleRequest(req, res, isHttps) {
     }
   }
 
+  // Real-time Calibration Events SSE stream (PC <-> iPhone live bridge)
+  if (pathname === '/api/calibration/events') {
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      'Connection': 'keep-alive',
+      'Access-Control-Allow-Origin': '*'
+    });
+    res.write('data: {"type":"connected"}\n\n');
+    sseClients.add(res);
+    req.on('close', () => { sseClients.delete(res); });
+    return;
+  }
+
+  // Real-time Calibration Control endpoint (broadcasts actions to connected clients)
+  if (pathname === '/api/calibration/control' && req.method === 'POST') {
+    let body = '';
+    req.on('data', chunk => { body += chunk; });
+    req.on('end', () => {
+      try {
+        const payload = JSON.parse(body);
+        broadcastCalibrationEvent(payload);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ status: 'ok', broadcasted: true }));
+      } catch (err) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: err.message }));
+      }
+    });
+    return;
+  }
+
   // Telemetry endpoint
   if (pathname === '/api/telemetry' && req.method === 'POST') {
     let body = '';
@@ -364,11 +409,13 @@ function handleRequest(req, res, isHttps) {
     }
   }
 
-  // Static assets (.js, .mjs, .css, .json, .png, .svg)
-  const safePath = path.normalize(path.join(__dirname, pathname));
+  // Static assets (.html, .js, .mjs, .css, .json, .png, .svg)
+  let safePath = path.normalize(path.join(__dirname, pathname));
+  if (pathname === '/controller') safePath = path.join(__dirname, 'controller.html');
   if (safePath.startsWith(__dirname) && fs.existsSync(safePath) && fs.statSync(safePath).isFile()) {
     const ext = path.extname(safePath).toLowerCase();
     const mimeTypes = {
+      '.html': 'text/html; charset=utf-8',
       '.js': 'text/javascript; charset=utf-8',
       '.mjs': 'text/javascript; charset=utf-8',
       '.css': 'text/css; charset=utf-8',

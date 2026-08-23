@@ -1,8 +1,7 @@
 // ==========================================
-// Staged Calibration & Diagnostic UI Controls
-// (Synthetic Scene Toggle, Full Custom Viewer Inputs & JSON Import)
+// Staged Calibration & Diagnostic UI Controls (Stage A / B / C & PC Remote Bridge)
 // ==========================================
-import { showFeedbackToast } from '../core/state.js';
+import { state, showFeedbackToast } from '../core/state.js';
 import { createDefaultViewerProfile, deriveCardboardEyeGeometry } from '../core/projection-profile.js';
 import { activeScreenProfile } from '../core/screen-profile.js';
 
@@ -12,6 +11,7 @@ export class CalibrationUI {
     this.mediaController = options.mediaController;
     this.diagnosticOverlay = options.diagnosticOverlay;
     this.vrRenderer = options.vrRenderer;
+    this.commandModel = options.commandModel;
     this.onProfileChanged = options.onProfileChanged;
     this.onEnterVR = options.onEnterVR;
     this.onExitVR = options.onExitVR;
@@ -24,10 +24,10 @@ export class CalibrationUI {
     this.activeViewerProfile = this.storage.activeViewerProfile;
 
     this.initDOM();
+    this.initSSEBridge();
   }
 
   initDOM() {
-    this.panel = document.getElementById('calibrationPanel');
     this.btnModeDiagnostic = document.getElementById('btnModeDiagnostic');
     this.btnModeVR = document.getElementById('btnModeVR');
     this.btnToggleScene = document.getElementById('btnToggleScene');
@@ -83,6 +83,95 @@ export class CalibrationUI {
     this.bindEvents();
   }
 
+  initSSEBridge() {
+    try {
+      const es = new EventSource('/api/calibration/events');
+      es.onopen = () => { state.pcConnected = true; };
+      es.onerror = () => { state.pcConnected = false; };
+      es.onmessage = (e) => {
+        try {
+          const msg = JSON.parse(e.data);
+          this.handleRemoteControlAction(msg);
+        } catch (err) {}
+      };
+    } catch (e) {}
+  }
+
+  handleRemoteControlAction(msg) {
+    if (!msg || !msg.action) return;
+    const act = msg.action;
+
+    if (act === 'set_stage') {
+      this.switchStage(msg.stage);
+    } else if (act === 'set_lens_correction') {
+      if (this.activeViewerProfile) {
+        this.activeViewerProfile.lensCorrectionEnabled = msg.enabled === true;
+        this.activeViewerProfile.isCalibrated = true;
+        this.syncStageBToUI();
+        if (this.onProfileChanged) this.onProfileChanged(this.activeVideoProfile, this.activeViewerProfile);
+        showFeedbackToast(`Lens: ${this.activeViewerProfile.lensCorrectionEnabled ? 'ON' : 'OFF'}`);
+      }
+    } else if (act === 'set_viewer_params') {
+      if (!this.activeViewerProfile) return;
+      if (!this.activeViewerProfile.distortion) this.activeViewerProfile.distortion = {};
+      if (typeof msg.k1 === 'number') this.activeViewerProfile.distortion.k1 = msg.k1;
+      if (typeof msg.k2 === 'number') this.activeViewerProfile.distortion.k2 = msg.k2;
+      if (typeof msg.screenToLensMm === 'number') this.activeViewerProfile.screenToLensDistance = msg.screenToLensMm / 1000;
+      if (typeof msg.interLensMm === 'number') this.activeViewerProfile.interLensDistance = msg.interLensMm / 1000;
+      if (typeof msg.trayToLensMm === 'number') this.activeViewerProfile.trayToLensDistance = msg.trayToLensMm / 1000;
+      if (typeof msg.maxFovDeg === 'number') {
+        const f = msg.maxFovDeg;
+        this.activeViewerProfile.maxFovAngles = { outerDeg: f, innerDeg: f, upperDeg: f, lowerDeg: f };
+      }
+      this.activeViewerProfile.isCalibrated = true;
+      this.syncStageBToUI();
+      if (this.onProfileChanged) this.onProfileChanged(this.activeVideoProfile, this.activeViewerProfile);
+    } else if (act === 'recenter' && this.commandModel) {
+      this.commandModel.recenter();
+    } else if (act === 'exit_vr' && this.onExitVR) {
+      this.switchStage('A');
+    } else if (act === 'playPause' && this.commandModel) {
+      this.commandModel.playPause();
+    } else if (act === 'seekForward' && this.commandModel) {
+      this.commandModel.seekForward(5);
+    } else if (act === 'seekBackward' && this.commandModel) {
+      this.commandModel.seekBackward(5);
+    } else if (act === 'next' && this.commandModel) {
+      this.commandModel.next();
+    } else if (act === 'previous' && this.commandModel) {
+      this.commandModel.previous();
+    } else if (act === 'save_viewer_profile') {
+      this.storage.saveViewerProfile(this.activeViewerProfile);
+      showFeedbackToast('💾 Viewer Profile Saved');
+    } else if (act === 'save_video_profile' && this.activeVideoProfile) {
+      this.storage.saveVideoProfile(this.activeVideoProfile);
+      showFeedbackToast('💾 Video Profile Saved');
+    }
+  }
+
+  switchStage(stage) {
+    state.calibrationStage = stage;
+    if (stage === 'A') {
+      // Stage A: Flat Diagnostic View (No Optics, Real Video)
+      if (this.onExitVR) this.onExitVR();
+      if (this.vrRenderer) this.vrRenderer.sceneType = 0;
+      this.currentMode = 'diagnostic';
+      showFeedbackToast('Stage A: Flat Diagnostic');
+    } else if (stage === 'B') {
+      // Stage B: Viewer Optics (Synthetic Grid Only, Headset Stereo)
+      if (this.vrRenderer) this.vrRenderer.sceneType = 1;
+      this.currentMode = 'vr';
+      if (this.onEnterVR) this.onEnterVR();
+      showFeedbackToast('Stage B: Synthetic Grid');
+    } else if (stage === 'C') {
+      // Stage C: Real Video Verification (Headset Stereo, Fixed Optics)
+      if (this.vrRenderer) this.vrRenderer.sceneType = 0;
+      this.currentMode = 'vr';
+      if (this.onEnterVR) this.onEnterVR();
+      showFeedbackToast('Stage C: Video Verification');
+    }
+  }
+
   setVideoProfile(profile) {
     this.activeVideoProfile = profile;
     this.syncStageAToUI();
@@ -112,7 +201,7 @@ export class CalibrationUI {
 
     if (this.txtMappingStatus) {
       if (vp.confidence === 'unverified' || vp.projection === 'unknown') {
-        this.txtMappingStatus.textContent = '⚠️ Untagged Media (Select Candidate Projection)';
+        this.txtMappingStatus.textContent = '⚠️ UNVERIFIED PREVIEW (Equirect-180 Candidate)';
         this.txtMappingStatus.style.color = '#f87171';
       } else {
         this.txtMappingStatus.textContent = `✓ Calibrated: ${vp.projection} (${vp.stereoMode})`;
@@ -151,15 +240,14 @@ export class CalibrationUI {
     if (this.txtDerivedFov) {
       const geom = deriveCardboardEyeGeometry(activeScreenProfile, hp);
       const l = geom.leftEye;
-      const r = geom.rightEye;
-      const statusStr = hp.isCalibrated ? '<span style="color:#34d399;">✓ [CALIBRATED PROFILE]</span>' : '<span style="color:#f87171;">⚠️ [UNCALIBRATED BASELINE — Lens Pass Not Evaluated]</span>';
+      const statusStr = hp.isCalibrated ? '<span style="color:#34d399;">✓ [CALIBRATED PROFILE]</span>' : '<span style="color:#f87171;">⚠️ [UNCALIBRATED BASELINE]</span>';
       this.txtDerivedFov.innerHTML = `
         ${statusStr}<br>
         <b>Left Eye Virt FOV:</b> L:${l.fovDeg.left.toFixed(1)}° R:${l.fovDeg.right.toFixed(1)}° U:${l.fovDeg.top.toFixed(1)}° D:${l.fovDeg.bottom.toFixed(1)}°<br>
         <b>Phys Tan:</b> [${l.physTanBounds[0].toFixed(3)}, ${l.physTanBounds[1].toFixed(3)}, ${l.physTanBounds[2].toFixed(3)}, ${l.physTanBounds[3].toFixed(3)}]<br>
         <b>Virt Tan:</b> [${l.virtTanBounds[0].toFixed(3)}, ${l.virtTanBounds[1].toFixed(3)}, ${l.virtTanBounds[2].toFixed(3)}, ${l.virtTanBounds[3].toFixed(3)}]<br>
         <b>Physical Tan Scale:</b> [${geom.physicalTanScale[0].toFixed(3)}, ${geom.physicalTanScale[1].toFixed(3)}]<br>
-        <span style="opacity:0.75;">Screen: ${activeScreenProfile.deviceModel} (141.2×65.1mm, Bezel Est: 3.0mm)</span>
+        <span style="opacity:0.75;">Screen: ${activeScreenProfile.deviceModel}</span>
       `;
     }
   }
@@ -172,55 +260,33 @@ export class CalibrationUI {
         this.btnToggleLens.textContent = '⚪ LENS CORRECTION: OFF (Uncalibrated Baseline)';
         this.btnToggleLens.style.background = '#475569';
       } else {
-        this.btnToggleLens.textContent = isEnabled ? '🛡️ LENS CORRECTION: ON (Cardboard Screen Pre-Warp)' : '⚪ LENS CORRECTION: OFF (Ideal Undistorted)';
+        this.btnToggleLens.textContent = isEnabled ? '🛡️ LENS CORRECTION: ON (Cardboard Pre-Warp)' : '⚪ LENS CORRECTION: OFF (Ideal Undistorted)';
         this.btnToggleLens.style.background = isEnabled ? '#059669' : '#475569';
       }
     }
   }
 
   bindEvents() {
-    // Mode Switch
     if (this.btnModeDiagnostic) {
-      this.btnModeDiagnostic.addEventListener('click', () => {
-        this.currentMode = 'diagnostic';
-        this.btnModeDiagnostic.classList.add('active');
-        if (this.btnModeVR) this.btnModeVR.classList.remove('active');
-        if (this.onExitVR) this.onExitVR();
-      });
+      this.btnModeDiagnostic.addEventListener('click', () => this.switchStage('A'));
     }
 
     if (this.btnModeVR) {
-      this.btnModeVR.addEventListener('click', () => {
-        this.currentMode = 'vr';
-        this.btnModeVR.classList.add('active');
-        if (this.btnModeDiagnostic) this.btnModeDiagnostic.classList.remove('active');
-        if (this.onEnterVR) this.onEnterVR();
-      });
+      this.btnModeVR.addEventListener('click', () => this.switchStage('C'));
     }
 
-    // Toggle Scene Type (Video vs Synthetic Calibration Grid)
     if (this.btnToggleScene) {
       this.btnToggleScene.addEventListener('click', () => {
-        if (this.vrRenderer) {
-          this.vrRenderer.sceneType = (this.vrRenderer.sceneType === 0) ? 1 : 0;
-          this.btnToggleScene.textContent = (this.vrRenderer.sceneType === 1) ? '▦ Scene: Synthetic Grid' : '🎬 Scene: Video Source';
-          this.btnToggleScene.classList.toggle('active', this.vrRenderer.sceneType === 1);
-          showFeedbackToast(`Scene: ${this.vrRenderer.sceneType === 1 ? 'Synthetic Calibration Grid' : 'Video Source'}`);
-        }
+        if (state.calibrationStage === 'B') this.switchStage('C');
+        else this.switchStage('B');
       });
     }
 
-    // Diagnostic Toolbar
     if (this.btnFreeze) {
       this.btnFreeze.addEventListener('click', () => {
         const v = this.mediaController.video;
-        if (v.paused) {
-          v.play();
-          this.btnFreeze.textContent = '⏸ Freeze';
-        } else {
-          v.pause();
-          this.btnFreeze.textContent = '▶ Play';
-        }
+        if (v.paused) { v.play(); this.btnFreeze.textContent = '⏸ Freeze'; }
+        else { v.pause(); this.btnFreeze.textContent = '▶ Play'; }
       });
     }
 
@@ -263,7 +329,6 @@ export class CalibrationUI {
       });
     }
 
-    // Stage A Event Listeners
     const notifyChange = () => {
       if (this.onProfileChanged) this.onProfileChanged(this.activeVideoProfile, this.activeViewerProfile);
     };
@@ -335,12 +400,11 @@ export class CalibrationUI {
         if (this.activeVideoProfile) {
           await this.storage.saveVideoProfile(this.activeVideoProfile);
           this.syncStageAToUI();
-          showFeedbackToast('💾 Projection Profile Saved for this Video');
+          showFeedbackToast('💾 Projection Profile Saved');
         }
       });
     }
 
-    // Stage B Event Listeners
     if (this.selViewerPreset) {
       this.selViewerPreset.addEventListener('change', (e) => {
         const presetId = e.target.value;
@@ -355,12 +419,12 @@ export class CalibrationUI {
     if (this.btnToggleLens) {
       this.btnToggleLens.addEventListener('click', () => {
         if (!this.activeViewerProfile || !this.activeViewerProfile.isCalibrated) {
-          showFeedbackToast('⚠️ Select or Import a Calibrated Viewer Profile first');
+          showFeedbackToast('⚠️ Select or Import a Calibrated Profile first');
           return;
         }
         this.activeViewerProfile.lensCorrectionEnabled = !this.activeViewerProfile.lensCorrectionEnabled;
         this.updateLensBtnState();
-        showFeedbackToast(`Lens Correction: ${this.activeViewerProfile.lensCorrectionEnabled ? 'ON' : 'OFF'}`);
+        showFeedbackToast(`Lens: ${this.activeViewerProfile.lensCorrectionEnabled ? 'ON' : 'OFF'}`);
         notifyChange();
       });
     }
@@ -379,7 +443,6 @@ export class CalibrationUI {
     if (this.rangeDistortK1) this.rangeDistortK1.addEventListener('input', updateDistort);
     if (this.rangeDistortK2) this.rangeDistortK2.addEventListener('input', updateDistort);
 
-    // Custom Profile Manual Input listeners
     const updateCustomParams = () => {
       if (!this.activeViewerProfile) return;
       this.activeViewerProfile.screenToLensDistance = parseFloat(this.inputScreenToLens.value || 40) / 1000;
@@ -399,13 +462,11 @@ export class CalibrationUI {
     if (this.inputTrayToLens) this.inputTrayToLens.addEventListener('input', updateCustomParams);
     if (this.inputMaxFov) this.inputMaxFov.addEventListener('input', updateCustomParams);
 
-    // JSON Parameter Import (Cardboard URI parsing unsupported in this prototype)
     if (this.btnImportJson) {
       this.btnImportJson.addEventListener('click', () => {
         const raw = (this.inputJsonImport ? this.inputJsonImport.value : '').trim();
-        if (!raw) return;
-        if (!raw.startsWith('{')) {
-          showFeedbackToast('⚠️ Cardboard URI Protobuf decoding not supported; please paste JSON profile');
+        if (!raw || !raw.startsWith('{')) {
+          showFeedbackToast('⚠️ Paste JSON Profile');
           return;
         }
         try {
@@ -413,9 +474,9 @@ export class CalibrationUI {
           this.activeViewerProfile = { ...createDefaultViewerProfile('custom:calibrated'), ...parsed, isCalibrated: true };
           this.syncStageBToUI();
           notifyChange();
-          showFeedbackToast('✓ Viewer Profile JSON Imported Successfully');
+          showFeedbackToast('✓ Profile JSON Imported');
         } catch (e) {
-          showFeedbackToast('⚠️ JSON Parse Error: ' + e.message);
+          showFeedbackToast('⚠️ JSON Error: ' + e.message);
         }
       });
     }

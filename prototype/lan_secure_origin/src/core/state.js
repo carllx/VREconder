@@ -10,6 +10,22 @@ export const state = {
   activePattern: 'B', // Default to Pattern B (Radial)
   dwellThresholdMs: 1000,
   
+  // Staged Calibration Workflow: 'A' (Source Geometry), 'B' (Viewer Optics), 'C' (Real Video Verification)
+  calibrationStage: 'A',
+  pcConnected: false,
+
+  // First-Frame Timing & Black-Screen Instrumentation
+  firstFrameTimings: {
+    selectedAt: 0,
+    metadataAt: 0,
+    canplayAt: 0,
+    firstFrameDecodedAt: 0,
+    firstTextureUploadAt: 0,
+    firstRenderAt: 0,
+    ready: false,
+    statusText: 'Ready'
+  },
+
   // Video Playlist
   videoList: [],
   currentVideoIndex: 0,
