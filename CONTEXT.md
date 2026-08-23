@@ -23,3 +23,15 @@ _Avoid_: Temporary transcode, Proxy
 **VR Mapping**:
 The declared interpretation of a video's stereo layout and projection geometry, such as SBS or TB/OU combined with 180° or 360° equirectangular projection.
 _Avoid_: Automatic projection detection
+
+**Playback Item**:
+The minimal unit handed to the VR Web Player for one viewing choice: a selected playable source plus the VR-specific declaration needed to render it correctly.
+_Avoid_: Video Asset, Library Item
+
+**Playback Queue**:
+An ordered collection of Playback Items used for selection, previous/next navigation, automatic advance, and loop playback.
+_Avoid_: Folder, Playlist database
+
+**Media Library**:
+The media-management side that discovers and describes Video Assets, understands codec/container differences, and selects Source Media or a Playback Variant before handing playback to the Player.
+_Avoid_: Player, Playback Queue
