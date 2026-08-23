@@ -189,6 +189,16 @@ function handleRequest(req, res, isHttps) {
     return;
   }
 
+  // Web App Manifest
+  if (pathname === '/manifest.json') {
+    const manifestPath = path.join(__dirname, 'manifest.json');
+    if (fs.existsSync(manifestPath)) {
+      res.writeHead(200, { 'Content-Type': 'application/manifest+json; charset=utf-8' });
+      fs.createReadStream(manifestPath).pipe(res);
+      return;
+    }
+  }
+
   // CA certificate download endpoint
   if (pathname === '/ca.crt' || pathname === '/download-ca') {
     const caFile = path.join(CERTS_DIR, 'ca.crt');
@@ -218,7 +228,12 @@ function handleRequest(req, res, isHttps) {
         
         const s = latestTelemetry.state || {};
         const reason = latestTelemetry.reason || 'update';
-        console.log(`[VR Telemetry (${reason})] inVR: ${s.inVR} | FPS: ${s.fps} | Motion: ${s.motionPermission} (${s.motionEventCount} evts) | Angle: ${s.screenAngle}° | Time: ${s.currentTime}s | Drop: ${s.droppedFrames}/${s.totalVideoFrames} | Stereo: ${s.stereo}/${s.projection}°`);
+        const fwd = s.cameraForward ? `fwd:(${s.cameraForward.map(n=>n.toFixed(2)).join(',')})` : '';
+        const up = s.cameraUp ? `up:(${s.cameraUp.map(n=>n.toFixed(2)).join(',')})` : '';
+        const sa = `stand:${s.standalone ? 'YES' : 'no'}`;
+        const vp = s.viewport ? `${s.viewport.w}x${s.viewport.h}` : '';
+
+        console.log(`[Telemetry (${reason})] inVR:${s.inVR} | ${sa} | ang:${s.screenAngle}° | FPS:${s.fps} | ${fwd} ${up} | mode:${s.stereoMode} | time:${s.currentTime}s | vp:${vp}`);
         
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ status: 'ok', received: true }));

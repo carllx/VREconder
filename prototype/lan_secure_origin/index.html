@@ -5,7 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="VREconder">
   <meta name="apple-touch-fullscreen" content="yes">
+  <link rel="manifest" href="/manifest.json">
   <title>VREconder VR Web Player</title>
   <style>
     :root {
@@ -17,7 +19,7 @@
       --blue: #2563eb;
       --green: #10b981;
       --red: #ef4444;
-      --purple: #8b5cf6;
+      --amber: #f59e0b;
     }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     html, body {
@@ -51,13 +53,13 @@
       height: 100vh;
       z-index: 10;
       background: rgba(9, 13, 22, 0.94);
-      backdrop-filter: blur(10px);
-      -webkit-backdrop-filter: blur(10px);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
       padding: 16px;
       overflow-y: auto;
       display: flex;
       flex-direction: column;
-      gap: 12px;
+      gap: 10px;
       transition: opacity 0.25s ease, visibility 0.25s ease;
     }
     #uiOverlay.hidden {
@@ -70,17 +72,27 @@
       background: var(--card);
       border: 1px solid var(--border);
       border-radius: 12px;
-      padding: 14px;
+      padding: 12px 14px;
     }
     h1 { font-size: 1.15rem; font-weight: 700; display: flex; align-items: center; gap: 8px; color: #fff; }
     .subtitle { font-size: 0.8rem; color: var(--muted); margin-top: 2px; }
 
-    .tip-box {
-      background: rgba(37, 99, 235, 0.15);
+    .status-badge {
+      display: inline-block;
+      padding: 3px 8px;
+      border-radius: 6px;
+      font-size: 0.75rem;
+      font-weight: bold;
+    }
+    .badge-standalone { background: #065f46; color: #34d399; }
+    .badge-browser { background: #78350f; color: #fbbf24; }
+
+    .pwa-instruction {
+      background: rgba(37, 99, 235, 0.12);
       border: 1px solid rgba(59, 130, 246, 0.3);
-      padding: 10px 12px;
+      padding: 10px;
       border-radius: 8px;
-      font-size: 0.78rem;
+      font-size: 0.8rem;
       color: #93c5fd;
       line-height: 1.4;
     }
@@ -89,9 +101,9 @@
       display: flex;
       flex-direction: column;
       gap: 6px;
-      margin-top: 10px;
+      margin-top: 8px;
     }
-    .label { font-size: 0.75rem; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
+    .label { font-size: 0.72rem; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
 
     select {
       width: 100%;
@@ -105,26 +117,31 @@
       -webkit-appearance: none;
     }
 
-    .btn-group {
-      display: flex;
+    .diag-btn-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
       gap: 6px;
+      margin-top: 6px;
     }
-    .btn-group button {
-      flex: 1;
+    .diag-btn-grid button {
       padding: 10px 8px;
       background: #1e293b;
       color: #94a3b8;
       border: 1px solid #334155;
       border-radius: 6px;
-      font-size: 0.82rem;
+      font-size: 0.8rem;
       font-weight: 600;
       cursor: pointer;
+      text-align: center;
       touch-action: manipulation;
     }
-    .btn-group button.active {
+    .diag-btn-grid button.active {
       background: var(--blue);
       color: #fff;
       border-color: var(--blue);
+    }
+    .diag-btn-grid button.diag-highlight {
+      border: 1px dashed #f59e0b;
     }
 
     .btn-main {
@@ -133,7 +150,7 @@
       color: #fff;
       font-size: 1.05rem;
       font-weight: 700;
-      padding: 15px 20px;
+      padding: 14px 20px;
       border-radius: 10px;
       border: none;
       cursor: pointer;
@@ -141,7 +158,7 @@
       align-items: center;
       justify-content: center;
       gap: 8px;
-      margin-top: 8px;
+      margin-top: 6px;
       box-shadow: 0 4px 14px rgba(37, 99, 235, 0.4);
       touch-action: manipulation;
     }
@@ -150,10 +167,10 @@
     .metrics-grid {
       display: grid;
       grid-template-columns: 1fr 1fr;
-      gap: 6px;
-      font-size: 0.8rem;
+      gap: 5px;
+      font-size: 0.78rem;
       font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, monospace;
-      background: rgba(0,0,0,0.3);
+      background: rgba(0,0,0,0.35);
       padding: 8px;
       border-radius: 8px;
     }
@@ -165,7 +182,7 @@
       background: rgba(239, 68, 68, 0.2);
       border: 1px solid var(--red);
       color: #fca5a5;
-      padding: 10px;
+      padding: 8px;
       border-radius: 8px;
       font-size: 0.8rem;
       word-break: break-all;
@@ -180,9 +197,9 @@
       z-index: 20;
       display: flex;
       gap: 8px;
-      background: rgba(15, 23, 42, 0.85);
-      border: 1px solid rgba(255,255,255,0.15);
-      padding: 8px 12px;
+      background: rgba(15, 23, 42, 0.88);
+      border: 1px solid rgba(255,255,255,0.2);
+      padding: 8px 14px;
       border-radius: 30px;
       backdrop-filter: blur(8px);
       -webkit-backdrop-filter: blur(8px);
@@ -198,8 +215,8 @@
       color: #fff;
       border: none;
       border-radius: 20px;
-      padding: 10px 16px;
-      font-size: 0.85rem;
+      padding: 10px 14px;
+      font-size: 0.82rem;
       font-weight: 600;
       cursor: pointer;
       display: flex;
@@ -228,12 +245,11 @@
   <canvas id="glCanvas"></canvas>
   <video id="sourceVideo" playsinline preload="metadata" crossorigin="anonymous" muted></video>
 
-  <!-- In-VR Floating Quick Bar -->
+  <!-- In-VR Floating Quick Bar (Tap screen in VR to reveal) -->
   <div id="vrFloatingBar" class="fade-out">
     <button class="vr-btn vr-btn-reset" id="btnVrReset">🎯 Recenter View</button>
+    <button class="vr-btn" id="btnVrToggleStereo">🔀 Step L/R</button>
     <button class="vr-btn" id="btnVrPlayPause">⏯ Play/Pause</button>
-    <button class="vr-btn" id="btnVrSeekBack">⏪ -1m</button>
-    <button class="vr-btn" id="btnVrSeekFwd">⏩ +1m</button>
     <button class="vr-btn vr-btn-exit" id="btnVrExit">⚙ Exit VR</button>
   </div>
 
@@ -242,67 +258,55 @@
     <div id="errorBanner"></div>
 
     <div class="card">
-      <h1>🥽 VREconder VR Web Player</h1>
-      <div class="subtitle">Minimal Safari VR Rendering &bull; Stereo Split &bull; Head Tracking</div>
+      <div style="display:flex; justify-content:space-between; align-items:center;">
+        <h1>🥽 VREconder Minimal VR Player</h1>
+        <span class="status-badge" id="badgeDisplayMode">Browser Tab</span>
+      </div>
+      <div class="subtitle">W3C DeviceOrientation &bull; Full-Pose Recenter &bull; 180° SBS Diagnostic</div>
     </div>
 
-    <!-- Safari Fullscreen Tip -->
-    <div class="tip-box">
-      <b>💡 Safari 全屏建议</b>：若顶部有地址栏，可点击地址栏左侧【<b>大小 / aA</b>】&rarr;【<b>隐藏工具栏</b>】，或通过 Safari 分享按钮【<b>添加到主屏幕</b>】体验 100% 纯净原生全屏。
+    <!-- Home Screen Standalone Check -->
+    <div class="pwa-instruction" id="pwaBox">
+      <b>📱 iOS 全屏要求（Home Screen Standalone）</b>：<br>
+      若当前为普通 Safari 标签页，请点击 Safari 底部【<b>分享</b>】&rarr;【<b>添加到主屏幕</b>】。从主屏幕启动将彻底抹除 Safari 地址栏与底部导航栏。
     </div>
 
-    <!-- Media Selector -->
+    <!-- Media Source -->
     <div class="card">
       <div class="label">1. VR Media Source (G:\Media\VR)</div>
       <select id="videoSelect">
         <option value="4K/4096_2048_crf18_avc1-Kururugi Aoi - WAVR224.mp4">[6.09 GB] 4K/4096_2048_crf18_avc1-Kururugi Aoi - WAVR224.mp4</option>
       </select>
 
-      <div class="metrics-grid" style="margin-top:8px;">
-        <div class="m-item">Video Res: <span class="m-val" id="valVideoRes">--</span></div>
-        <div class="m-item">Duration: <span class="m-val" id="valVideoDur">--</span></div>
+      <div class="metrics-grid" style="margin-top:6px;">
+        <div class="m-item">Res: <span class="m-val" id="valVideoRes">--</span></div>
+        <div class="m-item">Dur: <span class="m-val" id="valVideoDur">--</span></div>
         <div class="m-item">Time: <span class="m-val" id="valVideoTime">0.00s</span></div>
-        <div class="m-item">HTTP Range: <span class="m-val" id="valRangeStatus">206 OK</span></div>
+        <div class="m-item">Range: <span class="m-val" id="valRangeStatus">206 OK</span></div>
       </div>
     </div>
 
-    <!-- VR Mapping Controls -->
+    <!-- Stereo Diagnosis Strategy -->
     <div class="card">
-      <div class="label">2. VR Mapping (Stereo &bull; Projection &bull; Eye)</div>
-      
-      <div class="control-row">
-        <div class="label">Stereo Layout</div>
-        <div class="btn-group" id="grpStereo">
-          <button class="active" data-val="SBS">SBS (Side-by-Side)</button>
-          <button data-val="TB">TB (Top-Bottom / OU)</button>
-        </div>
-      </div>
-
-      <div class="control-row">
-        <div class="label">Projection Geometry</div>
-        <div class="btn-group" id="grpProjection">
-          <button class="active" data-val="180">180° Hemisphere</button>
-          <button data-val="360">360° Sphere</button>
-        </div>
-      </div>
-
-      <div class="control-row">
-        <div class="label">Eye Order</div>
-        <div class="btn-group" id="grpEye">
-          <button class="active" data-val="normal">Normal (L-R)</button>
-          <button data-val="swap">Eye Swap (R-L)</button>
-        </div>
+      <div class="label">2. Stereo Diagnosis Mode (Order: Step 1 &rarr; Step 2 &rarr; Step 3)</div>
+      <div class="diag-btn-grid" id="grpStereoMode">
+        <button class="active diag-highlight" data-val="0">STEP 1: LEFT &rarr; Both Eyes (合焦基准)</button>
+        <button data-val="1">STEP 2: SBS Normal (L&rarr;L, R&rarr;R)</button>
+        <button data-val="2">STEP 3: SBS Eye Swap (R&rarr;L, L&rarr;R)</button>
+        <button data-val="3">TB Normal (Top/Bottom)</button>
+        <button data-val="4">TB Eye Swap</button>
+        <button data-val="5">360° Sphere SBS</button>
       </div>
     </div>
 
     <!-- Enter VR Button -->
     <div class="card">
-      <div class="label">3. Launch Headset View</div>
+      <div class="label">3. Launch VR Headset View</div>
       <button class="btn-main" id="btnEnterVR">
-        <span>🚀 Enter VR / Enable Motion</span>
+        <span>🚀 Enter VR / Recenter & Enable Motion</span>
       </button>
       <div class="subtitle" style="text-align:center; margin-top:6px;">
-        手机打横（垂直于地面面向正前方），点击按钮戴入 VR 眼镜
+        手机打横并立起（面向正前方），点击按钮戴入 VR 眼镜
       </div>
     </div>
 
@@ -314,13 +318,13 @@
       </div>
       <div class="metrics-grid">
         <div class="m-item">FPS: <span class="m-val" id="valFps">0.0</span></div>
-        <div class="m-item">Renderer: <span class="m-val">WebGL Stereo Shader</span></div>
-        <div class="m-item">Screen Angle: <span class="m-val" id="valScreenAngle">0°</span></div>
-        <div class="m-item">Motion Perm: <span class="m-val" id="valMotionPerm">--</span></div>
-        <div class="m-item">Yaw (Alpha): <span class="m-val" id="valYaw">--</span></div>
-        <div class="m-item">Pitch (Beta): <span class="m-val" id="valPitch">--</span></div>
-        <div class="m-item">Roll (Gamma): <span class="m-val" id="valRoll">--</span></div>
-        <div class="m-item">Total Seeks: <span class="m-val" id="valSeekCount">0</span></div>
+        <div class="m-item">Screen Ang: <span class="m-val" id="valScreenAngle">0°</span></div>
+        <div class="m-item">Cam Fwd: <span class="m-val" id="valCamFwd">0,0,-1</span></div>
+        <div class="m-item">Cam Up: <span class="m-val" id="valCamUp">0,1,0</span></div>
+        <div class="m-item">Motion: <span class="m-val" id="valMotionPerm">--</span></div>
+        <div class="m-item">Events: <span class="m-val" id="valEventCount">0</span></div>
+        <div class="m-item">Viewport: <span class="m-val" id="valViewport">--</span></div>
+        <div class="m-item">Dropped: <span class="m-val" id="valDropped">0/0</span></div>
       </div>
     </div>
   </div>
@@ -339,7 +343,7 @@
     window.onunhandledrejection = (e) => { showError(e.reason ? (e.reason.message || e.reason) : e); };
 
     // ==========================================
-    // 1. Math: Quaternion & Standard Tait-Bryan
+    // 1. Math: Quaternion & Vector3 Library
     // ==========================================
     class Quat {
       constructor(x = 0, y = 0, z = 0, w = 1) {
@@ -352,15 +356,22 @@
         this.x = q.x; this.y = q.y; this.z = q.z; this.w = q.w;
         return this;
       }
-      setFromEuler(x, y, z, order = 'YXZ') {
+      setIdentity() {
+        this.x = 0; this.y = 0; this.z = 0; this.w = 1;
+        return this;
+      }
+      invert() {
+        // For unit quaternions, inverse is conjugate
+        this.x = -this.x; this.y = -this.y; this.z = -this.z;
+        return this;
+      }
+      setFromEulerYXZ(x, y, z) {
         const c1 = Math.cos(x / 2), c2 = Math.cos(y / 2), c3 = Math.cos(z / 2);
         const s1 = Math.sin(x / 2), s2 = Math.sin(y / 2), s3 = Math.sin(z / 2);
-        if (order === 'YXZ') {
-          this.x = s1 * c2 * c3 + c1 * s2 * s3;
-          this.y = c1 * s2 * c3 - s1 * c2 * s3;
-          this.z = c1 * c2 * s3 - s1 * s2 * c3;
-          this.w = c1 * c2 * c3 + s1 * s2 * s3;
-        }
+        this.x = s1 * c2 * c3 + c1 * s2 * s3;
+        this.y = c1 * s2 * c3 - s1 * c2 * s3;
+        this.z = c1 * c2 * s3 - s1 * s2 * c3;
+        this.w = c1 * c2 * c3 + s1 * s2 * s3;
         return this;
       }
       setFromAxisAngle(ax, ay, az, rad) {
@@ -379,6 +390,19 @@
         this.w = aw * bw - ax * bx - ay * by - az * bz;
         return this;
       }
+      transformVector(v) {
+        const vx = v[0], vy = v[1], vz = v[2];
+        const qx = this.x, qy = this.y, qz = this.z, qw = this.w;
+        const ix = qw * vx + qy * vz - qz * vy;
+        const iy = qw * vy + qz * vx - qx * vz;
+        const iz = qw * vz + qx * vy - qy * vx;
+        const iw = -qx * vx - qy * vy - qz * vz;
+        return [
+          ix * qw + iw * -qx + iy * -qz - iz * -qy,
+          iy * qw + iw * -qy + iz * -qx - ix * -qz,
+          iz * qw + iw * -qz + ix * -qy - iy * -qx
+        ];
+      }
       toMat3() {
         const x = this.x, y = this.y, z = this.z, w = this.w;
         const x2 = x + x, y2 = y + y, z2 = z + z;
@@ -394,28 +418,33 @@
     }
 
     // ==========================================
-    // 2. App State
+    // 2. App State & Presentation Detection
     // ==========================================
+    const isStandalone = (window.navigator.standalone === true) || window.matchMedia('(display-mode: standalone)').matches;
+
     const state = {
       inVR: false,
+      standalone: isStandalone,
       secureContext: window.isSecureContext === true,
-      renderer: 'WebGL Stereo Raymarching',
-      stereo: 'SBS',       // SBS | TB
-      projection: '180',   // 180 | 360
-      eyeOrder: 'normal',  // normal | swap
+      stereoMode: 0, // 0: LEFT_MONO (Step 1), 1: SBS_NORMAL (Step 2), 2: SBS_SWAP (Step 3), 3: TB_NORMAL, 4: TB_SWAP, 5: 360_SBS
       videoPath: '4K/4096_2048_crf18_avc1-Kururugi Aoi - WAVR224.mp4',
       videoDuration: 0,
       videoWidth: 0,
       videoHeight: 0,
       fps: 0,
       renderFrameCount: 0,
-      droppedFrames: 'unavailable',
-      totalVideoFrames: 'unavailable',
+      droppedFrames: 0,
+      totalVideoFrames: 0,
       screenAngle: 0,
       motionPermission: 'unrequested',
       motionEventCount: 0,
       rawOrientation: { alpha: 0, beta: 0, gamma: 0 },
-      calibratedYawOffset: 0,
+      qPose: [0, 0, 0, 1],
+      qRefInv: [0, 0, 0, 1],
+      qView: [0, 0, 0, 1],
+      cameraForward: [0, 0, -1],
+      cameraUp: [0, 1, 0],
+      viewport: { w: window.innerWidth, h: window.innerHeight, dpr: window.devicePixelRatio },
       seeks: [],
       runtimeSeconds: 0
     };
@@ -425,6 +454,18 @@
     const uiOverlay = document.getElementById('uiOverlay');
     const vrFloatingBar = document.getElementById('vrFloatingBar');
     const videoSelect = document.getElementById('videoSelect');
+
+    // UI Badges
+    const badgeDisplay = document.getElementById('badgeDisplayMode');
+    if (isStandalone) {
+      badgeDisplay.className = 'status-badge badge-standalone';
+      badgeDisplay.textContent = 'Standalone WebApp (Fullscreen)';
+      const pwaBox = document.getElementById('pwaBox');
+      if (pwaBox) pwaBox.style.display = 'none';
+    } else {
+      badgeDisplay.className = 'status-badge badge-browser';
+      badgeDisplay.textContent = 'Safari Browser Tab';
+    }
 
     let hideBarTimeout = null;
     function showFloatingBar() {
@@ -440,7 +481,7 @@
     window.addEventListener('click', showFloatingBar);
 
     // ==========================================
-    // 3. WebGL Setup
+    // 3. WebGL Setup & Shader Contract
     // ==========================================
     let gl = null;
     try {
@@ -464,57 +505,67 @@
       varying vec2 vUv;
 
       uniform sampler2D uVideoTexture;
-      uniform mat3 uCamRot;
-      uniform int uStereo;      // 0: SBS, 1: TB
-      uniform int uProjection;  // 0: 180, 1: 360
-      uniform int uEyeSwap;     // 0: normal, 1: swap
+      uniform mat3 uCamRot;     // rotation matrix from qView
+      uniform int uStereoMode;  // 0: Left-to-Both (Step 1), 1: SBS Normal (Step 2), 2: SBS Swap (Step 3), 3: TB Normal, 4: TB Swap, 5: 360 SBS
       uniform int uEye;         // 0: Left Eye, 1: Right Eye
       uniform float uAspect;    // viewport aspect ratio
 
       const float PI = 3.14159265358979323846;
       const float HALF_PI = 1.57079632679489661923;
       const float TWO_PI = 6.28318530717958647692;
-      const float FOV = 1.65; // ~95 deg horizontal FOV per eye
+      const float FOV = 1.65; // ~95 deg horizontal FOV
 
       void main() {
         vec2 ndc = (vUv - 0.5) * 2.0;
         float tanHalfFov = tan(FOV * 0.5);
         vec3 rayCam = normalize(vec3(ndc.x * tanHalfFov * uAspect, ndc.y * tanHalfFov, -1.0));
-        vec3 ray = uCamRot * rayCam;
+        
+        // Rotate ray by qView camera orientation matrix
+        vec3 d = uCamRot * rayCam;
 
-        float yaw = atan(ray.x, -ray.z);
-        float pitch = asin(clamp(ray.y, -1.0, 1.0));
+        float lon = atan(d.x, -d.z); // [-PI, PI], 0 is center forward
+        float lat = asin(clamp(d.y, -1.0, 1.0)); // [-PI/2, PI/2]
 
-        float u_eye = 0.0;
-        float v_eye = (pitch / PI) + 0.5;
+        float uLocal = 0.0;
+        float vLocal = 0.5 + lat / PI; // +90 deg lat -> 1.0 (top), -90 deg lat -> 0.0 (bottom)
 
-        if (uProjection == 0) {
-          if (abs(yaw) > HALF_PI) {
-            gl_FragColor = vec4(0.03, 0.05, 0.08, 1.0);
+        if (uStereoMode == 5) {
+          // 360° Sphere Equirectangular
+          uLocal = fract(0.5 + lon / TWO_PI);
+        } else {
+          // 180° Hemisphere Equirectangular
+          if (abs(lon) > HALF_PI) {
+            gl_FragColor = vec4(0.02, 0.03, 0.05, 1.0);
             return;
           }
-          u_eye = (yaw / PI) + 0.5;
-        } else {
-          u_eye = (yaw / TWO_PI) + 0.5;
-        }
-
-        int effectiveEye = uEye;
-        if (uEyeSwap == 1) {
-          effectiveEye = 1 - effectiveEye;
+          uLocal = 0.5 + lon / PI; // [-PI/2, PI/2] -> [0.0, 1.0]
         }
 
         vec2 texUv;
-        if (uStereo == 0) {
-          if (effectiveEye == 0) {
-            texUv = vec2(u_eye * 0.5, v_eye);
+        if (uStereoMode == 0) {
+          // STEP 1 Diagnostic: LEFT source half to BOTH eyes
+          texUv = vec2(uLocal * 0.5, vLocal);
+        } else if (uStereoMode == 1) {
+          // STEP 2: SBS Normal (Left eye -> Left half [0, 0.5], Right eye -> Right half [0.5, 1.0])
+          float sourceEye = float(uEye);
+          texUv = vec2(0.5 * (uLocal + sourceEye), vLocal);
+        } else if (uStereoMode == 2) {
+          // STEP 3: SBS Swap (Left eye -> Right half [0.5, 1.0], Right eye -> Left half [0, 0.5])
+          float sourceEye = float(1 - uEye);
+          texUv = vec2(0.5 * (uLocal + sourceEye), vLocal);
+        } else if (uStereoMode == 3) {
+          // TB Normal: Left eye -> Top [0.5, 1.0], Right eye -> Bottom [0.0, 0.5]
+          if (uEye == 0) {
+            texUv = vec2(uLocal, vLocal * 0.5 + 0.5);
           } else {
-            texUv = vec2(u_eye * 0.5 + 0.5, v_eye);
+            texUv = vec2(uLocal, vLocal * 0.5);
           }
-        } else {
-          if (effectiveEye == 0) {
-            texUv = vec2(u_eye, v_eye * 0.5 + 0.5);
+        } else if (uStereoMode == 4) {
+          // TB Swap: Left eye -> Bottom [0.0, 0.5], Right eye -> Top [0.5, 1.0]
+          if (uEye == 0) {
+            texUv = vec2(uLocal, vLocal * 0.5);
           } else {
-            texUv = vec2(u_eye, v_eye * 0.5);
+            texUv = vec2(uLocal, vLocal * 0.5 + 0.5);
           }
         }
 
@@ -535,7 +586,7 @@
     }
 
     let program = null;
-    let aPositionLoc = -1, uVideoTextureLoc = null, uCamRotLoc = null, uStereoLoc = null, uProjectionLoc = null, uEyeSwapLoc = null, uEyeLoc = null, uAspectLoc = null;
+    let aPositionLoc = -1, uVideoTextureLoc = null, uCamRotLoc = null, uStereoModeLoc = null, uEyeLoc = null, uAspectLoc = null;
     let posBuffer = null;
     let videoTex = null;
 
@@ -562,9 +613,7 @@
         aPositionLoc = gl.getAttribLocation(program, 'aPosition');
         uVideoTextureLoc = gl.getUniformLocation(program, 'uVideoTexture');
         uCamRotLoc = gl.getUniformLocation(program, 'uCamRot');
-        uStereoLoc = gl.getUniformLocation(program, 'uStereo');
-        uProjectionLoc = gl.getUniformLocation(program, 'uProjection');
-        uEyeSwapLoc = gl.getUniformLocation(program, 'uEyeSwap');
+        uStereoModeLoc = gl.getUniformLocation(program, 'uStereoMode');
         uEyeLoc = gl.getUniformLocation(program, 'uEye');
         uAspectLoc = gl.getUniformLocation(program, 'uAspect');
 
@@ -579,16 +628,15 @@
     }
 
     // ==========================================
-    // 4. Mathematical Head Tracking & Orientation Calibration
+    // 4. W3C DeviceOrientation & Full-Pose Recenter
     // ==========================================
-    // q1: Rotates coordinate system by -90 deg around X-axis (from looking down at table to looking forward at horizon)
-    const q1 = new Quat(-Math.SQRT1_2, 0, 0, Math.SQRT1_2); 
-    const qScreen = new Quat();
-    const qDevice = new Quat();
-    const qYawRecenter = new Quat();
+    const qCameraCorrect = new Quat(-Math.SQRT1_2, 0, 0, Math.SQRT1_2); // -90 deg around X (device top -> camera -Z)
+    const qScreenZ = new Quat();
+    let qPoseCurrent = new Quat();
+    let qRefInv = new Quat(); // Saved on reset
+    let qView = new Quat();
 
     let cameraMat3 = [1, 0, 0,  0, 1, 0,  0, 0, 1];
-    let zeroYawOffset = 0;
 
     function updateScreenOrientation() {
       if (screen.orientation && typeof screen.orientation.angle !== 'undefined') {
@@ -600,61 +648,88 @@
       }
       const el = document.getElementById('valScreenAngle');
       if (el) el.textContent = state.screenAngle + '°';
+      state.viewport = { w: window.innerWidth, h: window.innerHeight, dpr: window.devicePixelRatio };
+      const elVp = document.getElementById('valViewport');
+      if (elVp) elVp.textContent = `${window.innerWidth}x${window.innerHeight}`;
     }
     window.addEventListener('orientationchange', updateScreenOrientation);
     window.addEventListener('resize', updateScreenOrientation);
     updateScreenOrientation();
 
-    function computeDeviceOrientation(alphaDeg, betaDeg, gammaDeg, screenDeg) {
+    // W3C Sensor to Corrected Pose Quaternion
+    function computePoseQuaternion(alphaDeg, betaDeg, gammaDeg, screenAngleDeg) {
       const deg2rad = Math.PI / 180;
-      const alpha = alphaDeg * deg2rad;
-      const beta = betaDeg * deg2rad;
-      const gamma = gammaDeg * deg2rad;
-      const orient = screenDeg * deg2rad;
+      const betaRad = betaDeg * deg2rad;
+      const alphaRad = alphaDeg * deg2rad;
+      const gammaRad = gammaDeg * deg2rad;
+      const screenRad = screenAngleDeg * deg2rad;
 
-      // 1. Convert W3C Euler angles (beta, alpha, -gamma in 'YXZ' order)
-      qDevice.setFromEuler(beta, alpha, -gamma, 'YXZ');
+      // 1. Intrinsic 'YXZ' rotation from W3C angles
+      const q = new Quat().setFromEulerYXZ(betaRad, alphaRad, -gammaRad);
 
-      // 2. Multiply by q1 to align camera looking out forward horizontally
-      qDevice.multiply(q1);
+      // 2. Camera correction (-90 deg X-axis)
+      q.multiply(qCameraCorrect);
 
-      // 3. Multiply by qScreen to compensate for landscape rotation (90° / -90°)
-      qScreen.setFromAxisAngle(0, 0, 1, -orient);
-      qDevice.multiply(qScreen);
+      // 3. Screen orientation angle correction (-screenRad Z-axis)
+      qScreenZ.setFromAxisAngle(0, 0, 1, -screenRad);
+      q.multiply(qScreenZ);
 
-      // 4. Apply Zero Recenter Heading
-      qYawRecenter.setFromAxisAngle(0, 1, 0, zeroYawOffset);
-      const qFinal = qYawRecenter.clone().multiply(qDevice);
-
-      return qFinal.toMat3();
+      return q;
     }
 
-    function resetView() {
-      // Recenter current viewing direction to 0° forward
-      const deg2rad = Math.PI / 180;
-      const alpha = state.rawOrientation.alpha * deg2rad;
-      const orient = state.screenAngle * deg2rad;
-      // Offset heading so horizon is centered forward
-      zeroYawOffset = -alpha - orient;
-      state.calibratedYawOffset = Number((zeroYawOffset * 180 / Math.PI).toFixed(1));
-      syncTelemetry('resetView: ' + state.calibratedYawOffset + '°');
+    // Full-Pose Recenter
+    function recenterPose() {
+      qPoseCurrent = computePoseQuaternion(
+        state.rawOrientation.alpha,
+        state.rawOrientation.beta,
+        state.rawOrientation.gamma,
+        state.screenAngle
+      );
+
+      // qRefInv = inverse(qPose)
+      qRefInv = qPoseCurrent.clone().invert();
+
+      // qView at reset = qRefInv * qPose = Identity
+      qView = qRefInv.clone().multiply(qPoseCurrent);
+      cameraMat3 = qView.toMat3();
+
+      state.cameraForward = qView.transformVector([0, 0, -1]);
+      state.cameraUp = qView.transformVector([0, 1, 0]);
+      state.qPose = [qPoseCurrent.x, qPoseCurrent.y, qPoseCurrent.z, qPoseCurrent.w];
+      state.qRefInv = [qRefInv.x, qRefInv.y, qRefInv.z, qRefInv.w];
+      state.qView = [qView.x, qView.y, qView.z, qView.w];
+
+      const elFwd = document.getElementById('valCamFwd');
+      const elUp = document.getElementById('valCamUp');
+      if (elFwd) elFwd.textContent = `${state.cameraForward[0].toFixed(2)},${state.cameraForward[1].toFixed(2)},${state.cameraForward[2].toFixed(2)}`;
+      if (elUp) elUp.textContent = `${state.cameraUp[0].toFixed(2)},${state.cameraUp[1].toFixed(2)},${state.cameraUp[2].toFixed(2)}`;
+
+      syncTelemetry('recenterPose');
     }
 
     window.addEventListener('deviceorientation', (e) => {
       if (e.alpha === null) return;
       state.motionEventCount++;
       state.rawOrientation.alpha = e.alpha;
-      state.rawOrientation.beta = e.beta;
-      state.rawOrientation.gamma = e.gamma;
+      state.rawOrientation.beta = e.beta || 0;
+      state.rawOrientation.gamma = e.gamma || 0;
 
-      const elYaw = document.getElementById('valYaw');
-      const elPitch = document.getElementById('valPitch');
-      const elRoll = document.getElementById('valRoll');
-      if (elYaw) elYaw.textContent = e.alpha.toFixed(1) + '°';
-      if (elPitch) elPitch.textContent = (e.beta || 0).toFixed(1) + '°';
-      if (elRoll) elRoll.textContent = (e.gamma || 0).toFixed(1) + '°';
+      // Update pose and view
+      qPoseCurrent = computePoseQuaternion(e.alpha, e.beta || 0, e.gamma || 0, state.screenAngle);
+      qView = qRefInv.clone().multiply(qPoseCurrent);
+      cameraMat3 = qView.toMat3();
 
-      cameraMat3 = computeDeviceOrientation(e.alpha, e.beta || 0, e.gamma || 0, state.screenAngle);
+      state.cameraForward = qView.transformVector([0, 0, -1]);
+      state.cameraUp = qView.transformVector([0, 1, 0]);
+      state.qPose = [qPoseCurrent.x, qPoseCurrent.y, qPoseCurrent.z, qPoseCurrent.w];
+      state.qView = [qView.x, qView.y, qView.z, qView.w];
+
+      const elEvt = document.getElementById('valEventCount');
+      if (elEvt) elEvt.textContent = state.motionEventCount;
+      const elFwd = document.getElementById('valCamFwd');
+      const elUp = document.getElementById('valCamUp');
+      if (elFwd) elFwd.textContent = `${state.cameraForward[0].toFixed(2)},${state.cameraForward[1].toFixed(2)},${state.cameraForward[2].toFixed(2)}`;
+      if (elUp) elUp.textContent = `${state.cameraUp[0].toFixed(2)},${state.cameraUp[1].toFixed(2)},${state.cameraUp[2].toFixed(2)}`;
     }, { passive: true });
 
     // ==========================================
@@ -680,6 +755,8 @@
         const q = video.getVideoPlaybackQuality();
         state.droppedFrames = q.droppedVideoFrames;
         state.totalVideoFrames = q.totalVideoFrames;
+        const elDrop = document.getElementById('valDropped');
+        if (elDrop) elDrop.textContent = `${q.droppedVideoFrames}/${q.totalVideoFrames}`;
       }
 
       if (!gl || !program) return;
@@ -706,9 +783,7 @@
       gl.uniform1i(uVideoTextureLoc, 0);
 
       gl.uniformMatrix3fv(uCamRotLoc, false, cameraMat3);
-      gl.uniform1i(uStereoLoc, state.stereo === 'SBS' ? 0 : 1);
-      gl.uniform1i(uProjectionLoc, state.projection === '180' ? 0 : 1);
-      gl.uniform1i(uEyeSwapLoc, state.eyeOrder === 'swap' ? 1 : 0);
+      gl.uniform1i(uStereoModeLoc, state.stereoMode);
 
       gl.enable(gl.SCISSOR_TEST);
 
@@ -779,32 +854,17 @@
       if (elTime) elTime.textContent = `${video.currentTime.toFixed(1)}s`;
     });
 
-    let seekStart = 0;
-    video.addEventListener('seeking', () => { seekStart = performance.now(); });
-    video.addEventListener('seeked', () => {
-      const lat = performance.now() - seekStart;
-      state.seeks.push({ target: Number(video.currentTime.toFixed(1)), latencyMs: Number(lat.toFixed(1)) });
-      const elCount = document.getElementById('valSeekCount');
-      if (elCount) elCount.textContent = state.seeks.length;
+    // Stereo Diagnosis Selector
+    const grpStereoMode = document.getElementById('grpStereoMode');
+    grpStereoMode.addEventListener('click', (e) => {
+      const btn = e.target.closest('button');
+      if (btn) {
+        grpStereoMode.querySelectorAll('button').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        state.stereoMode = parseInt(btn.getAttribute('data-val'), 10);
+        syncTelemetry('setStereoMode:' + state.stereoMode);
+      }
     });
-
-    // Mapping Button Groups
-    function setupButtonGroup(containerId, stateKey) {
-      const container = document.getElementById(containerId);
-      if (!container) return;
-      container.addEventListener('click', (e) => {
-        const btn = e.target.closest('button');
-        if (btn) {
-          container.querySelectorAll('button').forEach(b => b.classList.remove('active'));
-          btn.classList.add('active');
-          state[stateKey] = btn.getAttribute('data-val');
-          syncTelemetry('settingChanged:' + stateKey + '=' + state[stateKey]);
-        }
-      });
-    }
-    setupButtonGroup('grpStereo', 'stereo');
-    setupButtonGroup('grpProjection', 'projection');
-    setupButtonGroup('grpEye', 'eyeOrder');
 
     // Enter VR Button
     document.getElementById('btnEnterVR').addEventListener('click', () => {
@@ -827,18 +887,15 @@
         if (elPerm) elPerm.textContent = 'Standard';
       }
 
-      // 2. Play Video & unmute on gesture
+      // 2. Play Video on gesture
       video.muted = false;
       video.play().catch(e => console.log('Video play:', e));
 
-      // 3. Calibrate Zero Orientation
+      // 3. Recenter Pose at entry
       updateScreenOrientation();
-      resetView();
+      recenterPose();
 
-      // 4. Scroll to hide browser chrome if possible
-      window.scrollTo(0, 1);
-
-      // 5. Enter Fullscreen VR View
+      // 4. Enter Fullscreen VR View
       state.inVR = true;
       uiOverlay.classList.add('hidden');
       showFloatingBar();
@@ -848,19 +905,20 @@
     // Floating Bar Controls
     document.getElementById('btnVrReset').addEventListener('click', (e) => {
       e.stopPropagation();
-      resetView();
+      recenterPose();
+    });
+    document.getElementById('btnVrToggleStereo').addEventListener('click', (e) => {
+      e.stopPropagation();
+      // Cycle: STEP 1 (0) -> STEP 2 (1) -> STEP 3 (2)
+      state.stereoMode = (state.stereoMode + 1) % 3;
+      grpStereoMode.querySelectorAll('button').forEach(b => b.classList.remove('active'));
+      const activeBtn = grpStereoMode.querySelector(`button[data-val="${state.stereoMode}"]`);
+      if (activeBtn) activeBtn.classList.add('active');
+      syncTelemetry('cycleStereoMode:' + state.stereoMode);
     });
     document.getElementById('btnVrPlayPause').addEventListener('click', (e) => {
       e.stopPropagation();
       if (video.paused) video.play(); else video.pause();
-    });
-    document.getElementById('btnVrSeekBack').addEventListener('click', (e) => {
-      e.stopPropagation();
-      video.currentTime = Math.max(0, video.currentTime - 60);
-    });
-    document.getElementById('btnVrSeekFwd').addEventListener('click', (e) => {
-      e.stopPropagation();
-      video.currentTime = Math.min(video.duration, video.currentTime + 60);
     });
     document.getElementById('btnVrExit').addEventListener('click', (e) => {
       e.stopPropagation();
