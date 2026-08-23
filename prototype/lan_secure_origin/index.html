@@ -8,7 +8,7 @@
   <meta name="apple-mobile-web-app-title" content="VREconder">
   <meta name="apple-touch-fullscreen" content="yes">
   <link rel="manifest" href="/manifest.json">
-  <title>VREconder VR Web Player</title>
+  <title>VREconder VR Web Player - In-Headset Controls</title>
   <style>
     :root {
       --bg: #090d16;
@@ -20,6 +20,7 @@
       --green: #10b981;
       --red: #ef4444;
       --amber: #f59e0b;
+      --cyan: #06b6d4;
     }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     html, body {
@@ -44,6 +45,17 @@
       z-index: 1;
     }
 
+    #uiCanvas {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      display: block;
+      z-index: 2;
+      pointer-events: none;
+    }
+
     /* 2D Setup & Control Overlay */
     #uiOverlay {
       position: fixed;
@@ -52,14 +64,14 @@
       width: 100vw;
       height: 100vh;
       z-index: 10;
-      background: rgba(9, 13, 22, 0.95);
-      backdrop-filter: blur(12px);
-      -webkit-backdrop-filter: blur(12px);
-      padding: 14px;
+      background: rgba(9, 13, 22, 0.96);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+      padding: 12px;
       overflow-y: auto;
       display: flex;
       flex-direction: column;
-      gap: 10px;
+      gap: 8px;
       transition: opacity 0.25s ease, visibility 0.25s ease;
     }
     #uiOverlay.hidden {
@@ -71,17 +83,17 @@
     .card {
       background: var(--card);
       border: 1px solid var(--border);
-      border-radius: 12px;
-      padding: 12px 14px;
+      border-radius: 10px;
+      padding: 10px 12px;
     }
-    h1 { font-size: 1.1rem; font-weight: 700; display: flex; align-items: center; gap: 8px; color: #fff; }
-    .subtitle { font-size: 0.78rem; color: var(--muted); margin-top: 2px; }
+    h1 { font-size: 1.05rem; font-weight: 700; display: flex; align-items: center; gap: 8px; color: #fff; }
+    .subtitle { font-size: 0.74rem; color: var(--muted); margin-top: 2px; }
 
     .status-badge {
       display: inline-block;
       padding: 3px 8px;
       border-radius: 6px;
-      font-size: 0.75rem;
+      font-size: 0.72rem;
       font-weight: bold;
     }
     .badge-standalone { background: #065f46; color: #34d399; }
@@ -90,8 +102,8 @@
     .control-row {
       display: flex;
       flex-direction: column;
-      gap: 6px;
-      margin-top: 8px;
+      gap: 5px;
+      margin-top: 6px;
     }
     .label { font-size: 0.72rem; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
 
@@ -100,44 +112,59 @@
       background: #1e293b;
       color: #f1f5f9;
       border: 1px solid #334155;
-      padding: 10px;
+      padding: 8px 10px;
       border-radius: 8px;
-      font-size: 0.85rem;
+      font-size: 0.82rem;
       appearance: none;
       -webkit-appearance: none;
     }
 
-    .diag-btn-grid {
+    .btn-grid-3 {
       display: grid;
-      grid-template-columns: 1fr 1fr;
+      grid-template-columns: 1fr 1fr 1fr;
       gap: 6px;
       margin-top: 6px;
     }
-    .diag-btn-grid button {
-      padding: 10px 8px;
+    .btn-grid-4 {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr 1fr;
+      gap: 5px;
+      margin-top: 6px;
+    }
+
+    .opt-btn {
+      padding: 8px 6px;
       background: #1e293b;
       color: #94a3b8;
       border: 1px solid #334155;
       border-radius: 6px;
-      font-size: 0.8rem;
+      font-size: 0.76rem;
       font-weight: 600;
       cursor: pointer;
       text-align: center;
       touch-action: manipulation;
     }
-    .diag-btn-grid button.active {
+    .opt-btn.active {
       background: var(--blue);
       color: #fff;
       border-color: var(--blue);
+    }
+    .opt-btn.pattern-b.active {
+      background: #7c3aed;
+      border-color: #7c3aed;
+    }
+    .opt-btn.pattern-c.active {
+      background: #0891b2;
+      border-color: #0891b2;
     }
 
     .btn-main {
       width: 100%;
       background: linear-gradient(135deg, #2563eb, #7c3aed);
       color: #fff;
-      font-size: 1.05rem;
+      font-size: 1rem;
       font-weight: 700;
-      padding: 14px 20px;
+      padding: 12px 18px;
       border-radius: 10px;
       border: none;
       cursor: pointer;
@@ -154,15 +181,44 @@
     .metrics-grid {
       display: grid;
       grid-template-columns: 1fr 1fr;
-      gap: 5px;
-      font-size: 0.78rem;
+      gap: 4px;
+      font-size: 0.74rem;
       font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, monospace;
       background: rgba(0,0,0,0.35);
-      padding: 8px;
-      border-radius: 8px;
+      padding: 6px 8px;
+      border-radius: 6px;
     }
     .m-item { color: var(--muted); }
     .m-val { color: #38bdf8; font-weight: 600; }
+
+    .table-compare {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.72rem;
+      font-family: ui-monospace, monospace;
+      margin-top: 4px;
+    }
+    .table-compare th, .table-compare td {
+      border: 1px solid #334155;
+      padding: 4px 6px;
+      text-align: center;
+    }
+    .table-compare th {
+      background: #1e293b;
+      color: #cbd5e1;
+    }
+
+    .checklist-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 4px 0;
+      font-size: 0.75rem;
+      border-bottom: 1px dashed #243048;
+    }
+    .checklist-row:last-child { border-bottom: none; }
+    .chk-done { color: #34d399; font-weight: bold; }
+    .chk-pending { color: #64748b; }
 
     #errorBanner {
       display: none;
@@ -171,25 +227,25 @@
       color: #fca5a5;
       padding: 8px;
       border-radius: 8px;
-      font-size: 0.8rem;
+      font-size: 0.78rem;
       word-break: break-all;
     }
 
     /* In-VR Floating Controls */
     #vrFloatingBar {
       position: fixed;
-      bottom: 20px;
+      bottom: 16px;
       left: 50%;
       transform: translateX(-50%);
       z-index: 20;
       display: flex;
-      gap: 8px;
-      background: rgba(15, 23, 42, 0.88);
-      border: 1px solid rgba(255,255,255,0.2);
-      padding: 8px 14px;
-      border-radius: 30px;
-      backdrop-filter: blur(8px);
-      -webkit-backdrop-filter: blur(8px);
+      gap: 6px;
+      background: rgba(15, 23, 42, 0.9);
+      border: 1px solid rgba(255,255,255,0.25);
+      padding: 6px 12px;
+      border-radius: 26px;
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
       transition: opacity 0.3s ease, transform 0.3s ease;
     }
     #vrFloatingBar.fade-out {
@@ -201,9 +257,9 @@
       background: #334155;
       color: #fff;
       border: none;
-      border-radius: 20px;
-      padding: 10px 14px;
-      font-size: 0.82rem;
+      border-radius: 18px;
+      padding: 8px 12px;
+      font-size: 0.78rem;
       font-weight: 600;
       cursor: pointer;
       display: flex;
@@ -213,7 +269,7 @@
     }
     .vr-btn:active { background: #475569; }
     .vr-btn-reset { background: #059669; }
-    .vr-btn-play { background: #2563eb; }
+    .vr-btn-pattern { background: #7c3aed; }
     .vr-btn-exit { background: #dc2626; }
 
     #sourceVideo {
@@ -232,13 +288,17 @@
 
   <!-- Background WebGL Stereo VR Canvas -->
   <canvas id="glCanvas"></canvas>
+
+  <!-- 2D In-Headset Stereo UI & Reticle Overlay -->
+  <canvas id="uiCanvas"></canvas>
+
   <video id="sourceVideo" playsinline preload="auto" crossorigin="anonymous" muted loop></video>
 
   <!-- In-VR Floating Quick Bar (Tap screen in VR to reveal) -->
   <div id="vrFloatingBar" class="fade-out">
-    <button class="vr-btn vr-btn-reset" id="btnVrReset">🎯 Recenter View</button>
-    <button class="vr-btn vr-btn-play" id="btnVrPlayPause">⏯ Play/Pause</button>
-    <button class="vr-btn" id="btnVrToggleStereo">🔀 Step L/R</button>
+    <button class="vr-btn vr-btn-pattern" id="btnVrSwitchPattern">🔀 Pattern: A</button>
+    <button class="vr-btn vr-btn-reset" id="btnVrReset">🎯 Recenter</button>
+    <button class="vr-btn" id="btnVrToggleStereo">👁 Stereo</button>
     <button class="vr-btn vr-btn-exit" id="btnVrExit">⚙ Exit VR</button>
   </div>
 
@@ -248,20 +308,40 @@
 
     <div class="card">
       <div style="display:flex; justify-content:space-between; align-items:center;">
-        <h1>🥽 VREconder Minimal VR Player</h1>
+        <h1>🥽 VREconder UX Patterns (Issue #9)</h1>
         <span class="status-badge" id="badgeDisplayMode">Browser Tab</span>
       </div>
-      <div class="subtitle">W3C DeviceOrientation &bull; Camera-to-World Transform &bull; Full-Pose Recenter</div>
+      <div class="subtitle">A. Center Gaze + Dwell &bull; B. Radial Menu &bull; C. Video HUD</div>
+    </div>
+
+    <!-- Pattern Selection -->
+    <div class="card">
+      <div class="label">1. Active UX Pattern Experiment</div>
+      <div class="btn-grid-3" id="grpPatternSelect">
+        <button class="opt-btn active" data-pattern="A">Pattern A<br><span style="font-size:0.68rem;opacity:0.8;">Center Gaze Arc</span></button>
+        <button class="opt-btn pattern-b" data-pattern="B">Pattern B<br><span style="font-size:0.68rem;opacity:0.8;">Radial Menu</span></button>
+        <button class="opt-btn pattern-c" data-pattern="C">Pattern C<br><span style="font-size:0.68rem;opacity:0.8;">Video HUD</span></button>
+      </div>
+
+      <div class="control-row" style="margin-top:8px;">
+        <div class="label">Dwell Activation Threshold</div>
+        <div class="btn-grid-4" id="grpDwellThreshold">
+          <button class="opt-btn" data-dwell="800">800ms</button>
+          <button class="opt-btn active" data-dwell="1000">1000ms</button>
+          <button class="opt-btn" data-dwell="1200">1200ms</button>
+          <button class="opt-btn" data-dwell="1500">1500ms</button>
+        </div>
+      </div>
     </div>
 
     <!-- Media Source Selection -->
     <div class="card">
-      <div class="label">1. VR Media Source (G:\Media\VR)</div>
+      <div class="label">2. VR Media Source (G:\Media\VR)</div>
       <select id="videoSelect">
         <option value="4K/4096_2048_crf18_avc1-Kururugi Aoi - WAVR224.mp4">[6.09 GB] 4K/4096_2048_crf18_avc1-Kururugi Aoi - WAVR224.mp4</option>
       </select>
 
-      <div class="metrics-grid" style="margin-top:6px;">
+      <div class="metrics-grid" style="margin-top:5px;">
         <div class="m-item">Res: <span class="m-val" id="valVideoRes">--</span></div>
         <div class="m-item">Dur: <span class="m-val" id="valVideoDur">--</span></div>
         <div class="m-item">Time: <span class="m-val" id="valVideoTime">0.00s</span></div>
@@ -269,43 +349,69 @@
       </div>
     </div>
 
-    <!-- Stereo Diagnosis Strategy -->
-    <div class="card">
-      <div class="label">2. Stereo Diagnosis Mode</div>
-      <div class="diag-btn-grid" id="grpStereoMode">
-        <button class="active" data-val="0">STEP 1: LEFT &rarr; Both Eyes</button>
-        <button data-val="1">STEP 2: SBS Normal (L&rarr;L, R&rarr;R)</button>
-        <button data-val="2">STEP 3: SBS Eye Swap (R&rarr;L, L&rarr;R)</button>
-        <button data-val="3">360° Sphere SBS</button>
-      </div>
-    </div>
-
     <!-- Enter VR Button -->
     <div class="card">
       <div class="label">3. Launch VR Headset View</div>
       <button class="btn-main" id="btnEnterVR">
-        <span>🚀 Enter VR / Play & Enable Motion</span>
+        <span>🚀 Enter VR / Start Experiment</span>
       </button>
-      <div class="subtitle" style="text-align:center; margin-top:6px;">
-        手机打横并立起（面向正前方），点击按钮戴入 VR 眼镜
+      <div class="subtitle" style="text-align:center; margin-top:4px;">
+        在 VR 中可通过注视 "🔀 Next Pattern" 或点击屏幕浮条快速切换 A/B/C
       </div>
     </div>
 
-    <!-- Real-time Telemetry -->
+    <!-- Test Protocol Checklist -->
     <div class="card">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
-        <div class="label">4. Real-time Telemetry (Gate Check)</div>
-        <button id="btnSyncTelemetry" style="background:#059669;color:#fff;border:none;border-radius:4px;padding:4px 8px;font-size:0.75rem;cursor:pointer;">📤 Sync to PC</button>
+      <div style="display:flex; justify-content:space-between; align-items:center;">
+        <div class="label">4. Standardized Task Checklist (2-3 min per pattern)</div>
+        <button id="btnResetTasks" style="background:#334155;color:#cbd5e1;border:none;border-radius:4px;padding:2px 6px;font-size:0.7rem;cursor:pointer;">Reset Tasks</button>
       </div>
+      <div id="checklistContainer" style="margin-top:4px;">
+        <div class="checklist-row" data-task="pause"><span>1. Pause Video</span><span class="chk-status chk-pending">Pending</span></div>
+        <div class="checklist-row" data-task="play"><span>2. Play Video</span><span class="chk-status chk-pending">Pending</span></div>
+        <div class="checklist-row" data-task="seekForward"><span>3. Seek Forward (+10s)</span><span class="chk-status chk-pending">Pending</span></div>
+        <div class="checklist-row" data-task="seekBackward"><span>4. Seek Backward (-10s)</span><span class="chk-status chk-pending">Pending</span></div>
+        <div class="checklist-row" data-task="next"><span>5. Next Video</span><span class="chk-status chk-pending">Pending</span></div>
+        <div class="checklist-row" data-task="previous"><span>6. Previous Video</span><span class="chk-status chk-pending">Pending</span></div>
+        <div class="checklist-row" data-task="recenter"><span>7. Recenter View</span><span class="chk-status chk-pending">Pending</span></div>
+      </div>
+    </div>
+
+    <!-- UX Evidence & Telemetry Matrix -->
+    <div class="card">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+        <div class="label">5. Interaction Evidence Matrix</div>
+        <button id="btnSyncTelemetry" style="background:#059669;color:#fff;border:none;border-radius:4px;padding:3px 8px;font-size:0.72rem;cursor:pointer;">📤 Sync to PC</button>
+      </div>
+      <table class="table-compare">
+        <thead>
+          <tr>
+            <th>Pattern</th>
+            <th>Activations</th>
+            <th>Cancels</th>
+            <th>Avg Dwell</th>
+            <th>TimeToCmd</th>
+            <th>Head Travel</th>
+          </tr>
+        </thead>
+        <tbody id="telemetryTableBody">
+          <tr id="row-A"><td>A (Gaze Arc)</td><td>0</td><td>0</td><td>--</td><td>--</td><td>0.0°</td></tr>
+          <tr id="row-B"><td>B (Radial)</td><td>0</td><td>0</td><td>--</td><td>--</td><td>0.0°</td></tr>
+          <tr id="row-C"><td>C (Video HUD)</td><td>0</td><td>0</td><td>--</td><td>--</td><td>0.0°</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Sensor Diagnostics -->
+    <div class="card">
+      <div class="label">6. Real-time Diagnostics</div>
       <div class="metrics-grid">
         <div class="m-item">FPS: <span class="m-val" id="valFps">0.0</span></div>
         <div class="m-item">Screen Ang: <span class="m-val" id="valScreenAngle">0°</span></div>
         <div class="m-item">Cam Fwd: <span class="m-val" id="valCamFwd">0,0,-1</span></div>
-        <div class="m-item">Cam Up: <span class="m-val" id="valCamUp">0,1,0</span></div>
-        <div class="m-item">Motion: <span class="m-val" id="valMotionPerm">--</span></div>
-        <div class="m-item">Events: <span class="m-val" id="valEventCount">0</span></div>
         <div class="m-item">Head State: <span class="m-val" id="valHeadState">Center</span></div>
-        <div class="m-item">Dropped: <span class="m-val" id="valDropped">0/0</span></div>
+        <div class="m-item">Motion Perm: <span class="m-val" id="valMotionPerm">--</span></div>
+        <div class="m-item">Events: <span class="m-val" id="valEventCount">0</span></div>
       </div>
     </div>
   </div>
@@ -318,10 +424,45 @@
         banner.textContent = 'Error: ' + msg;
       }
       console.error(msg);
-      syncTelemetry('error: ' + msg);
     }
     window.onerror = (msg, url, line) => { showError(`${msg} (L${line})`); };
     window.onunhandledrejection = (e) => { showError(e.reason ? (e.reason.message || e.reason) : e); };
+
+    // ==========================================
+    // 0. Web Audio API Synth Feedback
+    // ==========================================
+    let audioCtx = null;
+    function playAudioFeedback(type = 'activate') {
+      try {
+        if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        if (audioCtx.state === 'suspended') audioCtx.resume();
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        const now = audioCtx.currentTime;
+        if (type === 'hover') {
+          osc.frequency.setValueAtTime(440, now);
+          gain.gain.setValueAtTime(0.04, now);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + 0.04);
+          osc.start(now);
+          osc.stop(now + 0.04);
+        } else if (type === 'activate') {
+          osc.frequency.setValueAtTime(587.33, now); // D5
+          osc.frequency.exponentialRampToValueAtTime(880, now + 0.09); // A5
+          gain.gain.setValueAtTime(0.12, now);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + 0.12);
+          osc.start(now);
+          osc.stop(now + 0.12);
+        }
+      } catch (e) {}
+    }
+
+    function triggerHaptic() {
+      if (navigator.vibrate) {
+        navigator.vibrate(40);
+      }
+    }
 
     // ==========================================
     // 1. Math: Quaternion Library (Camera-to-World)
@@ -330,9 +471,7 @@
       constructor(x = 0, y = 0, z = 0, w = 1) {
         this.x = x; this.y = y; this.z = z; this.w = w;
       }
-      clone() {
-        return new Quat(this.x, this.y, this.z, this.w);
-      }
+      clone() { return new Quat(this.x, this.y, this.z, this.w); }
       copy(q) {
         this.x = q.x; this.y = q.y; this.z = q.z; this.w = q.w;
         return this;
@@ -398,21 +537,27 @@
     }
 
     // ==========================================
-    // 2. App State & Presentation Detection
+    // 2. Global State
     // ==========================================
     const isStandalone = (window.navigator.standalone === true) || window.matchMedia('(display-mode: standalone)').matches;
 
     const state = {
       inVR: false,
       standalone: isStandalone,
-      secureContext: window.isSecureContext === true,
       stereoMode: 0, // 0: LEFT_MONO, 1: SBS_NORMAL, 2: SBS_SWAP, 3: 360_SBS
+      activePattern: 'A', // 'A' | 'B' | 'C'
+      dwellThresholdMs: 1000,
+      
+      // Video Playlist
+      videoList: [],
+      currentVideoIndex: 0,
       videoPath: '4K/4096_2048_crf18_avc1-Kururugi Aoi - WAVR224.mp4',
       videoDuration: 0,
       videoWidth: 0,
       videoHeight: 0,
+
+      // Render metrics
       fps: 0,
-      renderFrameCount: 0,
       droppedFrames: 0,
       totalVideoFrames: 0,
       screenAngle: 0,
@@ -426,14 +571,25 @@
       cameraUp: [0, 1, 0],
       viewport: { w: window.innerWidth, h: window.innerHeight, dpr: window.devicePixelRatio },
       headStateText: 'Center',
-      runtimeSeconds: 0
+
+      // Pattern States
+      patternB_open: false,
+      patternB_anchorPos: { yaw: 0, pitch: -16 },
+      patternC_open: true,
+
+      // Toast feedback
+      toastText: '',
+      toastTime: 0
     };
 
     const video = document.getElementById('sourceVideo');
-    const canvas = document.getElementById('glCanvas');
+    const glCanvas = document.getElementById('glCanvas');
+    const uiCanvas = document.getElementById('uiCanvas');
+    const uiCtx = uiCanvas.getContext('2d');
     const uiOverlay = document.getElementById('uiOverlay');
     const vrFloatingBar = document.getElementById('vrFloatingBar');
     const videoSelect = document.getElementById('videoSelect');
+    const btnVrSwitchPattern = document.getElementById('btnVrSwitchPattern');
 
     // UI Badges
     const badgeDisplay = document.getElementById('badgeDisplayMode');
@@ -445,33 +601,272 @@
       badgeDisplay.textContent = 'Safari Browser Tab';
     }
 
-    let hideBarTimeout = null;
-    function showFloatingBar() {
-      if (!state.inVR) return;
-      vrFloatingBar.classList.remove('fade-out');
-      clearTimeout(hideBarTimeout);
-      hideBarTimeout = setTimeout(() => {
-        vrFloatingBar.classList.add('fade-out');
-      }, 4000);
+    function showFeedbackToast(msg) {
+      state.toastText = msg;
+      state.toastTime = performance.now();
     }
 
-    window.addEventListener('touchstart', showFloatingBar, { passive: true });
-    window.addEventListener('click', showFloatingBar);
-
-    // Tap anywhere in VR to resume if paused
-    window.addEventListener('touchend', () => {
-      if (state.inVR && video.paused) {
-        video.play().catch(() => {});
-      }
-    }, { passive: true });
+    function formatTime(seconds) {
+      if (isNaN(seconds)) return '00:00';
+      const m = Math.floor(seconds / 60);
+      const s = Math.floor(seconds % 60);
+      return `${m < 10 ? '0' : ''}${m}:${s < 10 ? '0' : ''}${s}`;
+    }
 
     // ==========================================
-    // 3. WebGL Setup & Canonical Shader
+    // 3. UX Telemetry Engine
+    // ==========================================
+    class TelemetryEngine {
+      constructor() {
+        this.metrics = {
+          A: { activations: 0, cancels: 0, dwellTimes: [], menuToCmdTimes: [], travelDeg: 0 },
+          B: { activations: 0, cancels: 0, dwellTimes: [], menuToCmdTimes: [], travelDeg: 0 },
+          C: { activations: 0, cancels: 0, dwellTimes: [], menuToCmdTimes: [], travelDeg: 0 }
+        };
+        this.completedTasks = {
+          pause: false,
+          play: false,
+          seekForward: false,
+          seekBackward: false,
+          next: false,
+          previous: false,
+          recenter: false
+        };
+        this.currentHoverTarget = null;
+        this.hoverStartTime = 0;
+        this.menuOpenTime = performance.now();
+        this.lastHeadFwd = [0, 0, -1];
+      }
+
+      onHeadMove(newFwd) {
+        const dot = this.lastHeadFwd[0] * newFwd[0] + this.lastHeadFwd[1] * newFwd[1] + this.lastHeadFwd[2] * newFwd[2];
+        const rad = Math.acos(Math.max(-1, Math.min(1, dot)));
+        const deg = rad * (180 / Math.PI);
+        if (deg > 0.05 && deg < 45) {
+          this.metrics[state.activePattern].travelDeg += deg;
+        }
+        this.lastHeadFwd = [...newFwd];
+      }
+
+      recordTargetEnter(pattern, targetId) {
+        this.currentHoverTarget = targetId;
+        this.hoverStartTime = performance.now();
+        playAudioFeedback('hover');
+        this.sendEvent('targetEnter', { pattern, target: targetId });
+      }
+
+      recordDwellCancel(pattern, targetId, dwellMs) {
+        this.metrics[pattern].cancels++;
+        this.sendEvent('dwellCancel', { pattern, target: targetId, dwellMs: Math.round(dwellMs) });
+        this.currentHoverTarget = null;
+        this.hoverStartTime = 0;
+        this.updateTable();
+      }
+
+      recordDwellComplete(pattern, targetId, dwellMs) {
+        this.metrics[pattern].activations++;
+        this.metrics[pattern].dwellTimes.push(dwellMs);
+        const timeToCmd = Math.max(0, performance.now() - this.menuOpenTime);
+        this.metrics[pattern].menuToCmdTimes.push(timeToCmd);
+
+        playAudioFeedback('activate');
+        triggerHaptic();
+
+        this.sendEvent('dwellComplete', { pattern, target: targetId, dwellMs: Math.round(dwellMs), timeToCmdMs: Math.round(timeToCmd) });
+        this.currentHoverTarget = null;
+        this.hoverStartTime = 0;
+        this.updateTable();
+      }
+
+      recordCommand(commandId) {
+        const timeToCmd = Math.max(0, performance.now() - this.menuOpenTime);
+        this.sendEvent('commandInvoked', { pattern: state.activePattern, command: commandId, timeToCmdMs: Math.round(timeToCmd) });
+        
+        // Check task checklist
+        if (commandId === 'playPause') {
+          if (video.paused) this.markTaskDone('pause');
+          else this.markTaskDone('play');
+        } else if (commandId === 'seekForward_10s') {
+          this.markTaskDone('seekForward');
+        } else if (commandId === 'seekBackward_10s') {
+          this.markTaskDone('seekBackward');
+        } else if (commandId === 'next') {
+          this.markTaskDone('next');
+        } else if (commandId === 'previous') {
+          this.markTaskDone('previous');
+        } else if (commandId === 'recenter') {
+          this.markTaskDone('recenter');
+        }
+      }
+
+      markTaskDone(taskKey) {
+        this.completedTasks[taskKey] = true;
+        const row = document.querySelector(`.checklist-row[data-task="${taskKey}"] .chk-status`);
+        if (row) {
+          row.textContent = '✓ Done';
+          row.className = 'chk-status chk-done';
+        }
+      }
+
+      resetTasks() {
+        for (const k in this.completedTasks) this.completedTasks[k] = false;
+        document.querySelectorAll('.checklist-row .chk-status').forEach(el => {
+          el.textContent = 'Pending';
+          el.className = 'chk-status chk-pending';
+        });
+      }
+
+      updateTable() {
+        ['A', 'B', 'C'].forEach(p => {
+          const m = this.metrics[p];
+          const row = document.getElementById(`row-${p}`);
+          if (!row) return;
+          const avgDwell = m.dwellTimes.length ? (m.dwellTimes.reduce((a,b)=>a+b, 0) / m.dwellTimes.length).toFixed(0) + 'ms' : '--';
+          const avgTimeToCmd = m.menuToCmdTimes.length ? (m.menuToCmdTimes.reduce((a,b)=>a+b, 0) / m.menuToCmdTimes.length).toFixed(0) + 'ms' : '--';
+          const pName = p === 'A' ? 'A (Gaze Arc)' : p === 'B' ? 'B (Radial)' : 'C (Video HUD)';
+          row.innerHTML = `<td>${pName}</td><td>${m.activations}</td><td>${m.cancels}</td><td>${avgDwell}</td><td>${avgTimeToCmd}</td><td>${m.travelDeg.toFixed(1)}°</td>`;
+        });
+      }
+
+      async sendEvent(eventName, data = {}) {
+        try {
+          const payload = {
+            type: 'ux_event',
+            event: eventName,
+            pattern: data.pattern || state.activePattern,
+            target: data.target || null,
+            dwellMs: data.dwellMs || 0,
+            timeToCmdMs: data.timeToCmdMs || 0,
+            travelDeg: this.metrics[state.activePattern].travelDeg,
+            timestamp: new Date().toISOString()
+          };
+          fetch('/api/telemetry', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          }).catch(()=>{});
+        } catch (e) {}
+      }
+
+      async syncSummary() {
+        const summary = {
+          type: 'ux_summary',
+          timestamp: new Date().toISOString(),
+          patterns: this.metrics,
+          activePattern: state.activePattern,
+          dwellThresholdMs: state.dwellThresholdMs,
+          completedTasks: this.completedTasks
+        };
+        try {
+          await fetch('/api/telemetry', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(summary)
+          });
+          showFeedbackToast('Telemetry Synced to PC');
+        } catch (e) {
+          showError('Telemetry sync failed: ' + e.message);
+        }
+      }
+    }
+
+    const telemetry = new TelemetryEngine();
+
+    // ==========================================
+    // 4. Common Command Model (Unified Across Patterns)
+    // ==========================================
+    const CommandModel = {
+      playPause() {
+        if (video.paused) {
+          video.play().catch(e => console.log('Play error:', e));
+          showFeedbackToast('▶ Playing');
+        } else {
+          video.pause();
+          showFeedbackToast('⏸ Paused');
+        }
+        telemetry.recordCommand('playPause');
+      },
+      previous() {
+        if (state.videoList && state.videoList.length > 0) {
+          state.currentVideoIndex = (state.currentVideoIndex - 1 + state.videoList.length) % state.videoList.length;
+          selectVideo(state.videoList[state.currentVideoIndex].relPath);
+          showFeedbackToast('⏮ Previous Video');
+        }
+        telemetry.recordCommand('previous');
+      },
+      next() {
+        if (state.videoList && state.videoList.length > 0) {
+          state.currentVideoIndex = (state.currentVideoIndex + 1) % state.videoList.length;
+          selectVideo(state.videoList[state.currentVideoIndex].relPath);
+          showFeedbackToast('⏭ Next Video');
+        }
+        telemetry.recordCommand('next');
+      },
+      seekBackward(sec = 10) {
+        video.currentTime = Math.max(0, video.currentTime - sec);
+        showFeedbackToast(`⏪ -${sec}s (${formatTime(video.currentTime)})`);
+        telemetry.recordCommand(`seekBackward_${sec}s`);
+      },
+      seekForward(sec = 10) {
+        video.currentTime = Math.min(video.duration || 999999, video.currentTime + sec);
+        showFeedbackToast(`⏩ +${sec}s (${formatTime(video.currentTime)})`);
+        telemetry.recordCommand(`seekForward_${sec}s`);
+      },
+      recenter() {
+        recenterPose();
+        showFeedbackToast('🎯 View Recentered');
+        telemetry.recordCommand('recenter');
+      },
+      openControls() {
+        if (state.activePattern === 'B') {
+          state.patternB_open = true;
+          telemetry.menuOpenTime = performance.now();
+          showFeedbackToast('Radial Menu Opened');
+        } else if (state.activePattern === 'C') {
+          state.patternC_open = true;
+          telemetry.menuOpenTime = performance.now();
+          showFeedbackToast('Video HUD Opened');
+        }
+      },
+      closeControls() {
+        if (state.activePattern === 'B') {
+          state.patternB_open = false;
+          showFeedbackToast('Radial Menu Closed');
+        } else if (state.activePattern === 'C') {
+          state.patternC_open = false;
+          showFeedbackToast('Video HUD Closed');
+        }
+      },
+      cyclePattern() {
+        const patterns = ['A', 'B', 'C'];
+        const idx = patterns.indexOf(state.activePattern);
+        const nextPat = patterns[(idx + 1) % patterns.length];
+        setPattern(nextPat);
+        showFeedbackToast(`Switched to Pattern ${nextPat}`);
+      }
+    };
+
+    function setPattern(pat) {
+      state.activePattern = pat;
+      telemetry.menuOpenTime = performance.now();
+      document.querySelectorAll('#grpPatternSelect button').forEach(b => {
+        b.classList.toggle('active', b.getAttribute('data-pattern') === pat);
+      });
+      btnVrSwitchPattern.textContent = `🔀 Pattern: ${pat}`;
+      if (pat === 'B') {
+        state.patternB_open = false;
+      } else if (pat === 'C') {
+        state.patternC_open = true;
+      }
+    }
+
+    // ==========================================
+    // 5. WebGL VR Renderer Setup
     // ==========================================
     let gl = null;
     try {
-      gl = canvas.getContext('webgl', { alpha: false, antialias: false, powerPreference: 'high-performance' }) ||
-           canvas.getContext('experimental-webgl');
+      gl = glCanvas.getContext('webgl', { alpha: false, antialias: false, powerPreference: 'high-performance' }) ||
+           glCanvas.getContext('experimental-webgl');
     } catch (e) {
       showError('WebGL init failed: ' + e.message);
     }
@@ -490,10 +885,10 @@
       varying vec2 vUv;
 
       uniform sampler2D uVideoTexture;
-      uniform mat3 uCamRot;     // Camera-to-World rotation matrix (dWorld = uCamRot * dCamera)
-      uniform int uStereoMode;  // 0: Left-to-Both (Step 1), 1: SBS Normal (Step 2), 2: SBS Swap (Step 3), 3: 360 SBS
+      uniform mat3 uCamRot;     // Camera-to-World rotation matrix
+      uniform int uStereoMode;  // 0: Left-to-Both, 1: SBS Normal, 2: SBS Swap, 3: 360 SBS
       uniform int uEye;         // 0: Left Eye, 1: Right Eye
-      uniform float uAspect;    // viewport aspect ratio
+      uniform float uAspect;
 
       const float PI = 3.14159265358979323846;
       const float HALF_PI = 1.57079632679489661923;
@@ -505,38 +900,31 @@
         float tanHalfFov = tan(FOV * 0.5);
         vec3 rayCam = normalize(vec3(ndc.x * tanHalfFov * uAspect, ndc.y * tanHalfFov, -1.0));
         
-        // Camera-to-World Ray Transform
         vec3 dWorld = uCamRot * rayCam;
 
-        float lon = atan(dWorld.x, -dWorld.z); // [-PI, PI], 0 is center forward
-        float lat = asin(clamp(dWorld.y, -1.0, 1.0)); // [-PI/2, PI/2]
+        float lon = atan(dWorld.x, -dWorld.z);
+        float lat = asin(clamp(dWorld.y, -1.0, 1.0));
 
         float uLocal = 0.0;
-        // Canonical OpenGL UV with UNPACK_FLIP_Y_WEBGL = true
         float vLocal = 0.5 + lat / PI;
 
         if (uStereoMode == 3) {
-          // 360° Sphere Equirectangular
           uLocal = fract(0.5 + lon / TWO_PI);
         } else {
-          // 180° Hemisphere Equirectangular
           if (abs(lon) > HALF_PI) {
             gl_FragColor = vec4(0.02, 0.03, 0.05, 1.0);
             return;
           }
-          uLocal = 0.5 + lon / PI; // [-PI/2, PI/2] -> [0.0, 1.0]
+          uLocal = 0.5 + lon / PI;
         }
 
         vec2 texUv;
         if (uStereoMode == 0) {
-          // STEP 1 Diagnostic: LEFT source half to BOTH eyes
           texUv = vec2(uLocal * 0.5, vLocal);
         } else if (uStereoMode == 1) {
-          // STEP 2: SBS Normal (Left eye -> Left half [0, 0.5], Right eye -> Right half [0.5, 1.0])
           float sourceEye = float(uEye);
           texUv = vec2(0.5 * (uLocal + sourceEye), vLocal);
         } else if (uStereoMode == 2) {
-          // STEP 3: SBS Swap (Left eye -> Right half [0.5, 1.0], Right eye -> Left half [0, 0.5])
           float sourceEye = float(1 - uEye);
           texUv = vec2(0.5 * (uLocal + sourceEye), vLocal);
         }
@@ -574,12 +962,8 @@
         posBuffer = gl.createBuffer();
         gl.bindBuffer(gl.ARRAY_BUFFER, posBuffer);
         gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
-          -1, -1,
-           1, -1,
-          -1,  1,
-          -1,  1,
-           1, -1,
-           1,  1,
+          -1, -1,  1, -1, -1,  1,
+          -1,  1,  1, -1,  1,  1,
         ]), gl.STATIC_DRAW);
 
         aPositionLoc = gl.getAttribLocation(program, 'aPosition');
@@ -600,14 +984,14 @@
     }
 
     // ==========================================
-    // 4. W3C DeviceOrientation & Full-Pose Recenter
+    // 6. DeviceOrientation & Pose Recenter
     // ==========================================
-    const qCameraCorrect = new Quat(-Math.SQRT1_2, 0, 0, Math.SQRT1_2); // -90 deg around X (device top -> camera -Z)
+    const qCameraCorrect = new Quat(-Math.SQRT1_2, 0, 0, Math.SQRT1_2);
     const qScreenZ = new Quat();
     let qPoseCurrent = new Quat();
     let qRefInv = new Quat();
     let qCamera = new Quat();
-
+    let qCameraInv = new Quat();
     let cameraMat3 = [1, 0, 0,  0, 1, 0,  0, 0, 1];
 
     function updateScreenOrientation() {
@@ -626,7 +1010,6 @@
     window.addEventListener('resize', updateScreenOrientation);
     updateScreenOrientation();
 
-    // W3C Sensor to Corrected Pose Quaternion
     function computePoseQuaternion(alphaDeg, betaDeg, gammaDeg, screenAngleDeg) {
       const deg2rad = Math.PI / 180;
       const betaRad = betaDeg * deg2rad;
@@ -634,20 +1017,13 @@
       const gammaRad = gammaDeg * deg2rad;
       const screenRad = screenAngleDeg * deg2rad;
 
-      // 1. Intrinsic 'YXZ' rotation from W3C angles
       const q = new Quat().setFromEulerYXZ(betaRad, alphaRad, -gammaRad);
-
-      // 2. Camera correction (-90 deg X-axis)
       q.multiply(qCameraCorrect);
-
-      // 3. Screen orientation angle correction (-screenRad Z-axis)
       qScreenZ.setFromAxisAngle(0, 0, 1, -screenRad);
       q.multiply(qScreenZ);
-
       return q;
     }
 
-    // Full-Pose Recenter
     function recenterPose() {
       qPoseCurrent = computePoseQuaternion(
         state.rawOrientation.alpha,
@@ -658,6 +1034,7 @@
 
       qRefInv = qPoseCurrent.clone().invert();
       qCamera = qRefInv.clone().multiply(qPoseCurrent);
+      qCameraInv = qCamera.clone().invert();
       cameraMat3 = qCamera.toMat3ColumnMajor();
 
       state.cameraForward = qCamera.transformVector([0, 0, -1]);
@@ -667,11 +1044,7 @@
       state.qCamera = [qCamera.x, qCamera.y, qCamera.z, qCamera.w];
 
       const elFwd = document.getElementById('valCamFwd');
-      const elUp = document.getElementById('valCamUp');
       if (elFwd) elFwd.textContent = `${state.cameraForward[0].toFixed(2)},${state.cameraForward[1].toFixed(2)},${state.cameraForward[2].toFixed(2)}`;
-      if (elUp) elUp.textContent = `${state.cameraUp[0].toFixed(2)},${state.cameraUp[1].toFixed(2)},${state.cameraUp[2].toFixed(2)}`;
-
-      syncTelemetry('recenterPose');
     }
 
     window.addEventListener('deviceorientation', (e) => {
@@ -681,9 +1054,9 @@
       state.rawOrientation.beta = e.beta || 0;
       state.rawOrientation.gamma = e.gamma || 0;
 
-      // Update pose and relative camera orientation
       qPoseCurrent = computePoseQuaternion(e.alpha, e.beta || 0, e.gamma || 0, state.screenAngle);
       qCamera = qRefInv.clone().multiply(qPoseCurrent);
+      qCameraInv = qCamera.clone().invert();
       cameraMat3 = qCamera.toMat3ColumnMajor();
 
       state.cameraForward = qCamera.transformVector([0, 0, -1]);
@@ -691,7 +1064,8 @@
       state.qPose = [qPoseCurrent.x, qPoseCurrent.y, qPoseCurrent.z, qPoseCurrent.w];
       state.qCamera = [qCamera.x, qCamera.y, qCamera.z, qCamera.w];
 
-      // Objective Telemetry Direction Detection
+      telemetry.onHeadMove(state.cameraForward);
+
       const fx = state.cameraForward[0];
       const fy = state.cameraForward[1];
       let hState = 'Center';
@@ -704,102 +1078,511 @@
       const elEvt = document.getElementById('valEventCount');
       if (elEvt) elEvt.textContent = state.motionEventCount;
       const elFwd = document.getElementById('valCamFwd');
-      const elUp = document.getElementById('valCamUp');
       const elHead = document.getElementById('valHeadState');
       if (elFwd) elFwd.textContent = `${state.cameraForward[0].toFixed(2)},${state.cameraForward[1].toFixed(2)},${state.cameraForward[2].toFixed(2)}`;
-      if (elUp) elUp.textContent = `${state.cameraUp[0].toFixed(2)},${state.cameraUp[1].toFixed(2)},${state.cameraUp[2].toFixed(2)}`;
       if (elHead) elHead.textContent = hState;
     }, { passive: true });
 
     // ==========================================
-    // 5. Render Loop (Canonical UNPACK_FLIP_Y_WEBGL = true)
+    // 7. Stereo UI Math & Target Projection
     // ==========================================
-    let lastTime = performance.now();
+    const FOV_RAD = 1.65; // ~95 deg
+    const TAN_HALF_FOV = Math.tan(FOV_RAD * 0.5);
+
+    function sphericalToDir(yawDeg, pitchDeg) {
+      const yawRad = yawDeg * (Math.PI / 180);
+      const pitchRad = pitchDeg * (Math.PI / 180);
+      const cosP = Math.cos(pitchRad);
+      return [
+        Math.sin(yawRad) * cosP,
+        Math.sin(pitchRad),
+        -Math.cos(yawRad) * cosP
+      ];
+    }
+
+    // Projects a 3D world direction onto an eye's 2D canvas pixel coordinates
+    function projectWorldDirToEye(dirWorld, eyeIndex, halfW, height) {
+      const aspect = halfW / height;
+      const dCam = qCameraInv.transformVector(dirWorld);
+      if (dCam[2] >= -0.01) return null; // Behind camera
+
+      const zDepth = -dCam[2];
+      const ndcX = dCam[0] / (zDepth * TAN_HALF_FOV * aspect);
+      const ndcY = dCam[1] / (zDepth * TAN_HALF_FOV);
+
+      if (Math.abs(ndcX) > 1.35 || Math.abs(ndcY) > 1.35) return null;
+
+      const px = (eyeIndex * halfW) + (ndcX * 0.5 + 0.5) * halfW;
+      const py = (1.0 - (ndcY * 0.5 + 0.5)) * height;
+      return { x: px, y: py, ndcX, ndcY, zDepth };
+    }
+
+    // Measure angular distance between head gaze (forward vector) and target world direction
+    function getGazeAngularDistanceDeg(targetDirWorld) {
+      const fwd = state.cameraForward;
+      const dot = fwd[0] * targetDirWorld[0] + fwd[1] * targetDirWorld[1] + fwd[2] * targetDirWorld[2];
+      const clamped = Math.max(-1, Math.min(1, dot));
+      return Math.acos(clamped) * (180 / Math.PI);
+    }
+
+    // Build Interactive Items for current frame depending on active pattern
+    function getActiveInteractiveItems() {
+      const items = [];
+
+      if (state.activePattern === 'A') {
+        // Pattern A: Center Gaze Arc docked at pitch -13°
+        const arcButtons = [
+          { id: 'pat_switch', label: '🔀 A/B/C', yaw: -30, pitch: -13, radiusDeg: 4.8, cmd: () => CommandModel.cyclePattern(), color: '#7c3aed' },
+          { id: 'prev', label: '⏮ Prev', yaw: -20, pitch: -13, radiusDeg: 4.2, cmd: () => CommandModel.previous() },
+          { id: 'seek_back', label: '⏪ -10s', yaw: -10, pitch: -13, radiusDeg: 4.2, cmd: () => CommandModel.seekBackward(10) },
+          { id: 'play_pause', label: video.paused ? '▶ Play' : '⏸ Pause', yaw: 0, pitch: -13, radiusDeg: 5.2, cmd: () => CommandModel.playPause(), color: '#2563eb' },
+          { id: 'seek_fwd', label: '⏩ +10s', yaw: 10, pitch: -13, radiusDeg: 4.2, cmd: () => CommandModel.seekForward(10) },
+          { id: 'next', label: '⏭ Next', yaw: 20, pitch: -13, radiusDeg: 4.2, cmd: () => CommandModel.next() },
+          { id: 'recenter', label: '🎯 Center', yaw: 30, pitch: -13, radiusDeg: 4.8, cmd: () => CommandModel.recenter(), color: '#059669' }
+        ];
+        arcButtons.forEach(b => {
+          items.push({
+            ...b,
+            pattern: 'A',
+            dirWorld: sphericalToDir(b.yaw, b.pitch)
+          });
+        });
+      } else if (state.activePattern === 'B') {
+        // Pattern B: Radial Menu (Daydream Elements style)
+        if (!state.patternB_open) {
+          // Closed: Small summon anchor at pitch -16°
+          items.push({
+            id: 'open_radial',
+            label: '🔘 Open Menu',
+            pattern: 'B',
+            yaw: 0,
+            pitch: -16,
+            radiusDeg: 5.5,
+            color: '#7c3aed',
+            cmd: () => CommandModel.openControls(),
+            dirWorld: sphericalToDir(0, -16)
+          });
+        } else {
+          // Open: Radial ring surrounding gaze anchor
+          const anchorPitch = -12;
+          const radialR = 13.5;
+
+          // Center Dead-Zone (Close)
+          items.push({
+            id: 'close_radial',
+            label: '✕ Close',
+            pattern: 'B',
+            yaw: 0,
+            pitch: anchorPitch,
+            radiusDeg: 4.5,
+            color: '#ef4444',
+            cmd: () => CommandModel.closeControls(),
+            dirWorld: sphericalToDir(0, anchorPitch)
+          });
+
+          const radialNodes = [
+            { id: 'recenter', label: '🎯 Center', angleDeg: 90, cmd: () => CommandModel.recenter(), color: '#059669' },
+            { id: 'seek_fwd', label: '⏩ +10s', angleDeg: 30, cmd: () => CommandModel.seekForward(10) },
+            { id: 'next', label: '⏭ Next', angleDeg: -30, cmd: () => CommandModel.next() },
+            { id: 'play_pause', label: video.paused ? '▶ Play' : '⏸ Pause', angleDeg: -90, cmd: () => CommandModel.playPause(), color: '#2563eb' },
+            { id: 'prev', label: '⏮ Prev', angleDeg: -150, cmd: () => CommandModel.previous() },
+            { id: 'seek_back', label: '⏪ -10s', angleDeg: 150, cmd: () => CommandModel.seekBackward(10) }
+          ];
+
+          radialNodes.forEach(rn => {
+            const rad = rn.angleDeg * (Math.PI / 180);
+            const yaw = radialR * Math.cos(rad);
+            const pitch = anchorPitch + radialR * Math.sin(rad);
+            items.push({
+              id: rn.id,
+              label: rn.label,
+              pattern: 'B',
+              yaw: yaw,
+              pitch: pitch,
+              radiusDeg: 4.8,
+              color: rn.color,
+              cmd: rn.cmd,
+              dirWorld: sphericalToDir(yaw, pitch)
+            });
+          });
+
+          // Top helper node for pattern switch
+          items.push({
+            id: 'pat_switch',
+            label: '🔀 A/B/C',
+            pattern: 'B',
+            yaw: -22,
+            pitch: anchorPitch + 12,
+            radiusDeg: 4.2,
+            color: '#7c3aed',
+            cmd: () => CommandModel.cyclePattern(),
+            dirWorld: sphericalToDir(-22, anchorPitch + 12)
+          });
+        }
+      } else if (state.activePattern === 'C') {
+        // Pattern C: Video HUD with timeline & playback panel
+        if (!state.patternC_open) {
+          items.push({
+            id: 'open_hud',
+            label: '📺 Video HUD',
+            pattern: 'C',
+            yaw: 0,
+            pitch: -16,
+            radiusDeg: 5.5,
+            color: '#0891b2',
+            cmd: () => CommandModel.openControls(),
+            dirWorld: sphericalToDir(0, -16)
+          });
+        } else {
+          // Row 1: Scrubber jump zones (-60s, -10s, +10s, +60s)
+          items.push({ id: 'seek_b60', label: '-60s', pattern: 'C', yaw: -18, pitch: -7, radiusDeg: 3.8, cmd: () => CommandModel.seekBackward(60) });
+          items.push({ id: 'seek_b10', label: '-10s', pattern: 'C', yaw: -8, pitch: -7, radiusDeg: 3.8, cmd: () => CommandModel.seekBackward(10) });
+          items.push({ id: 'seek_f10', label: '+10s', pattern: 'C', yaw: 8, pitch: -7, radiusDeg: 3.8, cmd: () => CommandModel.seekForward(10) });
+          items.push({ id: 'seek_f60', label: '+60s', pattern: 'C', yaw: 18, pitch: -7, radiusDeg: 3.8, cmd: () => CommandModel.seekForward(60) });
+
+          // Row 2: Transport bar
+          items.push({ id: 'prev', label: '⏮ Prev', pattern: 'C', yaw: -20, pitch: -15, radiusDeg: 4.4, cmd: () => CommandModel.previous() });
+          items.push({ id: 'play_pause', label: video.paused ? '▶ Play' : '⏸ Pause', pattern: 'C', yaw: -7, pitch: -15, radiusDeg: 5.2, cmd: () => CommandModel.playPause(), color: '#2563eb' });
+          items.push({ id: 'next', label: '⏭ Next', pattern: 'C', yaw: 7, pitch: -15, radiusDeg: 4.4, cmd: () => CommandModel.next() });
+          items.push({ id: 'recenter', label: '🎯 Center', pattern: 'C', yaw: 20, pitch: -15, radiusDeg: 4.4, cmd: () => CommandModel.recenter(), color: '#059669' });
+
+          // Row 3: Top utility controls
+          items.push({ id: 'pat_switch', label: '🔀 A/B/C', pattern: 'C', yaw: -22, pitch: -22, radiusDeg: 3.8, color: '#7c3aed', cmd: () => CommandModel.cyclePattern() });
+          items.push({ id: 'close_hud', label: '✕ Close', pattern: 'C', yaw: 22, pitch: -22, radiusDeg: 3.8, color: '#ef4444', cmd: () => CommandModel.closeControls() });
+        }
+      }
+
+      return items;
+    }
+
+    // Dwell State Machine
+    let currentHoveredItem = null;
+    let dwellProgress = 0;
+    let activationFlashTime = 0;
+    let activatedItemId = null;
+    let actionCooldownUntil = 0;
+
+    function updateDwellInteraction(now) {
+      if (!state.inVR) return;
+
+      if (now < actionCooldownUntil) {
+        dwellProgress = 0;
+        return;
+      }
+
+      const items = getActiveInteractiveItems();
+      let bestItem = null;
+      let minAng = 999;
+
+      items.forEach(item => {
+        const ang = getGazeAngularDistanceDeg(item.dirWorld);
+        if (ang <= item.radiusDeg && ang < minAng) {
+          minAng = ang;
+          bestItem = item;
+        }
+      });
+
+      // Auto-close Pattern B if looking far away (>24°)
+      if (state.activePattern === 'B' && state.patternB_open) {
+        const centerDir = sphericalToDir(0, -12);
+        const distToCenter = getGazeAngularDistanceDeg(centerDir);
+        if (distToCenter > 24) {
+          state.patternB_open = false;
+        }
+      }
+
+      if (bestItem) {
+        if (!currentHoveredItem || currentHoveredItem.id !== bestItem.id) {
+          // Exited previous target
+          if (currentHoveredItem) {
+            telemetry.recordDwellCancel(state.activePattern, currentHoveredItem.id, (now - telemetry.hoverStartTime));
+          }
+          currentHoveredItem = bestItem;
+          telemetry.recordTargetEnter(state.activePattern, bestItem.id);
+        }
+
+        const elapsed = now - telemetry.hoverStartTime;
+        dwellProgress = Math.min(1.0, elapsed / state.dwellThresholdMs);
+
+        if (dwellProgress >= 1.0) {
+          // Activate!
+          activatedItemId = bestItem.id;
+          activationFlashTime = now;
+          actionCooldownUntil = now + 400; // 400ms cooldown to avoid repeat fires
+          telemetry.recordDwellComplete(state.activePattern, bestItem.id, elapsed);
+          bestItem.cmd();
+          dwellProgress = 0;
+          currentHoveredItem = null;
+        }
+      } else {
+        if (currentHoveredItem) {
+          telemetry.recordDwellCancel(state.activePattern, currentHoveredItem.id, (now - telemetry.hoverStartTime));
+          currentHoveredItem = null;
+        }
+        dwellProgress = 0;
+      }
+    }
+
+    // ==========================================
+    // 8. Stereo Canvas UI Rendering
+    // ==========================================
+    function renderStereoUI(now, width, height) {
+      if (!uiCtx) return;
+      uiCtx.clearRect(0, 0, width, height);
+      if (!state.inVR) return;
+
+      const halfW = Math.floor(width / 2);
+      const items = getActiveInteractiveItems();
+
+      // Render Left Eye (0) and Right Eye (1)
+      for (let eye = 0; eye < 2; eye++) {
+        const eyeOffsetX = eye * halfW;
+        const eyeCenterX = eyeOffsetX + halfW * 0.5;
+        const eyeCenterY = height * 0.5;
+
+        uiCtx.save();
+        uiCtx.beginPath();
+        uiCtx.rect(eyeOffsetX, 0, halfW, height);
+        uiCtx.clip();
+
+        // 1. Draw In-VR Status Bar (Top of field of view)
+        const hudProj = projectWorldDirToEye(sphericalToDir(0, 18), eye, halfW, height);
+        if (hudProj) {
+          uiCtx.fillStyle = 'rgba(15, 23, 42, 0.7)';
+          uiCtx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
+          uiCtx.lineWidth = 1;
+          const panelW = 320, panelH = 34;
+          roundRect(uiCtx, hudProj.x - panelW/2, hudProj.y - panelH/2, panelW, panelH, 17, true, true);
+
+          uiCtx.font = 'bold 12px -apple-system, sans-serif';
+          uiCtx.fillStyle = '#38bdf8';
+          uiCtx.textAlign = 'left';
+          uiCtx.fillText(`Pattern ${state.activePattern}: ${state.activePattern === 'A' ? 'Gaze Arc' : state.activePattern === 'B' ? 'Radial Menu' : 'Video HUD'}`, hudProj.x - panelW/2 + 14, hudProj.y + 4);
+
+          uiCtx.fillStyle = '#94a3b8';
+          uiCtx.textAlign = 'right';
+          uiCtx.fillText(`${formatTime(video.currentTime)} / ${formatTime(video.duration)}`, hudProj.x + panelW/2 - 14, hudProj.y + 4);
+        }
+
+        // 2. Draw Interactive UI Nodes
+        items.forEach(item => {
+          const p = projectWorldDirToEye(item.dirWorld, eye, halfW, height);
+          if (!p) return;
+
+          const isHovered = (currentHoveredItem && currentHoveredItem.id === item.id);
+          const isActivated = (activatedItemId === item.id && (now - activationFlashTime < 300));
+          const btnRadius = Math.max(22, (item.radiusDeg * 5.2) * (halfW / 400));
+
+          uiCtx.save();
+
+          // Button Glow & Background
+          if (isActivated) {
+            uiCtx.fillStyle = 'rgba(16, 185, 129, 0.9)';
+            uiCtx.strokeStyle = '#34d399';
+            uiCtx.lineWidth = 3;
+          } else if (isHovered) {
+            uiCtx.fillStyle = item.color ? `${item.color}cc` : 'rgba(37, 99, 235, 0.85)';
+            uiCtx.strokeStyle = '#38bdf8';
+            uiCtx.lineWidth = 2.5;
+            uiCtx.shadowColor = '#38bdf8';
+            uiCtx.shadowBlur = 12;
+          } else {
+            uiCtx.fillStyle = item.color ? `${item.color}66` : 'rgba(15, 23, 42, 0.75)';
+            uiCtx.strokeStyle = 'rgba(255, 255, 255, 0.25)';
+            uiCtx.lineWidth = 1.2;
+          }
+
+          // Draw Rounded Button Pill
+          const pillW = Math.max(btnRadius * 2.2, 70);
+          const pillH = btnRadius * 1.6;
+          roundRect(uiCtx, p.x - pillW/2, p.y - pillH/2, pillW, pillH, pillH/2, true, true);
+
+          // Dwell Progress Filling Gauge on Button
+          if (isHovered && dwellProgress > 0) {
+            uiCtx.fillStyle = 'rgba(255, 255, 255, 0.3)';
+            roundRect(uiCtx, p.x - pillW/2, p.y - pillH/2, pillW * dwellProgress, pillH, pillH/2, true, false);
+          }
+
+          // Label
+          uiCtx.shadowBlur = 0;
+          uiCtx.font = `bold ${Math.round(btnRadius * 0.55)}px -apple-system, sans-serif`;
+          uiCtx.fillStyle = '#ffffff';
+          uiCtx.textAlign = 'center';
+          uiCtx.textBaseline = 'middle';
+          uiCtx.fillText(item.label, p.x, p.y);
+
+          uiCtx.restore();
+        });
+
+        // 3. Feedback Toast
+        if (state.toastText && (now - state.toastTime < 2000)) {
+          const alpha = Math.min(1.0, 1.0 - (now - state.toastTime - 1200) / 800);
+          if (alpha > 0) {
+            uiCtx.fillStyle = `rgba(15, 23, 42, ${0.85 * alpha})`;
+            uiCtx.strokeStyle = `rgba(56, 189, 248, ${0.8 * alpha})`;
+            uiCtx.lineWidth = 1.5;
+            const tw = 240, th = 32;
+            const toastY = eyeCenterY - 90;
+            roundRect(uiCtx, eyeCenterX - tw/2, toastY - th/2, tw, th, 16, true, true);
+
+            uiCtx.font = 'bold 13px -apple-system, sans-serif';
+            uiCtx.fillStyle = `rgba(255, 255, 255, ${alpha})`;
+            uiCtx.textAlign = 'center';
+            uiCtx.textBaseline = 'middle';
+            uiCtx.fillText(state.toastText, eyeCenterX, toastY);
+          }
+        }
+
+        // 4. Center Gaze Reticle & Dwell Progress Gauge
+        const isHovering = currentHoveredItem !== null;
+        const reticleR = isHovering ? 14 : 9;
+
+        // Outer Reticle Ring
+        uiCtx.beginPath();
+        uiCtx.arc(eyeCenterX, eyeCenterY, reticleR, 0, Math.PI * 2);
+        uiCtx.strokeStyle = isHovering ? '#38bdf8' : 'rgba(255, 255, 255, 0.7)';
+        uiCtx.lineWidth = isHovering ? 2.5 : 1.5;
+        uiCtx.stroke();
+
+        // Inner Dot
+        uiCtx.beginPath();
+        uiCtx.arc(eyeCenterX, eyeCenterY, 3, 0, Math.PI * 2);
+        uiCtx.fillStyle = isHovering ? '#38bdf8' : 'rgba(255, 255, 255, 0.9)';
+        uiCtx.fill();
+
+        // Dwell Radial Progress Arc
+        if (isHovering && dwellProgress > 0) {
+          uiCtx.beginPath();
+          const startAngle = -Math.PI / 2;
+          const endAngle = startAngle + (Math.PI * 2 * dwellProgress);
+          uiCtx.arc(eyeCenterX, eyeCenterY, reticleR + 5, startAngle, endAngle);
+          uiCtx.strokeStyle = '#34d399';
+          uiCtx.lineWidth = 3.5;
+          uiCtx.stroke();
+        }
+
+        // Activation Ripple Pulse
+        if (now - activationFlashTime < 250) {
+          const pulseProgress = (now - activationFlashTime) / 250;
+          const pulseR = reticleR + pulseProgress * 24;
+          uiCtx.beginPath();
+          uiCtx.arc(eyeCenterX, eyeCenterY, pulseR, 0, Math.PI * 2);
+          uiCtx.strokeStyle = `rgba(52, 211, 153, ${1.0 - pulseProgress})`;
+          uiCtx.lineWidth = 2.5;
+          uiCtx.stroke();
+        }
+
+        uiCtx.restore();
+      }
+    }
+
+    function roundRect(ctx, x, y, width, height, radius, fill, stroke) {
+      if (typeof radius === 'undefined') radius = 5;
+      ctx.beginPath();
+      ctx.moveTo(x + radius, y);
+      ctx.lineTo(x + width - radius, y);
+      ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
+      ctx.lineTo(x + width, y + height - radius);
+      ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
+      ctx.lineTo(x + radius, y + height);
+      ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
+      ctx.lineTo(x, y + radius);
+      ctx.quadraticCurveTo(x, y, x + radius, y);
+      ctx.closePath();
+      if (fill) ctx.fill();
+      if (stroke) ctx.stroke();
+    }
+
+    // ==========================================
+    // 9. Main Render Loop
+    // ==========================================
+    let lastFpsTime = performance.now();
     let frameCounter = 0;
 
     function renderLoop(now) {
       requestAnimationFrame(renderLoop);
 
       frameCounter++;
-      if (now - lastTime >= 1000) {
-        state.fps = Number(((frameCounter * 1000) / (now - lastTime)).toFixed(1));
+      if (now - lastFpsTime >= 1000) {
+        state.fps = Number(((frameCounter * 1000) / (now - lastFpsTime)).toFixed(1));
         const elFps = document.getElementById('valFps');
         if (elFps) elFps.textContent = state.fps.toFixed(1);
         frameCounter = 0;
-        lastTime = now;
-        state.runtimeSeconds += 1;
+        lastFpsTime = now;
       }
 
-      if (video.getVideoPlaybackQuality) {
-        const q = video.getVideoPlaybackQuality();
-        state.droppedFrames = q.droppedVideoFrames;
-        state.totalVideoFrames = q.totalVideoFrames;
-        const elDrop = document.getElementById('valDropped');
-        if (elDrop) elDrop.textContent = `${q.droppedVideoFrames}/${q.totalVideoFrames}`;
+      const dpr = window.devicePixelRatio || 1;
+      const width = window.innerWidth * dpr;
+      const height = window.innerHeight * dpr;
+
+      if (glCanvas.width !== width || glCanvas.height !== height) {
+        glCanvas.width = width;
+        glCanvas.height = height;
+        uiCanvas.width = width;
+        uiCanvas.height = height;
       }
 
-      if (!gl || !program) return;
+      // Update Dwell State
+      updateDwellInteraction(now);
 
-      const width = window.innerWidth * window.devicePixelRatio;
-      const height = window.innerHeight * window.devicePixelRatio;
-      if (canvas.width !== width || canvas.height !== height) {
-        canvas.width = width;
-        canvas.height = height;
-      }
+      // WebGL VR Projection
+      if (gl && program) {
+        if (video.readyState >= 2) {
+          gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+          gl.bindTexture(gl.TEXTURE_2D, videoTex);
+          gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, video);
+        }
 
-      // Canonical Video Upload with UNPACK_FLIP_Y_WEBGL = true
-      if (video.readyState >= 2) {
-        gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+        gl.useProgram(program);
+        gl.enableVertexAttribArray(aPositionLoc);
+        gl.bindBuffer(gl.ARRAY_BUFFER, posBuffer);
+        gl.vertexAttribPointer(aPositionLoc, 2, gl.FLOAT, false, 0, 0);
+
+        gl.activeTexture(gl.TEXTURE0);
         gl.bindTexture(gl.TEXTURE_2D, videoTex);
-        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, video);
+        gl.uniform1i(uVideoTextureLoc, 0);
+
+        gl.uniformMatrix3fv(uCamRotLoc, false, cameraMat3);
+        gl.uniform1i(uStereoModeLoc, state.stereoMode);
+
+        gl.enable(gl.SCISSOR_TEST);
+
+        const halfW = Math.floor(width / 2);
+        const aspectPerEye = (halfW / height);
+        gl.uniform1f(uAspectLoc, aspectPerEye);
+
+        // Left Eye Viewport
+        gl.viewport(0, 0, halfW, height);
+        gl.scissor(0, 0, halfW, height);
+        gl.uniform1i(uEyeLoc, 0);
+        gl.drawArrays(gl.TRIANGLES, 0, 6);
+
+        // Right Eye Viewport
+        gl.viewport(halfW, 0, halfW, height);
+        gl.scissor(halfW, 0, halfW, height);
+        gl.uniform1i(uEyeLoc, 1);
+        gl.drawArrays(gl.TRIANGLES, 0, 6);
+
+        gl.disable(gl.SCISSOR_TEST);
       }
 
-      gl.useProgram(program);
-      gl.enableVertexAttribArray(aPositionLoc);
-      gl.bindBuffer(gl.ARRAY_BUFFER, posBuffer);
-      gl.vertexAttribPointer(aPositionLoc, 2, gl.FLOAT, false, 0, 0);
-
-      gl.activeTexture(gl.TEXTURE0);
-      gl.bindTexture(gl.TEXTURE_2D, videoTex);
-      gl.uniform1i(uVideoTextureLoc, 0);
-
-      gl.uniformMatrix3fv(uCamRotLoc, false, cameraMat3);
-      gl.uniform1i(uStereoModeLoc, state.stereoMode);
-
-      gl.enable(gl.SCISSOR_TEST);
-
-      const halfW = Math.floor(width / 2);
-      const aspectPerEye = (halfW / height);
-      gl.uniform1f(uAspectLoc, aspectPerEye);
-
-      // --- Left Eye Viewport ---
-      gl.viewport(0, 0, halfW, height);
-      gl.scissor(0, 0, halfW, height);
-      gl.uniform1i(uEyeLoc, 0);
-      gl.drawArrays(gl.TRIANGLES, 0, 6);
-
-      // --- Right Eye Viewport ---
-      gl.viewport(halfW, 0, halfW, height);
-      gl.scissor(halfW, 0, halfW, height);
-      gl.uniform1i(uEyeLoc, 1);
-      gl.drawArrays(gl.TRIANGLES, 0, 6);
-
-      gl.disable(gl.SCISSOR_TEST);
-      state.renderFrameCount++;
+      // Stereo 2D In-Headset UI & Reticle
+      renderStereoUI(now, width, height);
     }
 
     requestAnimationFrame(renderLoop);
 
     // ==========================================
-    // 6. UI Controls & Load
+    // 10. UI Setup & Video Loading
     // ==========================================
     async function loadVideoList() {
       try {
         const res = await fetch('/api/videos');
         const data = await res.json();
         if (data.videos && data.videos.length > 0) {
+          state.videoList = data.videos;
           videoSelect.innerHTML = '';
-          data.videos.forEach((v) => {
+          data.videos.forEach((v, idx) => {
             const opt = document.createElement('option');
             opt.value = v.relPath;
             opt.textContent = `[${v.sizeGB}] ${v.name}`;
@@ -856,16 +1639,31 @@
       showError('Video decode error: ' + err);
     });
 
-    // Stereo Diagnosis Selector
-    const grpStereoMode = document.getElementById('grpStereoMode');
-    grpStereoMode.addEventListener('click', (e) => {
+    // Pattern Selector in 2D UI
+    const grpPatternSelect = document.getElementById('grpPatternSelect');
+    grpPatternSelect.addEventListener('click', (e) => {
       const btn = e.target.closest('button');
       if (btn) {
-        grpStereoMode.querySelectorAll('button').forEach(b => b.classList.remove('active'));
-        btn.classList.add('active');
-        state.stereoMode = parseInt(btn.getAttribute('data-val'), 10);
-        syncTelemetry('setStereoMode:' + state.stereoMode);
+        const pat = btn.getAttribute('data-pattern');
+        setPattern(pat);
       }
+    });
+
+    // Dwell Threshold Selector
+    const grpDwellThreshold = document.getElementById('grpDwellThreshold');
+    grpDwellThreshold.addEventListener('click', (e) => {
+      const btn = e.target.closest('button');
+      if (btn) {
+        grpDwellThreshold.querySelectorAll('button').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        state.dwellThresholdMs = parseInt(btn.getAttribute('data-dwell'), 10);
+        showFeedbackToast(`Dwell: ${state.dwellThresholdMs}ms`);
+      }
+    });
+
+    // Reset Tasks Checklist
+    document.getElementById('btnResetTasks').addEventListener('click', () => {
+      telemetry.resetTasks();
     });
 
     // Enter VR Button
@@ -876,12 +1674,10 @@
           state.motionPermission = perm;
           const elPerm = document.getElementById('valMotionPerm');
           if (elPerm) elPerm.textContent = perm;
-          syncTelemetry('motionPermission:' + perm);
         }).catch((err) => {
           state.motionPermission = 'error: ' + err.message;
           const elPerm = document.getElementById('valMotionPerm');
           if (elPerm) elPerm.textContent = 'Err';
-          syncTelemetry('motionPermissionError:' + err.message);
         });
       } else {
         state.motionPermission = 'granted_standard';
@@ -893,7 +1689,6 @@
       video.muted = false;
       video.play().catch((e) => {
         console.log('Video play error on gesture:', e);
-        // Fallback muted play if audio policy blocks
         video.muted = true;
         video.play().catch(e2 => console.log('Muted play error:', e2));
       });
@@ -906,61 +1701,47 @@
       state.inVR = true;
       uiOverlay.classList.add('hidden');
       showFloatingBar();
-      syncTelemetry('enterVR');
+      showFeedbackToast(`Started in Pattern ${state.activePattern}`);
     });
 
+    // Floating Bar Reveal
+    let hideBarTimeout = null;
+    function showFloatingBar() {
+      if (!state.inVR) return;
+      vrFloatingBar.classList.remove('fade-out');
+      clearTimeout(hideBarTimeout);
+      hideBarTimeout = setTimeout(() => {
+        vrFloatingBar.classList.add('fade-out');
+      }, 4000);
+    }
+
+    window.addEventListener('touchstart', showFloatingBar, { passive: true });
+    window.addEventListener('click', showFloatingBar);
+
     // Floating Bar Controls
+    btnVrSwitchPattern.addEventListener('click', (e) => {
+      e.stopPropagation();
+      CommandModel.cyclePattern();
+    });
     document.getElementById('btnVrReset').addEventListener('click', (e) => {
       e.stopPropagation();
-      recenterPose();
-    });
-    document.getElementById('btnVrPlayPause').addEventListener('click', (e) => {
-      e.stopPropagation();
-      if (video.paused) {
-        video.play().catch(e => console.log('Play error:', e));
-      } else {
-        video.pause();
-      }
-      syncTelemetry('togglePlayPause');
+      CommandModel.recenter();
     });
     document.getElementById('btnVrToggleStereo').addEventListener('click', (e) => {
       e.stopPropagation();
       state.stereoMode = (state.stereoMode + 1) % 3;
-      grpStereoMode.querySelectorAll('button').forEach(b => b.classList.remove('active'));
-      const activeBtn = grpStereoMode.querySelector(`button[data-val="${state.stereoMode}"]`);
-      if (activeBtn) activeBtn.classList.add('active');
-      syncTelemetry('cycleStereoMode:' + state.stereoMode);
+      showFeedbackToast(`Stereo Mode: ${state.stereoMode}`);
     });
     document.getElementById('btnVrExit').addEventListener('click', (e) => {
       e.stopPropagation();
       state.inVR = false;
       uiOverlay.classList.remove('hidden');
       vrFloatingBar.classList.add('fade-out');
-      syncTelemetry('exitVR');
+      telemetry.syncSummary();
     });
 
-    // Sync Telemetry
-    async function syncTelemetry(reason = 'manual') {
-      try {
-        const payload = {
-          reason: reason,
-          userAgent: navigator.userAgent,
-          state: {
-            ...state,
-            currentTime: Number(video.currentTime.toFixed(2)),
-            videoPaused: video.paused
-          },
-          timestamp: new Date().toISOString()
-        };
-        await fetch('/api/telemetry', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload)
-        });
-      } catch (e) {}
-    }
-
-    document.getElementById('btnSyncTelemetry').addEventListener('click', () => syncTelemetry('userSyncButton'));
+    // Sync Telemetry Button
+    document.getElementById('btnSyncTelemetry').addEventListener('click', () => telemetry.syncSummary());
 
     // Initial Load
     selectVideo(videoSelect.value);

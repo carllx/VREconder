@@ -222,18 +222,29 @@ function handleRequest(req, res, isHttps) {
     req.on('data', chunk => { body += chunk; });
     req.on('end', () => {
       try {
-        latestTelemetry = JSON.parse(body);
-        latestTelemetry.serverTimestamp = new Date().toISOString();
-        latestTelemetry.clientIp = req.socket.remoteAddress;
+        const payload = JSON.parse(body);
+        payload.serverTimestamp = new Date().toISOString();
+        payload.clientIp = req.socket.remoteAddress;
         
-        const s = latestTelemetry.state || {};
-        const reason = latestTelemetry.reason || 'update';
-        const fwd = s.cameraForward ? `fwd:(${s.cameraForward.map(n=>n.toFixed(2)).join(',')})` : '';
-        const up = s.cameraUp ? `up:(${s.cameraUp.map(n=>n.toFixed(2)).join(',')})` : '';
-        const sa = `stand:${s.standalone ? 'YES' : 'no'}`;
-        const vp = s.viewport ? `${s.viewport.w}x${s.viewport.h}` : '';
+        latestTelemetry = payload;
 
-        console.log(`[Telemetry (${reason})] inVR:${s.inVR} | ${sa} | ang:${s.screenAngle}° | FPS:${s.fps} | ${fwd} ${up} | mode:${s.stereoMode} | time:${s.currentTime}s | vp:${vp}`);
+        // If it's a UX interaction event or metric summary
+        if (payload.type === 'ux_event') {
+          console.log(`[UX Event] Pattern ${payload.pattern} | ${payload.event} | target: ${payload.target || 'none'} | dwell: ${payload.dwellMs || 0}ms | timeToCmd: ${payload.timeToCmdMs || 0}ms | travel: ${payload.travelDeg ? payload.travelDeg.toFixed(1) : 0}°`);
+        } else if (payload.type === 'ux_summary') {
+          console.log(`[UX Summary] Pattern ${payload.pattern} | Activations: ${payload.activations} | Cancels: ${payload.cancels} | AvgDwell: ${payload.avgDwellMs}ms | AvgTimeToCmd: ${payload.avgTimeToCmdMs}ms | Travel: ${payload.travelDeg.toFixed(1)}°`);
+          // Save to local prototype evidence JSON
+          const summaryFile = path.join(__dirname, 'prototype_ux_telemetry.json');
+          fs.writeFileSync(summaryFile, JSON.stringify(payload, null, 2), 'utf8');
+        } else {
+          const s = payload.state || {};
+          const reason = payload.reason || 'update';
+          const fwd = s.cameraForward ? `fwd:(${s.cameraForward.map(n=>n.toFixed(2)).join(',')})` : '';
+          const up = s.cameraUp ? `up:(${s.cameraUp.map(n=>n.toFixed(2)).join(',')})` : '';
+          const sa = `stand:${s.standalone ? 'YES' : 'no'}`;
+          const vp = s.viewport ? `${s.viewport.w}x${s.viewport.h}` : '';
+          console.log(`[Telemetry (${reason})] inVR:${s.inVR} | ${sa} | ang:${s.screenAngle}° | FPS:${s.fps} | ${fwd} ${up} | mode:${s.stereoMode} | time:${s.currentTime}s | vp:${vp}`);
+        }
         
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ status: 'ok', received: true }));
@@ -245,7 +256,7 @@ function handleRequest(req, res, isHttps) {
     return;
   }
 
-  // Telemetry status
+  // Telemetry status and summary
   if (pathname === '/api/telemetry' && req.method === 'GET') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ latestTelemetry }, null, 2));
