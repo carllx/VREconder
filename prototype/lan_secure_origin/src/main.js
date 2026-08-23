@@ -2,15 +2,18 @@
 // Application Bootstrap & Main Loop Entry
 // ==========================================
 import { state, showFeedbackToast, isStandalone } from './core/state.js';
-import { initOrientationListeners } from './core/orientation.js';
+import { initOrientationListeners, cameraMat3 } from './core/orientation.js';
 import { startRecenterCalibration } from './core/recenter.js';
 import { VRRenderer } from './render/vr-renderer.js';
+import { DiagnosticOverlay } from './render/diagnostic-overlay.js';
 import { MediaController } from './media/playback.js';
 import { CommandModel } from './controls/command-model.js';
 import { GazeEngine } from './controls/gaze-engine.js';
 import { renderStereoUI } from './controls/stereo-ui.js';
 import { telemetry } from './telemetry/telemetry.js';
 import { initAudioContext } from './controls/audio-haptics.js';
+import { profileStorage, computeMediaFingerprint } from './core/projection-profile.js';
+import { CalibrationUI } from './controls/calibration-ui.js';
 
 // Global error handlers
 function showError(msg) {
@@ -30,12 +33,7 @@ async function requestWakeLock() {
   try {
     if ('wakeLock' in navigator) {
       wakeLockSentinel = await navigator.wakeLock.request('screen');
-      const el = document.getElementById('valWakeLock');
-      if (el) el.textContent = 'Active (NoSleep)';
-      wakeLockSentinel.addEventListener('release', () => {
-        const elR = document.getElementById('valWakeLock');
-        if (elR) elR.textContent = 'Released';
-      });
+      wakeLockSentinel.addEventListener('release', () => {});
     }
   } catch (err) {
     console.warn('WakeLock error:', err);
@@ -60,16 +58,48 @@ const btnEnterVR = document.getElementById('btnEnterVR');
 const btnVrReset = document.getElementById('btnVrReset');
 const btnVrExit = document.getElementById('btnVrExit');
 const btnVrSwitchPattern = document.getElementById('btnVrSwitchPattern');
-const btnResetTasks = document.getElementById('btnResetTasks');
-const btnSyncTelemetry = document.getElementById('btnSyncTelemetry');
+const diagnosticToolbar = document.getElementById('diagnosticToolbar');
 
 // Instantiate Subsystems
 const vrRenderer = new VRRenderer(glCanvas);
+const diagnosticOverlay = new DiagnosticOverlay(uiCanvas);
 const mediaController = new MediaController(video, videoSelect);
 const commandModel = new CommandModel(mediaController);
 const gazeEngine = new GazeEngine(commandModel, video);
 
-// Initialize Device Orientation Listeners
+// Load server profiles
+profileStorage.loadServerProfiles();
+
+// Calibration UI Setup
+let activeVideoProfile = null;
+
+function onVideoSelected(videoItem) {
+  const mediaId = computeMediaFingerprint(videoItem);
+  activeVideoProfile = profileStorage.getVideoProfile(mediaId, videoItem ? videoItem.name : '');
+  calibrationUI.setVideoProfile(activeVideoProfile);
+  showFeedbackToast(`Profile loaded: ${activeVideoProfile.projection}`);
+}
+
+const calibrationUI = new CalibrationUI({
+  storage: profileStorage,
+  mediaController: mediaController,
+  diagnosticOverlay: diagnosticOverlay,
+  onProfileChanged: (vProfile, hProfile) => {
+    activeVideoProfile = vProfile;
+  },
+  onEnterVR: () => enterVRMode(),
+  onExitVR: () => exitVRMode()
+});
+
+// Override media selection to automatically load per-video profile
+const originalSelectVideo = mediaController.selectVideo.bind(mediaController);
+mediaController.selectVideo = (relPath) => {
+  originalSelectVideo(relPath);
+  const found = state.videoList.find(v => v.relPath === relPath) || { name: relPath, relPath: relPath, sizeBytes: 0 };
+  onVideoSelected(found);
+};
+
+// Initialize Orientation Listeners
 initOrientationListeners();
 
 // Floating Quick Bar visibility management
@@ -85,22 +115,11 @@ function showFloatingBar() {
 window.addEventListener('touchstart', showFloatingBar, { passive: true });
 window.addEventListener('click', showFloatingBar);
 
-// Event Listeners
-btnEnterVR.addEventListener('click', () => {
+function enterVRMode() {
   if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
     DeviceOrientationEvent.requestPermission().then((perm) => {
       state.motionPermission = perm;
-      const elPerm = document.getElementById('valMotionPerm');
-      if (elPerm) elPerm.textContent = perm;
-    }).catch((err) => {
-      state.motionPermission = 'error: ' + err.message;
-      const elPerm = document.getElementById('valMotionPerm');
-      if (elPerm) elPerm.textContent = 'Err';
-    });
-  } else {
-    state.motionPermission = 'granted_standard';
-    const elPerm = document.getElementById('valMotionPerm');
-    if (elPerm) elPerm.textContent = 'Standard';
+    }).catch(() => {});
   }
 
   requestWakeLock();
@@ -113,10 +132,24 @@ btnEnterVR.addEventListener('click', () => {
   });
 
   state.inVR = true;
+  calibrationUI.currentMode = 'vr';
   uiOverlay.classList.add('hidden');
+  diagnosticToolbar.style.display = 'none';
   showFloatingBar();
-  startRecenterCalibration(3000, '🥽 戴入眼镜并面朝正前方');
-});
+  startRecenterCalibration(2500, '🥽 戴入眼镜并面朝正前方');
+}
+
+function exitVRMode() {
+  state.inVR = false;
+  calibrationUI.currentMode = 'diagnostic';
+  uiOverlay.classList.remove('hidden');
+  diagnosticToolbar.style.display = 'flex';
+  vrFloatingBar.classList.add('fade-out');
+  telemetry.syncSummary();
+}
+
+// Event Listeners
+btnEnterVR.addEventListener('click', enterVRMode);
 
 btnVrReset.addEventListener('click', (e) => {
   e.stopPropagation();
@@ -130,40 +163,7 @@ btnVrSwitchPattern.addEventListener('click', (e) => {
 
 btnVrExit.addEventListener('click', (e) => {
   e.stopPropagation();
-  state.inVR = false;
-  uiOverlay.classList.remove('hidden');
-  vrFloatingBar.classList.add('fade-out');
-  telemetry.syncSummary();
-});
-
-btnResetTasks.addEventListener('click', () => {
-  telemetry.resetTasks();
-});
-
-btnSyncTelemetry.addEventListener('click', () => {
-  telemetry.syncSummary();
-});
-
-// Pattern Selector in 2D UI
-const grpPatternSelect = document.getElementById('grpPatternSelect');
-grpPatternSelect.addEventListener('click', (e) => {
-  const btn = e.target.closest('button');
-  if (btn) {
-    const pat = btn.getAttribute('data-pattern');
-    commandModel.setPattern(pat);
-  }
-});
-
-// Dwell Threshold Selector
-const grpDwellThreshold = document.getElementById('grpDwellThreshold');
-grpDwellThreshold.addEventListener('click', (e) => {
-  const btn = e.target.closest('button');
-  if (btn) {
-    grpDwellThreshold.querySelectorAll('button').forEach(b => b.classList.remove('active'));
-    btn.classList.add('active');
-    state.dwellThresholdMs = parseInt(btn.getAttribute('data-dwell'), 10);
-    showFeedbackToast('Dwell: ' + state.dwellThresholdMs + 'ms');
-  }
+  exitVRMode();
 });
 
 // Display Mode Badge
@@ -188,8 +188,6 @@ function renderLoop(now) {
   frameCounter++;
   if (now - lastFpsTime >= 1000) {
     state.fps = Number(((frameCounter * 1000) / (now - lastFpsTime)).toFixed(1));
-    const elFps = document.getElementById('valFps');
-    if (elFps) elFps.textContent = state.fps.toFixed(1);
     frameCounter = 0;
     lastFpsTime = now;
   }
@@ -205,17 +203,50 @@ function renderLoop(now) {
     uiCanvas.height = height;
   }
 
-  // Update Gaze & Dwell State
-  gazeEngine.update(now);
-
-  // WebGL 3D Stereo SBS Video Render
+  // Upload video frame if dirty
   if (mediaController.shouldUploadTexture()) {
     vrRenderer.updateVideoTexture(video);
   }
-  vrRenderer.render(width, height);
 
-  // 2D Stereo Overlay Canvas Render
-  renderStereoUI(uiCtx, gazeEngine, commandModel, video, now, width, height);
+  const isVR = state.inVR || calibrationUI.currentMode === 'vr';
+
+  if (!isVR) {
+    // 1. Diagnostic Mode: Single Rectilinear View
+    vrRenderer.renderDiagnosticView(
+      width,
+      height,
+      activeVideoProfile,
+      calibrationUI.activeViewerProfile,
+      calibrationUI.selectedEye,
+      null, // Identity camera rotation for pure forward perspective
+      calibrationUI.diagnosticFovDeg
+    );
+
+    // Draw Diagnostic Overlays (Grid, Plumb lines, Horizon, Crosshair)
+    diagnosticOverlay.render(
+      width,
+      height,
+      activeVideoProfile,
+      calibrationUI.activeViewerProfile,
+      calibrationUI.selectedEye,
+      video.paused,
+      video.currentTime,
+      video.duration || 0
+    );
+  } else {
+    // 2. Stereo VR Mode: Dual Viewports with Optional Lens Pre-Distortion
+    gazeEngine.update(now);
+
+    vrRenderer.renderStereoVR(
+      width,
+      height,
+      activeVideoProfile,
+      calibrationUI.activeViewerProfile,
+      cameraMat3
+    );
+
+    renderStereoUI(uiCtx, gazeEngine, commandModel, video, now, width, height);
+  }
 }
 
 requestAnimationFrame(renderLoop);

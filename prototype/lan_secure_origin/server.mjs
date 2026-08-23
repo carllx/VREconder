@@ -256,6 +256,65 @@ function handleRequest(req, res, isHttps) {
     return;
   }
 
+  // Profiles storage endpoints
+  const VIDEO_PROFILES_FILE = path.join(__dirname, 'prototype_video_profiles.json');
+  const VIEWER_PROFILE_FILE = path.join(__dirname, 'prototype_viewer_profile.json');
+
+  if (pathname === '/api/profiles' && req.method === 'GET') {
+    let videoProfiles = {};
+    let viewerProfile = null;
+    try {
+      if (fs.existsSync(VIDEO_PROFILES_FILE)) videoProfiles = JSON.parse(fs.readFileSync(VIDEO_PROFILES_FILE, 'utf8'));
+      if (fs.existsSync(VIEWER_PROFILE_FILE)) viewerProfile = JSON.parse(fs.readFileSync(VIEWER_PROFILE_FILE, 'utf8'));
+    } catch (e) {}
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ videoProfiles, viewerProfile }));
+    return;
+  }
+
+  if (pathname === '/api/profiles/video' && req.method === 'POST') {
+    let body = '';
+    req.on('data', chunk => { body += chunk; });
+    req.on('end', () => {
+      try {
+        const profile = JSON.parse(body);
+        let existing = {};
+        if (fs.existsSync(VIDEO_PROFILES_FILE)) {
+          try { existing = JSON.parse(fs.readFileSync(VIDEO_PROFILES_FILE, 'utf8')); } catch (e) {}
+        }
+        if (profile && profile.mediaId) {
+          existing[profile.mediaId] = profile;
+          fs.writeFileSync(VIDEO_PROFILES_FILE, JSON.stringify(existing, null, 2), 'utf8');
+          console.log(`[Profile] Saved Projection Profile for ${profile.mediaId} (${profile.projection})`);
+        }
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ status: 'ok', saved: true }));
+      } catch (err) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: err.message }));
+      }
+    });
+    return;
+  }
+
+  if (pathname === '/api/profiles/viewer' && req.method === 'POST') {
+    let body = '';
+    req.on('data', chunk => { body += chunk; });
+    req.on('end', () => {
+      try {
+        const profile = JSON.parse(body);
+        fs.writeFileSync(VIEWER_PROFILE_FILE, JSON.stringify(profile, null, 2), 'utf8');
+        console.log(`[Profile] Saved Viewer Profile: ${profile.viewerProfileId} (Lens: ${profile.lensCorrectionEnabled ? 'ON' : 'OFF'})`);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ status: 'ok', saved: true }));
+      } catch (err) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: err.message }));
+      }
+    });
+    return;
+  }
+
   // Telemetry status and summary
   if (pathname === '/api/telemetry' && req.method === 'GET') {
     res.writeHead(200, { 'Content-Type': 'application/json' });

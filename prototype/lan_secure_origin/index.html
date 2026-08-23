@@ -9,64 +9,71 @@
   <meta name="apple-touch-fullscreen" content="yes">
   <link rel="manifest" href="/manifest.json">
   <link rel="stylesheet" href="./styles.css">
-  <title>VREconder 3D VR Player - Zero-Occlusion Controls</title>
+  <title>VREconder - Viewer Optics & Projection Calibration</title>
 </head>
 <body>
 
-  <!-- Background WebGL Stereo VR Canvas -->
+  <!-- Background WebGL Stereo VR / Rectilinear Diagnostic Canvas -->
   <canvas id="glCanvas"></canvas>
 
-  <!-- 2D In-Headset Stereo UI & Reticle Overlay -->
+  <!-- 2D Stereo Reticle / Diagnostic Grid Overlay -->
   <canvas id="uiCanvas"></canvas>
 
   <video id="sourceVideo" playsinline preload="auto" crossorigin="anonymous" muted loop></video>
 
-  <!-- In-VR Floating Quick Bar (Tap screen in VR to reveal) -->
+  <!-- Diagnostic Quick Toolbar (Floating at Top) -->
+  <div id="diagnosticToolbar">
+    <button class="tool-btn" id="btnDiagFreeze">⏸ Freeze</button>
+    <button class="tool-btn" id="btnDiagSeekBack5">⏪ -5s</button>
+    <button class="tool-btn" id="btnDiagSeekBack1">◀ -1s</button>
+    <button class="tool-btn" id="btnDiagSeekFwd1">+1s ▶</button>
+    <button class="tool-btn" id="btnDiagSeekFwd5">+5s ⏩</button>
+    <button class="tool-btn" id="btnDiagToggleEye">👁 Eye: Left</button>
+    <button class="tool-btn active" id="btnDiagToggleGrid">▦ Grid</button>
+    <button class="tool-btn active" id="btnDiagTogglePlumb">⫯ Plumb</button>
+    <button class="tool-btn active" id="btnDiagToggleHorizon">━ Horizon</button>
+  </div>
+
+  <!-- In-VR Floating Quick Bar -->
   <div id="vrFloatingBar" class="fade-out">
     <button class="vr-btn vr-btn-pattern" id="btnVrSwitchPattern">🔀 Pattern: B</button>
     <button class="vr-btn vr-btn-reset" id="btnVrReset">🎯 Recenter</button>
-    <button class="vr-btn vr-btn-exit" id="btnVrExit">⚙ Exit VR</button>
+    <button class="vr-btn vr-btn-exit" id="btnVrExit">⚙ Setup</button>
   </div>
 
-  <!-- 2D Configuration & Setup Overlay -->
+  <!-- 2D Configuration, Staged Calibration & Diagnostic Panel -->
   <div id="uiOverlay">
     <div id="errorBanner"></div>
 
     <div class="card">
       <div style="display:flex; justify-content:space-between; align-items:center;">
-        <h1>🥽 VREconder 3D VR Player (Issue #9)</h1>
+        <h1>📐 Optics & Projection Calibration</h1>
         <span class="status-badge" id="badgeDisplayMode">Browser Tab</span>
       </div>
-      <div class="subtitle">3D Stereoscopic 180° SBS &bull; Zero-Occlusion Bottom Floor Controls</div>
+      <div class="subtitle">Validate Source Mapping vs Headset Lens Distortion (Issue #13)</div>
     </div>
 
-    <!-- Pattern Selection -->
+    <!-- Mode Selector: Diagnostic vs VR View -->
     <div class="card">
-      <div class="label">1. Active UX Pattern Experiment</div>
-      <div class="btn-grid-3" id="grpPatternSelect">
-        <button class="opt-btn" data-pattern="A">Pattern A<br><span style="font-size:0.68rem;opacity:0.8;">Bottom Arc</span></button>
-        <button class="opt-btn pattern-b active" data-pattern="B">Pattern B (推荐)<br><span style="font-size:0.68rem;opacity:0.8;">Floor Radial</span></button>
-        <button class="opt-btn pattern-c" data-pattern="C">Pattern C<br><span style="font-size:0.68rem;opacity:0.8;">Floor HUD</span></button>
-      </div>
-
-      <div class="control-row" style="margin-top:8px;">
-        <div class="label">Dwell Activation Threshold</div>
-        <div class="btn-grid-4" id="grpDwellThreshold">
-          <button class="opt-btn" data-dwell="800">800ms</button>
-          <button class="opt-btn active" data-dwell="1000">1000ms</button>
-          <button class="opt-btn" data-dwell="1200">1200ms</button>
-          <button class="opt-btn" data-dwell="1500">1500ms</button>
-        </div>
+      <div class="label">Operating Mode</div>
+      <div class="btn-grid-2">
+        <button class="opt-btn active" id="btnModeDiagnostic">
+          <b>📐 Flat Diagnostic View</b><br>
+          <span style="font-size:0.68rem;opacity:0.8;">Rectilinear / Straight Line Audit</span>
+        </button>
+        <button class="opt-btn" id="btnModeVR">
+          <b>🥽 Headset Stereo VR</b><br>
+          <span style="font-size:0.68rem;opacity:0.8;">In-Headset Stereo & Lens A/B</span>
+        </button>
       </div>
     </div>
 
-    <!-- Media Source Selection -->
+    <!-- Media Selector -->
     <div class="card">
-      <div class="label">2. 3D VR Media Source (G:\Media\VR)</div>
+      <div class="label">Media Source (G:\Media\VR)</div>
       <select id="videoSelect">
         <option value="4K/4096_2048_crf18_avc1-Kururugi Aoi - WAVR224.mp4">[6.09 GB] 4K/4096_2048_crf18_avc1-Kururugi Aoi - WAVR224.mp4</option>
       </select>
-
       <div class="metrics-grid" style="margin-top:5px;">
         <div class="m-item">Res: <span class="m-val" id="valVideoRes">--</span></div>
         <div class="m-item">Dur: <span class="m-val" id="valVideoDur">--</span></div>
@@ -75,69 +82,116 @@
       </div>
     </div>
 
-    <!-- Enter VR Button -->
-    <div class="card">
-      <div class="label">3. Launch 3D Stereo VR View</div>
-      <button class="btn-main" id="btnEnterVR">
-        <span>🚀 Enter 3D VR / Start Viewing</span>
-      </button>
-      <div class="subtitle" style="text-align:center; margin-top:4px;">
-        观看时视野中心 100% 零遮挡；低头看下方即可在脚底地板区展开 3D 菜单
-      </div>
-    </div>
-
-    <!-- Test Protocol Checklist -->
+    <!-- Stage A: Source Mapping Profile -->
     <div class="card">
       <div style="display:flex; justify-content:space-between; align-items:center;">
-        <div class="label">4. Standardized Task Checklist</div>
-        <button id="btnResetTasks" style="background:#334155;color:#cbd5e1;border:none;border-radius:4px;padding:2px 6px;font-size:0.7rem;cursor:pointer;">Reset Tasks</button>
+        <div class="label">Stage A — Per-Video Source Mapping</div>
+        <button class="btn-save" id="btnSaveVideoProfile">💾 Save Video Profile</button>
       </div>
-      <div id="checklistContainer" style="margin-top:4px;">
-        <div class="checklist-row" data-task="pause"><span>1. Pause Video</span><span class="chk-status chk-pending">Pending</span></div>
-        <div class="checklist-row" data-task="play"><span>2. Play Video</span><span class="chk-status chk-pending">Pending</span></div>
-        <div class="checklist-row" data-task="seekForward"><span>3. Seek Forward (+10s)</span><span class="chk-status chk-pending">Pending</span></div>
-        <div class="checklist-row" data-task="seekBackward"><span>4. Seek Backward (-10s)</span><span class="chk-status chk-pending">Pending</span></div>
-        <div class="checklist-row" data-task="next"><span>5. Next Video</span><span class="chk-status chk-pending">Pending</span></div>
-        <div class="checklist-row" data-task="previous"><span>6. Previous Video</span><span class="chk-status chk-pending">Pending</span></div>
-        <div class="checklist-row" data-task="recenter"><span>7. Recenter View</span><span class="chk-status chk-pending">Pending</span></div>
+
+      <div class="control-row">
+        <div style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap:6px;">
+          <div>
+            <div class="label" style="font-size:0.66rem;">Projection</div>
+            <select id="selProjType">
+              <option value="equirectangular-180">Equirect 180°</option>
+              <option value="equirectangular-360">Equirect 360°</option>
+              <option value="flat">Flat 2D</option>
+            </select>
+          </div>
+          <div>
+            <div class="label" style="font-size:0.66rem;">Stereo Layout</div>
+            <select id="selStereoType">
+              <option value="left-right">Side-by-Side (SBS)</option>
+              <option value="top-bottom">Top-Bottom</option>
+              <option value="mono">Mono</option>
+            </select>
+          </div>
+          <div>
+            <div class="label" style="font-size:0.66rem;">Eye Order</div>
+            <select id="selEyeOrder">
+              <option value="left-right">Left-Right</option>
+              <option value="right-left">Swap (Right-Left)</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <div class="control-row" style="margin-top:6px;">
+        <div class="label">Horizontal Coverage (°):</div>
+        <div class="slider-group">
+          <input type="range" id="rangeCoverageH" min="160" max="200" step="1" value="180">
+          <span class="slider-val" id="valCoverageH">180°</span>
+        </div>
+      </div>
+
+      <div class="control-row" style="margin-top:6px;">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <div class="label">Camera Pose Offset:</div>
+          <button id="btnResetPose" style="background:#334155;color:#cbd5e1;border:none;border-radius:4px;padding:2px 6px;font-size:0.68rem;cursor:pointer;">Reset Pose</button>
+        </div>
+        <div class="slider-group">
+          <span style="width:40px;font-size:0.72rem;color:var(--muted);">Yaw:</span>
+          <input type="range" id="rangePoseYaw" min="-30" max="30" step="0.5" value="0">
+          <span class="slider-val" id="valPoseYaw">0°</span>
+        </div>
+        <div class="slider-group">
+          <span style="width:40px;font-size:0.72rem;color:var(--muted);">Pitch:</span>
+          <input type="range" id="rangePosePitch" min="-30" max="30" step="0.5" value="0">
+          <span class="slider-val" id="valPosePitch">0°</span>
+        </div>
+        <div class="slider-group">
+          <span style="width:40px;font-size:0.72rem;color:var(--muted);">Roll:</span>
+          <input type="range" id="rangePoseRoll" min="-30" max="30" step="0.5" value="0">
+          <span class="slider-val" id="valPoseRoll">0°</span>
+        </div>
       </div>
     </div>
 
-    <!-- UX Evidence & Telemetry Matrix -->
+    <!-- Stage B: Viewer Optics Profile -->
     <div class="card">
-      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
-        <div class="label">5. Interaction Evidence Matrix</div>
-        <button id="btnSyncTelemetry" style="background:#059669;color:#fff;border:none;border-radius:4px;padding:3px 8px;font-size:0.72rem;cursor:pointer;">📤 Sync to PC</button>
+      <div style="display:flex; justify-content:space-between; align-items:center;">
+        <div class="label">Stage B — Viewer Optics & Lens Correction</div>
+        <button class="btn-save" id="btnSaveViewerProfile">💾 Save Viewer Profile</button>
       </div>
-      <table class="table-compare">
-        <thead>
-          <tr>
-            <th>Pattern</th>
-            <th>Activations</th>
-            <th>Cancels</th>
-            <th>Avg Dwell</th>
-            <th>TimeToCmd</th>
-            <th>Head Travel</th>
-          </tr>
-        </thead>
-        <tbody id="telemetryTableBody">
-          <tr id="row-A"><td>A (Bottom Arc)</td><td>0</td><td>0</td><td>--</td><td>--</td><td>0.0°</td></tr>
-          <tr id="row-B"><td>B (Floor Radial)</td><td>0</td><td>0</td><td>--</td><td>--</td><td>0.0°</td></tr>
-          <tr id="row-C"><td>C (Floor HUD)</td><td>0</td><td>0</td><td>--</td><td>--</td><td>0.0°</td></tr>
-        </tbody>
-      </table>
+
+      <div class="control-row">
+        <div class="label">Headset Profile:</div>
+        <select id="selViewerPreset">
+          <option value="cardboard:v2">Google Cardboard V2 (k1=0.16, k2=0.06)</option>
+          <option value="vrbox:standard">Standard VR Box (k1=0.22, k2=0.10)</option>
+          <option value="custom">Custom Viewer Profile</option>
+        </select>
+      </div>
+
+      <div class="control-row" style="margin-top:6px;">
+        <button id="btnToggleLens" style="width:100%;padding:10px;border-radius:8px;border:none;font-weight:bold;color:#fff;background:#475569;cursor:pointer;">
+          ⚪ LENS CORRECTION: OFF
+        </button>
+      </div>
+
+      <div class="control-row" style="margin-top:6px;">
+        <div class="label">Lens Pre-Warp Coefficients (Brown-Conrady):</div>
+        <div class="slider-group">
+          <span style="width:30px;font-size:0.72rem;color:var(--muted);">k1:</span>
+          <input type="range" id="rangeDistortK1" min="-0.50" max="0.50" step="0.01" value="0.16">
+          <span class="slider-val" id="valDistortK1">0.16</span>
+        </div>
+        <div class="slider-group">
+          <span style="width:30px;font-size:0.72rem;color:var(--muted);">k2:</span>
+          <input type="range" id="rangeDistortK2" min="-0.30" max="0.30" step="0.01" value="0.06">
+          <span class="slider-val" id="valDistortK2">0.06</span>
+        </div>
+      </div>
     </div>
 
-    <!-- Sensor Diagnostics -->
+    <!-- Enter VR Button -->
     <div class="card">
-      <div class="label">6. Real-time Diagnostics</div>
-      <div class="metrics-grid">
-        <div class="m-item">FPS: <span class="m-val" id="valFps">0.0</span></div>
-        <div class="m-item">Mode: <span class="m-val" id="valStereoMode">3D SBS 180°</span></div>
-        <div class="m-item">Cam Fwd: <span class="m-val" id="valCamFwd">0,0,-1</span></div>
-        <div class="m-item">Head: <span class="m-val" id="valHeadState">Center</span></div>
-        <div class="m-item">Motion: <span class="m-val" id="valMotionPerm">--</span></div>
-        <div class="m-item">NoSleep: <span class="m-val" id="valWakeLock">Inactive</span></div>
+      <button class="btn-main" id="btnEnterVR">
+        <span>🚀 Launch Headset Stereo VR View</span>
+      </button>
+      <div class="subtitle" style="text-align:center; margin-top:4px;">
+        使用已校准的 Video Projection Profile + Viewer Optics
       </div>
     </div>
   </div>
