@@ -13,6 +13,7 @@ export const state = {
   // Staged Calibration Workflow: 'A' (Source Geometry), 'B' (Viewer Optics), 'C' (Real Video Verification)
   calibrationStage: 'A',
   pcConnected: false,
+  isArmed: false,
 
   // First-Frame Timing & Black-Screen Instrumentation
   firstFrameTimings: {

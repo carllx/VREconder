@@ -106,7 +106,7 @@ export class CalibrationUI {
     } else if (act === 'set_lens_correction') {
       if (this.activeViewerProfile) {
         this.activeViewerProfile.lensCorrectionEnabled = msg.enabled === true;
-        this.activeViewerProfile.isCalibrated = true;
+        // Edits remain draft/unverified until explicit save/validate step
         this.syncStageBToUI();
         if (this.onProfileChanged) this.onProfileChanged(this.activeVideoProfile, this.activeViewerProfile);
         showFeedbackToast(`Lens: ${this.activeViewerProfile.lensCorrectionEnabled ? 'ON' : 'OFF'}`);
@@ -123,7 +123,7 @@ export class CalibrationUI {
         const f = msg.maxFovDeg;
         this.activeViewerProfile.maxFovAngles = { outerDeg: f, innerDeg: f, upperDeg: f, lowerDeg: f };
       }
-      this.activeViewerProfile.isCalibrated = true;
+      // Draft edits do NOT mark profile as calibrated
       this.syncStageBToUI();
       if (this.onProfileChanged) this.onProfileChanged(this.activeVideoProfile, this.activeViewerProfile);
     } else if (act === 'recenter' && this.commandModel) {
@@ -141,11 +141,18 @@ export class CalibrationUI {
     } else if (act === 'previous' && this.commandModel) {
       this.commandModel.previous();
     } else if (act === 'save_viewer_profile') {
-      this.storage.saveViewerProfile(this.activeViewerProfile);
-      showFeedbackToast('💾 Viewer Profile Saved');
+      if (this.activeViewerProfile) {
+        this.activeViewerProfile.isCalibrated = true;
+        this.activeViewerProfile.source = 'User Validated / Custom Calibrated';
+        this.storage.saveViewerProfile(this.activeViewerProfile);
+        this.syncStageBToUI();
+        showFeedbackToast('💾 Calibrated Viewer Profile Saved');
+      }
     } else if (act === 'save_video_profile' && this.activeVideoProfile) {
+      this.activeVideoProfile.confidence = 'user-calibrated';
       this.storage.saveVideoProfile(this.activeVideoProfile);
-      showFeedbackToast('💾 Video Profile Saved');
+      this.syncStageAToUI();
+      showFeedbackToast('💾 Calibrated Video Profile Saved');
     }
   }
 
@@ -159,12 +166,20 @@ export class CalibrationUI {
       showFeedbackToast('Stage A: Flat Diagnostic');
     } else if (stage === 'B') {
       // Stage B: Viewer Optics (Synthetic Grid Only, Headset Stereo)
+      if (!state.isArmed) {
+        showFeedbackToast('⚠️ Arm Calibration on iPhone first');
+        return;
+      }
       if (this.vrRenderer) this.vrRenderer.sceneType = 1;
       this.currentMode = 'vr';
       if (this.onEnterVR) this.onEnterVR();
       showFeedbackToast('Stage B: Synthetic Grid');
     } else if (stage === 'C') {
       // Stage C: Real Video Verification (Headset Stereo, Fixed Optics)
+      if (!state.isArmed) {
+        showFeedbackToast('⚠️ Arm Calibration on iPhone first');
+        return;
+      }
       if (this.vrRenderer) this.vrRenderer.sceneType = 0;
       this.currentMode = 'vr';
       if (this.onEnterVR) this.onEnterVR();

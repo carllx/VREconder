@@ -7,6 +7,7 @@ import { vsSource, fsIdealSceneSource, fsDistortionPassSource } from './shaders.
 import { Quat } from '../core/quaternion.js';
 import { activeScreenProfile } from '../core/screen-profile.js';
 import { deriveCardboardEyeGeometry } from '../core/projection-profile.js';
+import { state } from '../core/state.js';
 
 export class VRRenderer {
   constructor(canvas) {
@@ -125,9 +126,16 @@ export class VRRenderer {
   updateVideoTexture(videoElement) {
     const gl = this.gl;
     if (!gl || !this.videoTex) return;
-    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
-    gl.bindTexture(gl.TEXTURE_2D, this.videoTex);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, videoElement);
+    try {
+      gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+      gl.bindTexture(gl.TEXTURE_2D, this.videoTex);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, videoElement);
+      if (!state.firstFrameTimings.firstTextureUploadAt && state.firstFrameTimings.selectedAt) {
+        state.firstFrameTimings.firstTextureUploadAt = performance.now();
+      }
+    } catch (e) {
+      console.warn('Texture upload error:', e);
+    }
   }
 
   computePoseMatrix(poseDeg) {
@@ -336,5 +344,18 @@ export class VRRenderer {
     gl.drawArrays(gl.TRIANGLES, 0, 6);
 
     gl.disable(gl.SCISSOR_TEST);
+
+    if (!state.firstFrameTimings.firstRenderAt && state.firstFrameTimings.firstTextureUploadAt) {
+      state.firstFrameTimings.firstRenderAt = performance.now();
+      state.firstFrameTimings.ready = true;
+      state.firstFrameTimings.statusText = 'VR Ready';
+      const t = state.firstFrameTimings;
+      const totalMs = (t.firstRenderAt - t.selectedAt).toFixed(1);
+      const metaMs = (t.metadataAt ? (t.metadataAt - t.selectedAt).toFixed(1) : '--');
+      const canplayMs = (t.canplayAt ? (t.canplayAt - t.metadataAt).toFixed(1) : '--');
+      const decodeMs = (t.firstFrameDecodedAt ? (t.firstFrameDecodedAt - t.canplayAt).toFixed(1) : '--');
+      const uploadMs = (t.firstTextureUploadAt - (t.firstFrameDecodedAt || t.canplayAt)).toFixed(1);
+      console.log(`[First Frame Timing (Measured)] Total: ${totalMs}ms | Meta: ${metaMs}ms | CanPlay: ${canplayMs}ms | Decode: ${decodeMs}ms | Upload: ${uploadMs}ms`);
+    }
   }
 }

@@ -104,10 +104,11 @@ mediaController.selectVideo = (relPath) => {
 // Initialize Orientation Listeners
 initOrientationListeners();
 
-// Floating Quick Bar visibility management
+// Floating Quick Bar visibility management (Suppressed in Optics Stage B/C)
 let hideBarTimeout = null;
 function showFloatingBar() {
   if (!state.inVR) return;
+  if (state.calibrationStage === 'B' || state.calibrationStage === 'C') return;
   vrFloatingBar.classList.remove('fade-out');
   clearTimeout(hideBarTimeout);
   hideBarTimeout = setTimeout(() => {
@@ -118,6 +119,7 @@ window.addEventListener('touchstart', showFloatingBar, { passive: true });
 window.addEventListener('click', showFloatingBar);
 
 function enterVRMode() {
+  state.isArmed = true;
   updateScreenOrientation();
 
   if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
@@ -140,8 +142,10 @@ function enterVRMode() {
   calibrationUI.currentMode = 'vr';
   uiOverlay.classList.add('hidden');
   diagnosticToolbar.style.display = 'none';
-  showFloatingBar();
-  startRecenterCalibration(2500, '🥽 戴入眼镜并面朝正前方');
+  if (state.calibrationStage !== 'B' && state.calibrationStage !== 'C') {
+    showFloatingBar();
+    startRecenterCalibration(2500, '🥽 戴入眼镜并面朝正前方');
+  }
 }
 
 function exitVRMode() {
@@ -252,21 +256,24 @@ function renderLoop(now) {
 
     renderStereoUI(uiCtx, gazeEngine, commandModel, video, now, width, height);
   }
-
-  mediaController.recordRenderedFrame();
 }
 
 requestAnimationFrame(renderLoop);
 
-// Periodic Live Telemetry Sync to PC Controller (every 600ms)
+// Periodic Live Telemetry Sync to PC Controller (every 500ms)
 setInterval(() => {
   if (state.pcConnected) {
     const payload = {
       type: 'telemetry_sync',
       fps: state.fps,
+      isArmed: state.isArmed,
+      inVR: state.inVR,
+      calibrationStage: state.calibrationStage,
       mediaName: state.videoPath ? state.videoPath.split('/').pop() : '--',
       mediaStatus: state.firstFrameTimings.statusText || 'Ready',
       devStatus: state.inVR ? `In VR (Stage ${state.calibrationStage})` : `Diagnostic (Stage ${state.calibrationStage})`,
+      viewerProfile: calibrationUI.activeViewerProfile,
+      videoProfile: activeVideoProfile,
       timings: state.firstFrameTimings
     };
     fetch('/api/calibration/control', {
@@ -275,7 +282,7 @@ setInterval(() => {
       body: JSON.stringify(payload)
     }).catch(() => {});
   }
-}, 600);
+}, 500);
 
 // Initial Video List Load
 mediaController.loadVideoList();

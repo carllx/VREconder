@@ -140,29 +140,8 @@ export class MediaController {
     if (this.video.readyState >= 2 && (this.videoFrameNeedsUpload || (this.video.currentTime !== this.lastUploadedVideoTime && !this.video.paused))) {
       this.videoFrameNeedsUpload = false;
       this.lastUploadedVideoTime = this.video.currentTime;
-      if (!state.firstFrameTimings.firstTextureUploadAt && state.firstFrameTimings.selectedAt) {
-        state.firstFrameTimings.firstTextureUploadAt = performance.now();
-        state.firstFrameTimings.ready = true;
-        state.firstFrameTimings.statusText = 'VR Ready';
-      }
       return true;
     }
     return false;
-  }
-
-  recordRenderedFrame() {
-    if (!state.firstFrameTimings.firstRenderAt && state.firstFrameTimings.firstTextureUploadAt) {
-      state.firstFrameTimings.firstRenderAt = performance.now();
-      if (!this.hasLoggedFirstFrame) {
-        this.hasLoggedFirstFrame = true;
-        const t = state.firstFrameTimings;
-        const totalMs = (t.firstRenderAt - t.selectedAt).toFixed(1);
-        const metaMs = (t.metadataAt ? (t.metadataAt - t.selectedAt).toFixed(1) : '--');
-        const canplayMs = (t.canplayAt ? (t.canplayAt - t.metadataAt).toFixed(1) : '--');
-        const decodeMs = (t.firstFrameDecodedAt ? (t.firstFrameDecodedAt - t.canplayAt).toFixed(1) : '--');
-        const uploadMs = (t.firstTextureUploadAt - (t.firstFrameDecodedAt || t.canplayAt)).toFixed(1);
-        console.log(`[First Frame Timing] Total: ${totalMs}ms | Meta: ${metaMs}ms | CanPlay: ${canplayMs}ms | Decode: ${decodeMs}ms | Upload: ${uploadMs}ms`);
-      }
-    }
   }
 }

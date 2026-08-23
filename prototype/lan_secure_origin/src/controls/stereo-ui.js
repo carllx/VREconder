@@ -49,10 +49,12 @@ export function renderStereoUI(uiCtx, gazeEngine, commandModel, videoElement, no
   uiCtx.clearRect(0, 0, width, height);
   if (!state.inVR) return;
 
-  const halfW = Math.floor(width / 2);
-  const isOpticsMode = (state.calibrationStage === 'B' || state.calibrationStage === 'C');
+  // In Optics Experiment Stage B & C: ZERO legacy 2D overlays to prevent visual contamination
+  if (state.calibrationStage === 'B' || state.calibrationStage === 'C') {
+    return;
+  }
 
-  for (let eye = 0; eye < 2; eye++) {
+  const halfW = Math.floor(width / 2);
     const eyeOffsetX = eye * halfW;
     const eyeCenterX = eyeOffsetX + halfW * 0.5;
     const eyeCenterY = height * 0.5;
