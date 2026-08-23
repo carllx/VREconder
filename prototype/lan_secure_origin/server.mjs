@@ -14,8 +14,9 @@ const HTTPS_PORT = 8443;
 const CERTS_DIR = path.join(__dirname, 'certs');
 const MEDIA_ROOT = 'G:\\Media\\VR\\VR_Video_Processing\\01_Download_Completed';
 
-// Scan actual VR videos from G drive
-function listRealVRVideos() {
+// Scan actual VR videos from G drive and cache in memory
+let cachedVideos = [];
+function scanRealVRVideos() {
   const results = [];
   function scan(dir, relDir = '') {
     if (!fs.existsSync(dir)) return;
@@ -40,6 +41,8 @@ function listRealVRVideos() {
     }
   }
   scan(MEDIA_ROOT);
+  cachedVideos = results;
+  console.log(`[Media] Scanned and cached ${cachedVideos.length} VR videos from ${MEDIA_ROOT}`);
   return results;
 }
 
@@ -233,11 +236,13 @@ function handleRequest(req, res, isHttps) {
     return;
   }
 
-  // Video list from real media folder
+  // Video list from real media folder (instant cached)
   if (pathname === '/api/videos') {
-    const videos = listRealVRVideos();
+    if (cachedVideos.length === 0) {
+      scanRealVRVideos();
+    }
     res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
-    res.end(JSON.stringify({ mediaRoot: MEDIA_ROOT, count: videos.length, videos }));
+    res.end(JSON.stringify({ mediaRoot: MEDIA_ROOT, count: cachedVideos.length, videos: cachedVideos }));
     return;
   }
 
@@ -248,9 +253,9 @@ function handleRequest(req, res, isHttps) {
     if (relParam) {
       targetPath = path.join(MEDIA_ROOT, relParam);
     } else {
-      const videos = listRealVRVideos();
-      if (videos.length > 0) {
-        targetPath = videos[0].fullPath;
+      if (cachedVideos.length === 0) scanRealVRVideos();
+      if (cachedVideos.length > 0) {
+        targetPath = cachedVideos[0].fullPath;
       }
     }
 
@@ -323,7 +328,7 @@ function handleRequest(req, res, isHttps) {
     <span class="badge">Step 3</span>
     <h3>Open Secure Context Probe</h3>
     <p>After completing Step 1 & 2, open the HTTPS origin probe:</p>
-    <a class="btn btn-green" href="https://${primaryIp}:${HTTPS_PORT}/">🚀 Open HTTPS Probe (https://${primaryIp}:${HTTPS_PORT})</a>
+    <a class="btn btn-green" href="https://${primaryIp}:${HTTPS_PORT}/">🚀 Open HTTPS VR Player (https://${primaryIp}:${HTTPS_PORT})</a>
   </div>
 </body>
 </html>`);
@@ -336,6 +341,7 @@ function handleRequest(req, res, isHttps) {
 
 // Start Servers
 ensureCertificates();
+scanRealVRVideos();
 
 const localIps = getLocalIPs();
 const primaryIp = localIps.find(ip => ip.startsWith('192.168.')) || localIps[0] || '127.0.0.1';
@@ -354,7 +360,7 @@ const httpsOptions = {
 
 const httpsServer = https.createServer(httpsOptions, (req, res) => handleRequest(req, res, true));
 httpsServer.listen(HTTPS_PORT, '0.0.0.0', () => {
-  console.log(`[HTTPS Server] Running on https://${primaryIp}:${HTTPS_PORT} (Secure Origin Probe)`);
+  console.log(`[HTTPS Server] Running on https://${primaryIp}:${HTTPS_PORT} (Secure VR Player)`);
   console.log(`[Media Root]   Directly streaming real VR videos from: ${MEDIA_ROOT}`);
   console.log(`\n============================================================`);
   console.log(`👉 1. On iPhone Safari, open:  http://${primaryIp}:${HTTP_PORT}`);

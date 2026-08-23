@@ -47,7 +47,7 @@
       width: 100%;
       height: 100%;
       z-index: 10;
-      background: rgba(9, 13, 22, 0.92);
+      background: rgba(9, 13, 22, 0.94);
       backdrop-filter: blur(10px);
       -webkit-backdrop-filter: blur(10px);
       padding: 16px;
@@ -184,9 +184,15 @@
     .vr-btn-reset { background: #059669; }
     .vr-btn-exit { background: #dc2626; }
 
-    /* Hidden video element */
+    /* Keep video active in WebKit background without display:none */
     #sourceVideo {
-      display: none;
+      position: fixed;
+      top: -9999px;
+      left: -9999px;
+      width: 16px;
+      height: 16px;
+      opacity: 0.01;
+      pointer-events: none;
     }
   </style>
 </head>
@@ -194,7 +200,7 @@
 
   <!-- WebGL Canvas for Stereo VR Rendering -->
   <canvas id="glCanvas"></canvas>
-  <video id="sourceVideo" playsinline preload="metadata" crossorigin="anonymous"></video>
+  <video id="sourceVideo" playsinline preload="metadata" crossorigin="anonymous" muted></video>
 
   <!-- In-VR Floating Quick Bar -->
   <div id="vrFloatingBar" class="fade-out">
@@ -216,7 +222,7 @@
     <div class="card">
       <div class="label">1. VR Media Source</div>
       <select id="videoSelect">
-        <option value="">Scanning real VR videos...</option>
+        <option value="4K/4096_2048_crf18_avc1-Kururugi Aoi - WAVR224.mp4">[6.09 GB] 4K/4096_2048_crf18_avc1-Kururugi Aoi - WAVR224.mp4</option>
       </select>
 
       <div class="metrics-grid" style="margin-top:8px;">
@@ -260,7 +266,7 @@
     <div class="card">
       <div class="label">3. Launch Headset View</div>
       <button class="btn-main" id="btnEnterVR">
-        <span>🚀 4. Enter VR / Enable Motion</span>
+        <span>🚀 Enter VR / Enable Motion</span>
       </button>
       <div class="subtitle" style="text-align:center; margin-top:6px;">
         Turn iPhone to landscape, tap button, and insert into VR headset
@@ -297,7 +303,7 @@
       stereo: 'SBS',       // SBS | TB
       projection: '180',   // 180 | 360
       eyeOrder: 'normal',  // normal | swap
-      videoPath: '',
+      videoPath: '4K/4096_2048_crf18_avc1-Kururugi Aoi - WAVR224.mp4',
       videoDuration: 0,
       videoWidth: 0,
       videoHeight: 0,
@@ -449,10 +455,6 @@
     gl.attachShader(program, fragShader);
     gl.linkProgram(program);
 
-    if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
-      console.error('Program link error:', gl.getProgramInfoLog(program));
-    }
-
     const posBuffer = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, posBuffer);
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
@@ -480,9 +482,7 @@
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-
-    // Initial 1x1 black placeholder
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([0, 0, 0, 255]));
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([10, 15, 25, 255]));
 
     // ==========================================
     // 3. Orientation & Head Tracking Engine
@@ -516,7 +516,6 @@
       const cG = Math.cos(gamma), sG = Math.sin(gamma);
 
       // W3C device coordinates (Z-X'-Y'' intrinsic)
-      // M_device maps device frame to world (North, East, Down)
       const m11 = cA * cG - sA * sB * sG;
       const m12 = -cB * sA;
       const m13 = cA * sG + cG * sA * sB;
@@ -543,16 +542,13 @@
       const r32 = m31 * sS + m32 * cS;
       const r33 = m33;
 
-      // Convert to OpenGL Camera standard frame (Looking along -Z, +Y is Up, +X is Right)
-      // Coordinate transform: [X_cam = r11, Y_cam = r12, Z_cam = r13] etc.
-      // Matrix that rotates world ray into device camera space:
+      // Convert to OpenGL Camera frame (Looking along -Z, +Y Up, +X Right)
       const camX_x = r11, camX_y = r21, camX_z = r31;
       const camY_x = r12, camY_y = r22, camY_z = r32;
       const camZ_x = r13, camZ_y = r23, camZ_z = r33;
 
       // Apply Zero Heading calibration around World Y axis
       const cZ = Math.cos(zeroHeadingYaw), sZ = Math.sin(zeroHeadingYaw);
-      // R_calibrated = R_zero * R_cam
       return [
         cZ * camX_x + sZ * camX_z, camX_y, -sZ * camX_x + cZ * camX_z,
         cZ * camY_x + sZ * camY_z, camY_y, -sZ * camY_x + cZ * camY_z,
@@ -561,12 +557,10 @@
     }
 
     function resetView() {
-      // Calibrate current heading as 0° yaw forward
       const deg2rad = Math.PI / 180;
       const alpha = state.rawOrientation.alpha * deg2rad;
       zeroHeadingYaw = -alpha - (state.screenAngle * deg2rad);
       state.calibratedHeadingYaw = zeroHeadingYaw;
-      console.log('[VR] View Recentered. Offset yaw:', (zeroHeadingYaw * 180 / Math.PI).toFixed(1) + '°');
       syncTelemetry();
     }
 
@@ -669,8 +663,8 @@
       try {
         const res = await fetch('/api/videos');
         const data = await res.json();
-        videoSelect.innerHTML = '';
         if (data.videos && data.videos.length > 0) {
+          videoSelect.innerHTML = '';
           data.videos.forEach((v) => {
             const opt = document.createElement('option');
             opt.value = v.relPath;
@@ -680,14 +674,15 @@
           selectVideo(data.videos[0].relPath);
         }
       } catch (err) {
-        console.error('Error fetching videos:', err);
+        console.warn('Fallback: Using default media item', err);
+        selectVideo('4K/4096_2048_crf18_avc1-Kururugi Aoi - WAVR224.mp4');
       }
     }
 
     function selectVideo(relPath) {
       state.videoPath = relPath;
       video.src = `/video?path=${encodeURIComponent(relPath)}`;
-      video.load();
+      // Do not call video.load() synchronously without user gesture on iOS
     }
 
     videoSelect.addEventListener('change', (e) => selectVideo(e.target.value));
@@ -730,7 +725,15 @@
 
     // Enter VR Button
     document.getElementById('btnEnterVR').addEventListener('click', async () => {
-      // 1. Request Motion Permission
+      // 1. Unmute & Play Video on user gesture
+      video.muted = false;
+      try {
+        await video.play();
+      } catch (e) {
+        console.log('Video play catch:', e);
+      }
+
+      // 2. Request Motion Permission
       if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
         try {
           const perm = await DeviceOrientationEvent.requestPermission();
@@ -744,12 +747,9 @@
         document.getElementById('valMotionPerm').textContent = 'Standard';
       }
 
-      // 2. Calibrate Zero Orientation
+      // 3. Calibrate Zero Orientation
       updateScreenOrientation();
       resetView();
-
-      // 3. Play Video
-      video.play().catch(e => console.log('Auto play notice:', e));
 
       // 4. Hide 2D UI & Enter Fullscreen VR
       state.inVR = true;
@@ -806,6 +806,7 @@
     document.getElementById('btnSyncTelemetry').addEventListener('click', syncTelemetry);
 
     // Initial Load
+    selectVideo(videoSelect.value);
     loadVideoList();
   </script>
 </body>
