@@ -35,3 +35,15 @@ _Avoid_: Folder, Playlist database
 **Media Library**:
 The media-management side that discovers and describes Video Assets, understands codec/container differences, and selects Source Media or a Playback Variant before handing playback to the Player.
 _Avoid_: Player, Playback Queue
+
+**Viewer Profile**:
+The persistent headset/device optical model used by the VR Web Player. It owns viewer-global quantities such as per-eye optical geometry, asymmetric FOV, lens/screen geometry and lens distortion/pre-warp. Physical parameters such as Screen-to-Lens belong here and must not be used as per-video zoom or comfort controls.
+_Avoid_: Video Profile, Zoom Profile, Per-video Lens Settings
+
+**Per-video Projection Profile**:
+The source-specific interpretation of one video's projection and stereo geometry. It owns projection family, stereo layout and eye order, angular coverage/bounds, and other source-mapping information needed to render that media correctly. It must remain separate from Viewer Profile.
+_Avoid_: Viewer Profile, Headset Calibration
+
+**Session Controls**:
+Transient playback interactions that do not redefine viewer optics or video projection, such as play/pause, seek, previous/next, recenter and opening/closing in-headset controls.
+_Avoid_: Viewer Calibration, Video Mapping
