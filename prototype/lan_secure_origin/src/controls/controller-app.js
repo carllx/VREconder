@@ -77,11 +77,7 @@ export function renderVideoSelect() {
   } else if (listHasPrevious) {
     sel.value = previousVal;
   } else {
-    const firstPath = videoList[0].relPath;
-    sel.value = firstPath;
-    if (!lastAuthoritativeMediaPath) {
-      sendControl({ action: 'select_media', relPath: firstPath });
-    }
+    sel.value = videoList[0].relPath;
   }
 }
 
@@ -361,11 +357,13 @@ export function updateTelemetryUI(data) {
   }
 
   if (data.mediaPath) {
-    lastAuthoritativeMediaPath = data.mediaPath;
     const sel = document.getElementById('selMediaList');
-    if (sel) {
-      const optionExists = Array.from(sel.options).some(o => o.value === data.mediaPath);
-      if (optionExists && sel.value !== data.mediaPath) {
+    const optionExists = sel
+      ? Array.from(sel.options).some(o => o.value === data.mediaPath)
+      : videoList.some(v => v.relPath === data.mediaPath);
+    if (optionExists) {
+      lastAuthoritativeMediaPath = data.mediaPath;
+      if (sel && sel.value !== data.mediaPath) {
         sel.value = data.mediaPath;
       }
     }
