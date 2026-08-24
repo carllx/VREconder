@@ -58,7 +58,7 @@ export function playAudioFeedback(type = 'activate') {
 }
 
 export function triggerHaptic(durationMs = 30) {
-  if (navigator.vibrate) {
+  if (typeof navigator !== 'undefined' && navigator.vibrate) {
     navigator.vibrate(durationMs);
   }
 }

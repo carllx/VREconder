@@ -2,7 +2,8 @@
 // Unified Command Model for In-Headset Controls
 // ==========================================
 import { state, showFeedbackToast, formatTime } from '../core/state.js';
-import { startRecenterCalibration } from '../core/recenter.js';
+import { startRecenterCalibration, recenterPose } from '../core/recenter.js';
+import { playAudioFeedback, triggerHaptic } from './audio-haptics.js';
 import { telemetry } from '../telemetry/telemetry.js';
 
 export class CommandModel {
@@ -54,8 +55,18 @@ export class CommandModel {
     telemetry.recordCommand('seekForward_' + sec + 's', video);
   }
 
-  recenter() {
-    startRecenterCalibration(2500, '🎯 校准正前方视线');
+  recenter(immediate = false) {
+    if (immediate) {
+      state.recenterCountdown.active = false;
+      recenterPose();
+      playAudioFeedback('recenter_done');
+      triggerHaptic();
+      telemetry.recordCommand('recenter', this.media ? this.media.video : null);
+      showFeedbackToast('🎯 视角已精准校准至正前方！');
+    } else {
+      this.closeControls();
+      startRecenterCalibration(2500, '🎯 校准正前方视线');
+    }
   }
 
   openControls() {

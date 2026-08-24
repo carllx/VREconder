@@ -226,7 +226,7 @@ export class ControllerInputProbe {
         clearTimeout(this.confirmTapTimer);
         this.confirmTapTimer = null;
         this.recordEvent('DOUBLE_CONFIRM', { timestamp: Date.now() });
-        if (this.commandModel) this.commandModel.recenter();
+        if (this.commandModel) this.commandModel.recenter(true);
       } else {
         this.confirmTapTimer = setTimeout(() => {
           this.confirmTapTimer = null;
