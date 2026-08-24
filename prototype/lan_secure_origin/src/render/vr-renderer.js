@@ -258,6 +258,7 @@ export class VRRenderer {
     gl.bindTexture(gl.TEXTURE_2D, this.videoTex);
     gl.uniform1i(sLocs.uVideoTexture, 0);
 
+    const vp = videoProfile || {};
     const vhDeg = (typeof vp.horizontalCoverageDeg === 'number') ? vp.horizontalCoverageDeg : 180;
     const vvDeg = (typeof vp.verticalCoverageDeg === 'number') ? vp.verticalCoverageDeg : 180;
 
