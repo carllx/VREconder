@@ -132,49 +132,74 @@ function showFloatingBar() {
   }, 4000);
 }
 window.addEventListener('touchstart', showFloatingBar, { passive: true });
-function localArmAndEnterVR() {
+async function localArmAndEnterVR() {
   if (btnEnterVR) {
     btnEnterVR.style.background = '#10b981';
     const span = btnEnterVR.querySelector('span');
-    if (span) span.textContent = '🚀 Entering VR...';
+    if (span) span.textContent = '🚀 Requesting Sensor Permission...';
   }
   const topBtn = document.getElementById('btnEnterVRTop');
   if (topBtn) {
     topBtn.style.background = '#10b981';
     const span = topBtn.querySelector('span');
-    if (span) span.textContent = '🚀 Entering VR...';
+    if (span) span.textContent = '🚀 Requesting Sensor Permission...';
   }
 
-  // Genuinely request motion permission on local iPhone user gesture
+  // Genuinely request motion permission on local iPhone user gesture and await resolution
   if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
-    DeviceOrientationEvent.requestPermission().then((perm) => {
+    try {
+      const perm = await DeviceOrientationEvent.requestPermission();
       state.motionPermission = perm;
-      state.isArmed = (perm === 'granted');
-      updateScreenOrientation();
-    }).catch(() => {
+      if (perm === 'granted') {
+        state.isArmed = true;
+        updateScreenOrientation();
+        requestWakeLock();
+        initAudioContext();
+        video.muted = false;
+        video.play().catch(() => {
+          video.muted = true;
+          video.play().catch(e2 => console.log('Muted play error:', e2));
+        });
+        enterVRMode();
+      } else {
+        state.isArmed = false;
+        showError('DeviceOrientation permission denied. Gyroscope tracking required for VR.');
+        showFeedbackToast('⚠️ Motion Permission Denied');
+        if (btnEnterVR) {
+          btnEnterVR.style.background = '#dc2626';
+          const span = btnEnterVR.querySelector('span');
+          if (span) span.textContent = '❌ Permission Denied';
+        }
+        if (topBtn) {
+          topBtn.style.background = '#dc2626';
+          const span = topBtn.querySelector('span');
+          if (span) span.textContent = '❌ Permission Denied';
+        }
+      }
+    } catch (err) {
       state.isArmed = false;
-    });
+      showError('Permission error: ' + (err.message || err));
+      showFeedbackToast('⚠️ Sensor Permission Error');
+    }
   } else {
     // Non-iOS Safari environment
     state.isArmed = true;
     updateScreenOrientation();
+    requestWakeLock();
+    initAudioContext();
+    video.muted = false;
+    video.play().catch(() => {
+      video.muted = true;
+      video.play().catch(e2 => console.log('Muted play error:', e2));
+    });
+    enterVRMode();
   }
-
-  requestWakeLock();
-  initAudioContext();
-
-  video.muted = false;
-  video.play().catch(() => {
-    video.muted = true;
-    video.play().catch(e2 => console.log('Muted play error:', e2));
-  });
-
-  enterVRMode(true);
 }
 
-function enterVRMode(fromLocalGesture = false) {
-  if (!state.isArmed && !fromLocalGesture) {
-    console.warn('[VR] Remote enterVRMode ignored: Device not armed by local user gesture.');
+function enterVRMode() {
+  if (!state.isArmed) {
+    console.warn('[VR] enterVRMode blocked: Device not armed by local user gesture.');
+    showFeedbackToast('⚠️ Tap Arm Calibration on iPhone first');
     return;
   }
 
