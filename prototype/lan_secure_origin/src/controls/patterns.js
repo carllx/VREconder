@@ -20,20 +20,8 @@ export function getActiveInteractiveItems(commandModel, videoElement) {
   const floorAnchorPitch = -34;
 
   if (state.activePattern === 'A') {
-    // Pattern A: Floor Arc
-    if (!state.patternA_open) {
-      items.push({
-        id: 'open_arc',
-        icon: '⚡',
-        pattern: 'A',
-        yaw: 0,
-        pitch: floorAnchorPitch,
-        radiusDeg: 6.5,
-        color: '#7c3aed',
-        cmd: () => commandModel.openControls(),
-        dirWorld: sphericalToDir(0, floorAnchorPitch)
-      });
-    } else {
+    // Pattern A: Floor Arc (Only return items when menu is OPEN)
+    if (state.patternA_open) {
       const arcNodes = [
         { id: 'prev', icon: '⏮', yaw: -20, pitch: floorAnchorPitch, radiusDeg: 4.2, cmd: () => commandModel.previous() },
         { id: 'seek_back', icon: '⏪', yaw: -10, pitch: floorAnchorPitch, radiusDeg: 4.2, cmd: () => commandModel.seekBackward(10) },
@@ -48,20 +36,8 @@ export function getActiveInteractiveItems(commandModel, videoElement) {
       });
     }
   } else if (state.activePattern === 'B') {
-    // Pattern B: Floor Radial (100% Zero-occlusion)
-    if (!state.patternB_open) {
-      items.push({
-        id: 'open_radial',
-        icon: '⚡',
-        pattern: 'B',
-        yaw: 0,
-        pitch: floorAnchorPitch,
-        radiusDeg: 6.5,
-        color: '#7c3aed',
-        cmd: () => commandModel.openControls(),
-        dirWorld: sphericalToDir(0, floorAnchorPitch)
-      });
-    } else {
+    // Pattern B: Floor Radial (Only return items when menu is OPEN)
+    if (state.patternB_open) {
       const radialR = 15.0;
 
       // Center Dismiss Button
@@ -105,20 +81,8 @@ export function getActiveInteractiveItems(commandModel, videoElement) {
       });
     }
   } else if (state.activePattern === 'C') {
-    // Pattern C: Floor HUD
-    if (!state.patternC_open) {
-      items.push({
-        id: 'open_hud',
-        icon: '📺',
-        pattern: 'C',
-        yaw: 0,
-        pitch: floorAnchorPitch,
-        radiusDeg: 6.5,
-        color: '#0891b2',
-        cmd: () => commandModel.openControls(),
-        dirWorld: sphericalToDir(0, floorAnchorPitch)
-      });
-    } else {
+    // Pattern C: Floor HUD (Only return items when menu is OPEN)
+    if (state.patternC_open) {
       const hudNodes = [
         { id: 'seek_b60', icon: '⏮ 60s', yaw: -18, pitch: floorAnchorPitch + 5, radiusDeg: 3.8, cmd: () => commandModel.seekBackward(60) },
         { id: 'seek_b10', icon: '⏪ 10s', yaw: -7, pitch: floorAnchorPitch + 5, radiusDeg: 3.8, cmd: () => commandModel.seekBackward(10) },
