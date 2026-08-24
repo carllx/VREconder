@@ -52,10 +52,11 @@
       box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.6);
     }
     .transport-inner { max-width: 960px; margin: 0 auto; display: flex; flex-direction: column; gap: 6px; }
-    .transport-meta-row { display: flex; justify-content: space-between; align-items: center; font-size: 0.78rem; }
-    .transport-title-wrap { display: flex; align-items: center; gap: 6px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; max-width: 70%; }
-    .transport-media-name { font-weight: 600; color: #fff; overflow: hidden; text-overflow: ellipsis; }
-    .transport-time { font-family: ui-monospace, monospace; color: #38bdf8; font-weight: 700; font-size: 0.78rem; }
+    .transport-meta-row { display: flex; justify-content: space-between; align-items: center; font-size: 0.78rem; gap: 8px; }
+    .transport-title-wrap { display: flex; align-items: center; gap: 6px; }
+    .transport-media-select { flex: 1; min-width: 0; padding: 4px 8px; background: #1e293b; color: #fff; border: 1px solid #334155; border-radius: 6px; font-size: 0.78rem; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; overflow: hidden; }
+    .transport-media-select:focus { outline: none; border-color: #38bdf8; }
+    .transport-time { font-family: ui-monospace, monospace; color: #38bdf8; font-weight: 700; font-size: 0.78rem; white-space: nowrap; }
     .transport-scrub-row { display: flex; align-items: center; width: 100%; }
     .transport-scrubber { width: 100%; height: 6px; border-radius: 3px; accent-color: #38bdf8; cursor: pointer; }
     .transport-btn-row { display: flex; justify-content: center; gap: 8px; flex-wrap: wrap; margin-top: 2px; }
@@ -94,21 +95,11 @@
       </div>
     </div>
 
-    <!-- Media Selector (SSOT Playback is in Fixed Bottom Transport) -->
-    <div class="card">
-      <div style="font-size:0.8rem; font-weight:700; color:var(--muted); text-transform:uppercase;">2. Media Source Selection</div>
-      <div style="margin-top:6px;">
-        <select id="selMediaList" onchange="onSelectMedia(this.value)" style="width:100%; padding:6px 10px; background:#1e293b; color:#fff; border:1px solid #334155; border-radius:6px; font-size:0.8rem;">
-          <option value="">Loading videos...</option>
-        </select>
-      </div>
-    </div>
-
     <!-- Stage A: Diagnostic Tools & Video Mapping Panel -->
     <div class="card" id="cardStageA">
       <div style="display:flex; justify-content:space-between; align-items:center;">
         <div>
-          <div style="font-size:0.8rem; font-weight:700; color:var(--muted); text-transform:uppercase;">3. Stage A — Diagnostic Tools & Video Mapping</div>
+          <div style="font-size:0.8rem; font-weight:700; color:var(--muted); text-transform:uppercase;">2. Stage A — Diagnostic Tools & Video Mapping</div>
           <div id="txtVideoMappingStatus" style="font-size:0.72rem; color:#f87171; font-weight:bold;">⚠️ Unconfirmed Video Mapping</div>
         </div>
         <button class="action-btn btn-save" id="btnSaveVideoMapping" onclick="saveVideoMapping()">💾 Save Video Mapping</button>
@@ -200,7 +191,7 @@
     <div class="card" id="cardOptics">
       <div style="display:flex; justify-content:space-between; align-items:center;">
         <div>
-          <div style="font-size:0.8rem; font-weight:700; color:var(--muted); text-transform:uppercase;">4. Viewer Optics Calibration (Stage B/C)</div>
+          <div style="font-size:0.8rem; font-weight:700; color:var(--muted); text-transform:uppercase;">3. Viewer Optics Calibration (Stage B/C)</div>
           <div id="txtProfileStatus" style="font-size:0.72rem; color:#f87171; font-weight:bold;">⚠️ Unknown / Uncalibrated Profile</div>
         </div>
         <button class="action-btn btn-save" id="btnSaveViewer" onclick="saveMyViewerProfile()">💾 Save My Viewer Profile</button>
@@ -287,7 +278,7 @@
 
     <!-- iPhone Telemetry & Measured Timings -->
     <div class="card">
-      <div style="font-size:0.8rem; font-weight:700; color:var(--muted); text-transform:uppercase;">5. iPhone Telemetry & Measured Timings</div>
+      <div style="font-size:0.8rem; font-weight:700; color:var(--muted); text-transform:uppercase;">4. iPhone Telemetry & Measured Timings</div>
       <table class="timing-table">
         <tr><th>Metric</th><th>Live Value</th><th>Measured Latency</th></tr>
         <tr><td>Device / Headset State</td><td id="valDevStatus">Standby</td><td id="valFps">-- FPS</td></tr>
@@ -305,9 +296,11 @@
   <div class="bottom-transport-bar" id="bottomTransportBar">
     <div class="transport-inner">
       <div class="transport-meta-row">
-        <div class="transport-title-wrap">
-          <span style="font-size:0.75rem; font-weight:700; color:var(--muted); text-transform:uppercase;">Media:</span>
-          <span id="transportMediaName" class="transport-media-name">No media loaded</span>
+        <div class="transport-title-wrap" style="flex:1; min-width:0; margin-right:12px;">
+          <span style="font-size:0.75rem; font-weight:700; color:var(--muted); text-transform:uppercase; white-space:nowrap;">🎬 Media:</span>
+          <select id="selMediaList" onchange="onSelectMedia(this.value)" class="transport-media-select">
+            <option value="">Loading videos...</option>
+          </select>
         </div>
         <div id="transportVideoTime" class="transport-time">0:00 / 0:00</div>
       </div>
@@ -326,6 +319,6 @@
     </div>
   </div>
 
-  <script type="module" src="./src/controls/controller-app.js?v=20260824_v2"></script>
+  <script type="module" src="./src/controls/controller-app.js?v=20260824_v3"></script>
 </body>
 </html>

@@ -35,29 +35,54 @@ export function initEventSource() {
   } catch (e) {}
 }
 
+export let lastAuthoritativeMediaPath = '';
+
 export async function loadVideoList() {
   try {
     const res = await fetch('/api/videos');
     const data = await res.json();
     if (data && Array.isArray(data.videos)) {
       videoList = data.videos;
-      renderVideoSelect();
     } else if (Array.isArray(data)) {
       videoList = data;
-      renderVideoSelect();
     }
-  } catch (e) {}
+    renderVideoSelect();
+  } catch (e) {
+    videoList = [];
+    renderVideoSelect();
+  }
 }
 
 export function renderVideoSelect() {
   const sel = document.getElementById('selMediaList');
   if (!sel) return;
-  const cur = sel.value;
+
+  if (!videoList || videoList.length === 0) {
+    sel.innerHTML = '<option value="">No media available</option>';
+    sel.value = '';
+    return;
+  }
+
+  const previousVal = sel.value;
   sel.innerHTML = videoList.map(v => {
-    const sizeStr = v.sizeGB ? `[${v.sizeGB} GB] ` : '';
+    const sizeStr = v.sizeGB ? `[${v.sizeGB}] ` : '';
     return `<option value="${v.relPath}">${sizeStr}${v.name || v.relPath}</option>`;
   }).join('');
-  if (cur) sel.value = cur;
+
+  const listHasAuthoritative = lastAuthoritativeMediaPath && videoList.some(v => v.relPath === lastAuthoritativeMediaPath);
+  const listHasPrevious = previousVal && videoList.some(v => v.relPath === previousVal);
+
+  if (listHasAuthoritative) {
+    sel.value = lastAuthoritativeMediaPath;
+  } else if (listHasPrevious) {
+    sel.value = previousVal;
+  } else {
+    const firstPath = videoList[0].relPath;
+    sel.value = firstPath;
+    if (!lastAuthoritativeMediaPath) {
+      sendControl({ action: 'select_media', relPath: firstPath });
+    }
+  }
 }
 
 export async function sendControl(payload) {
@@ -80,6 +105,7 @@ let scrubResumeTimeout = null;
 
 export function onSelectMedia(relPath) {
   if (!relPath) return;
+  lastAuthoritativeMediaPath = relPath;
   sendControl({ action: 'select_media', relPath: relPath });
 }
 
@@ -335,14 +361,14 @@ export function updateTelemetryUI(data) {
   }
 
   if (data.mediaPath) {
+    lastAuthoritativeMediaPath = data.mediaPath;
     const sel = document.getElementById('selMediaList');
-    if (sel && sel.value !== data.mediaPath) sel.value = data.mediaPath;
-  }
-
-  if (data.mediaName || data.mediaPath) {
-    const raw = data.mediaName && data.mediaName !== '--' ? data.mediaName : (data.mediaPath ? data.mediaPath.split('/').pop() : '--');
-    const nameEl = document.getElementById('transportMediaName');
-    if (nameEl && nameEl.textContent !== raw) nameEl.textContent = raw;
+    if (sel) {
+      const optionExists = Array.from(sel.options).some(o => o.value === data.mediaPath);
+      if (optionExists && sel.value !== data.mediaPath) {
+        sel.value = data.mediaPath;
+      }
+    }
   }
 
   if (typeof data.currentTime === 'number') {
