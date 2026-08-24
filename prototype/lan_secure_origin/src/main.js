@@ -43,22 +43,98 @@ window.onunhandledrejection = (e) => {
   remoteLog('UNHANDLED_REJECTION', reason);
 };
 
-// WakeLock API
+// Screen Wake Lock API & Screen Sleep Prevention Lifecycle
 let wakeLockSentinel = null;
-async function requestWakeLock() {
+let isRequestingWakeLock = false;
+let wakeLockRetryTimer = null;
+let wakeLockRetryCount = 0;
+const MAX_WAKE_LOCK_RETRIES = 5;
+
+export async function requestWakeLock(reason = 'startup') {
+  if (!('wakeLock' in navigator)) {
+    remoteLog('WARN', 'WAKE_LOCK_UNSUPPORTED', { reason });
+    return false;
+  }
+  if (document.visibilityState !== 'visible') {
+    return false;
+  }
+  if (wakeLockSentinel && !wakeLockSentinel.released) {
+    return true;
+  }
+  if (isRequestingWakeLock) {
+    return false;
+  }
+
+  isRequestingWakeLock = true;
   try {
-    if ('wakeLock' in navigator) {
-      wakeLockSentinel = await navigator.wakeLock.request('screen');
-      wakeLockSentinel.addEventListener('release', () => {});
+    const sentinel = await navigator.wakeLock.request('screen');
+    wakeLockSentinel = sentinel;
+    wakeLockRetryCount = 0;
+    if (wakeLockRetryTimer) {
+      clearTimeout(wakeLockRetryTimer);
+      wakeLockRetryTimer = null;
     }
+    const eventName = (reason === 'visibilitychange' || reason === 'system_release_reacquire')
+      ? 'WAKE_LOCK_REACQUIRED'
+      : 'WAKE_LOCK_ACQUIRED';
+    remoteLog('INFO', eventName, { reason, stage: state.calibrationStage, inVR: state.inVR });
+
+    sentinel.addEventListener('release', () => {
+      remoteLog('INFO', 'WAKE_LOCK_RELEASED', { reason: 'sentinel_release', stage: state.calibrationStage });
+      wakeLockSentinel = null;
+      if (document.visibilityState === 'visible' && wakeLockRetryCount < MAX_WAKE_LOCK_RETRIES) {
+        wakeLockRetryCount++;
+        const delay = Math.min(1000 * Math.pow(1.5, wakeLockRetryCount - 1), 5000);
+        if (wakeLockRetryTimer) clearTimeout(wakeLockRetryTimer);
+        wakeLockRetryTimer = setTimeout(() => {
+          requestWakeLock('system_release_reacquire');
+        }, delay);
+      }
+    });
+
+    return true;
   } catch (err) {
-    console.warn('WakeLock error:', err);
+    const errMsg = err.name ? `${err.name}: ${err.message}` : String(err);
+    remoteLog('WARN', 'WAKE_LOCK_ERROR', { error: errMsg, reason, stage: state.calibrationStage });
+    return false;
+  } finally {
+    isRequestingWakeLock = false;
   }
 }
 
+// Check Wake Lock support at bootstrap
+if ('wakeLock' in navigator) {
+  remoteLog('INFO', 'WAKE_LOCK_SUPPORTED', { supported: true });
+} else {
+  remoteLog('WARN', 'WAKE_LOCK_UNSUPPORTED', { supported: false });
+}
+
+// Request on initial script execution
+requestWakeLock('initial_load');
+
+// Request on any user interaction (to satisfy iOS Safari user-gesture requirement if necessary)
+const onUserGestureForWakeLock = () => {
+  if (!wakeLockSentinel || wakeLockSentinel.released) {
+    requestWakeLock('user_gesture');
+  }
+};
+window.addEventListener('touchstart', onUserGestureForWakeLock, { passive: true });
+window.addEventListener('click', onUserGestureForWakeLock, { passive: true });
+
+// Visibility change handler (reacquire when returning to foreground, clean up when backgrounded)
 document.addEventListener('visibilitychange', async () => {
-  if (document.visibilityState === 'visible' && state.inVR) {
-    await requestWakeLock();
+  if (document.visibilityState === 'visible') {
+    wakeLockRetryCount = 0;
+    await requestWakeLock('visibilitychange');
+  } else {
+    if (wakeLockRetryTimer) {
+      clearTimeout(wakeLockRetryTimer);
+      wakeLockRetryTimer = null;
+    }
+    if (wakeLockSentinel) {
+      try { await wakeLockSentinel.release(); } catch (e) {}
+      wakeLockSentinel = null;
+    }
   }
 });
 
@@ -144,7 +220,7 @@ async function localArmAndEnterVR() {
       if (perm === 'granted') {
         state.isArmed = true;
         updateScreenOrientation();
-        requestWakeLock();
+        requestWakeLock('arm_and_enter_vr');
         initAudioContext();
         video.muted = false;
         video.play().catch(() => {
@@ -171,7 +247,7 @@ async function localArmAndEnterVR() {
     // Non-iOS Safari environment
     state.isArmed = true;
     updateScreenOrientation();
-    requestWakeLock();
+    requestWakeLock('arm_and_enter_vr');
     initAudioContext();
     video.muted = false;
     video.play().catch(() => {
