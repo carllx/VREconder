@@ -49,11 +49,6 @@ export function renderStereoUI(uiCtx, gazeEngine, commandModel, videoElement, no
   uiCtx.clearRect(0, 0, width, height);
   if (!state.inVR) return;
 
-  // In Optics Experiment Stage B & C: ZERO legacy 2D overlays to prevent visual contamination
-  if (state.calibrationStage === 'B' || state.calibrationStage === 'C') {
-    return;
-  }
-
   const halfW = Math.floor(width / 2);
   for (let eye = 0; eye < 2; eye++) {
     const eyeOffsetX = eye * halfW;
@@ -132,26 +127,27 @@ export function renderStereoUI(uiCtx, gazeEngine, commandModel, videoElement, no
       continue;
     }
 
-    // In Optics Experiment Stage B & C: Completely suppress legacy playback UI & gaze nodes
-    if (isOpticsMode) {
-      // Show subtle feedback toast if triggered from PC controller
-      if (state.toastText && (now - state.toastTime < 2000)) {
-        const alpha = Math.min(1.0, 1.0 - (now - state.toastTime - 1200) / 800);
-        if (alpha > 0) {
-          uiCtx.fillStyle = 'rgba(15, 23, 42, ' + (0.88 * alpha) + ')';
-          uiCtx.strokeStyle = 'rgba(56, 189, 248, ' + (0.8 * alpha) + ')';
-          uiCtx.lineWidth = 1.2;
-          const tw = 240, th = 30;
-          const toastY = eyeCenterY - 100;
-          roundRect(uiCtx, eyeCenterX - tw/2, toastY - th/2, tw, th, 15, true, true);
+    // Always show feedback toast (Farther / Closer / Recenter / Menu)
+    if (state.toastText && (now - state.toastTime < 2000)) {
+      const alpha = Math.min(1.0, 1.0 - (now - state.toastTime - 1200) / 800);
+      if (alpha > 0) {
+        uiCtx.fillStyle = 'rgba(15, 23, 42, ' + (0.88 * alpha) + ')';
+        uiCtx.strokeStyle = 'rgba(56, 189, 248, ' + (0.8 * alpha) + ')';
+        uiCtx.lineWidth = 1.2;
+        const tw = 240, th = 30;
+        const toastY = eyeCenterY - 100;
+        roundRect(uiCtx, eyeCenterX - tw/2, toastY - th/2, tw, th, 15, true, true);
 
-          uiCtx.font = 'bold 12px -apple-system, sans-serif';
-          uiCtx.fillStyle = 'rgba(255, 255, 255, ' + alpha + ')';
-          uiCtx.textAlign = 'center';
-          uiCtx.textBaseline = 'middle';
-          uiCtx.fillText(state.toastText, eyeCenterX, toastY);
-        }
+        uiCtx.font = 'bold 12px -apple-system, sans-serif';
+        uiCtx.fillStyle = 'rgba(255, 255, 255, ' + alpha + ')';
+        uiCtx.textAlign = 'center';
+        uiCtx.textBaseline = 'middle';
+        uiCtx.fillText(state.toastText, eyeCenterX, toastY);
       }
+    }
+
+    const isOpticsMode = (state.calibrationStage === 'B' || state.calibrationStage === 'C');
+    if (isOpticsMode && !state.patternB_open) {
       uiCtx.restore();
       continue;
     }
