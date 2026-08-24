@@ -149,6 +149,11 @@ export class CalibrationUI {
       this.switchStage('A');
     } else if (act === 'playPause' && this.commandModel) {
       this.commandModel.playPause();
+    } else if ((act === 'seek_to' || act === 'seekTo') && (typeof msg.seconds === 'number' || typeof msg.time === 'number') && this.mediaController) {
+      const v = this.mediaController.video;
+      const target = Math.max(0, Math.min(v.duration || 999999, typeof msg.seconds === 'number' ? msg.seconds : msg.time));
+      v.currentTime = target;
+      showFeedbackToast(`Seek: ${target.toFixed(1)}s`);
     } else if (act === 'seek' && typeof msg.seconds === 'number' && this.mediaController) {
       const v = this.mediaController.video;
       v.currentTime = Math.max(0, Math.min(v.duration || 9999, v.currentTime + msg.seconds));

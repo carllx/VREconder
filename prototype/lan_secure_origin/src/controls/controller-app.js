@@ -68,6 +68,16 @@ export async function sendControl(payload) {
   }).catch(() => {});
 }
 
+export function formatTime(sec) {
+  if (typeof sec !== 'number' || isNaN(sec) || sec < 0) return '0:00';
+  const m = Math.floor(sec / 60);
+  const s = Math.floor(sec % 60);
+  return `${m}:${s < 10 ? '0' : ''}${s}`;
+}
+
+export let isScrubbing = false;
+let scrubResumeTimeout = null;
+
 export function onSelectMedia(relPath) {
   if (!relPath) return;
   sendControl({ action: 'select_media', relPath: relPath });
@@ -75,6 +85,48 @@ export function onSelectMedia(relPath) {
 
 export function sendSeek(sec) {
   sendControl({ action: 'seek', seconds: sec });
+}
+
+export function sendSeekTo(sec) {
+  sendControl({ action: 'seek_to', seconds: Math.max(0, sec) });
+}
+
+export function initTimelineScrubber() {
+  const scrubber = document.getElementById('timelineScrubber');
+  if (!scrubber) return;
+
+  const onScrubStart = () => {
+    isScrubbing = true;
+    if (scrubResumeTimeout) clearTimeout(scrubResumeTimeout);
+  };
+
+  const onScrubInput = (e) => {
+    isScrubbing = true;
+    const targetSec = parseFloat(e.target.value);
+    const maxDur = parseFloat(scrubber.max) || 0;
+    const elTime = document.getElementById('transportVideoTime');
+    if (elTime) {
+      elTime.textContent = `${formatTime(targetSec)} / ${maxDur > 0 ? formatTime(maxDur) : '--'}`;
+    }
+  };
+
+  const onScrubCommit = (e) => {
+    const targetSec = parseFloat(e.target.value);
+    if (!isNaN(targetSec)) {
+      sendSeekTo(targetSec);
+    }
+    if (scrubResumeTimeout) clearTimeout(scrubResumeTimeout);
+    scrubResumeTimeout = setTimeout(() => {
+      isScrubbing = false;
+    }, 600);
+  };
+
+  scrubber.addEventListener('mousedown', onScrubStart);
+  scrubber.addEventListener('touchstart', onScrubStart, { passive: true });
+  scrubber.addEventListener('input', onScrubInput);
+  scrubber.addEventListener('change', onScrubCommit);
+  scrubber.addEventListener('mouseup', onScrubCommit);
+  scrubber.addEventListener('touchend', onScrubCommit);
 }
 
 export function toggleDiagnosticEye() {
@@ -287,11 +339,26 @@ export function updateTelemetryUI(data) {
     if (sel && sel.value !== data.mediaPath) sel.value = data.mediaPath;
   }
 
+  if (data.mediaName || data.mediaPath) {
+    const raw = data.mediaName && data.mediaName !== '--' ? data.mediaName : (data.mediaPath ? data.mediaPath.split('/').pop() : '--');
+    const nameEl = document.getElementById('transportMediaName');
+    if (nameEl && nameEl.textContent !== raw) nameEl.textContent = raw;
+  }
+
   if (typeof data.currentTime === 'number') {
-    const cur = data.currentTime.toFixed(2);
-    const dur = data.duration ? data.duration.toFixed(2) : '--';
-    const el = document.getElementById('txtVideoTime');
-    if (el) el.textContent = `${cur}s / ${dur}s`;
+    const cur = data.currentTime;
+    const dur = (typeof data.duration === 'number' && data.duration > 0) ? data.duration : 0;
+    if (!isScrubbing) {
+      const scrubber = document.getElementById('timelineScrubber');
+      if (scrubber) {
+        if (dur > 0 && Math.abs(parseFloat(scrubber.max) - dur) > 0.5) {
+          scrubber.max = dur;
+        }
+        scrubber.value = cur;
+      }
+      const el = document.getElementById('transportVideoTime');
+      if (el) el.textContent = `${formatTime(cur)} / ${dur > 0 ? formatTime(dur) : '--'}`;
+    }
   }
 
   if (typeof data.videoPaused === 'boolean') {
@@ -471,10 +538,12 @@ window.toggleReferenceGrid = toggleReferenceGrid;
 window.toggleLensCorrection = toggleLensCorrection;
 window.onOpticsChange = onOpticsChange;
 window.sendAction = sendAction;
+window.sendSeekTo = sendSeekTo;
 
-// Start background polling and SSE
+// Start background polling, SSE, and UI initializers
 initEventSource();
 loadVideoList();
+initTimelineScrubber();
 applyStageLocks('A');
 
 setInterval(async () => {
