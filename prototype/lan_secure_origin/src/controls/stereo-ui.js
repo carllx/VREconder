@@ -55,6 +55,7 @@ export function renderStereoUI(uiCtx, gazeEngine, commandModel, videoElement, no
   }
 
   const halfW = Math.floor(width / 2);
+  for (let eye = 0; eye < 2; eye++) {
     const eyeOffsetX = eye * halfW;
     const eyeCenterX = eyeOffsetX + halfW * 0.5;
     const eyeCenterY = height * 0.5;
