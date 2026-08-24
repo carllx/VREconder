@@ -135,6 +135,10 @@ window.addEventListener('touchstart', showFloatingBar, { passive: true });
 window.addEventListener('click', showFloatingBar);
 
 function enterVRMode() {
+  btnEnterVR.style.background = '#10b981';
+  const span = btnEnterVR.querySelector('span');
+  if (span) span.textContent = '🚀 Entering VR...';
+
   state.isArmed = true;
   updateScreenOrientation();
 
