@@ -427,6 +427,10 @@ function handleRequest(req, res, isHttps) {
 
   // Index HTML / Static page
   if (pathname === '/' || pathname === '/index.html') {
+    if (!isHttps) {
+      renderOnboardingPage(res);
+      return;
+    }
     const indexPath = path.join(__dirname, 'index.html');
     if (fs.existsSync(indexPath)) {
       res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
@@ -462,12 +466,11 @@ function handleRequest(req, res, isHttps) {
     }
   }
 
-  // Fallback for HTTP Onboarding page
-  if (!isHttps) {
-    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-    const localIps = getLocalIPs();
-    const primaryIp = localIps.find(ip => ip.startsWith('192.168.')) || localIps[0] || '127.0.0.1';
-    res.end(`<!DOCTYPE html>
+function renderOnboardingPage(res) {
+  res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+  const localIps = getLocalIPs();
+  const primaryIp = localIps.find(ip => ip.startsWith('192.168.')) || localIps[0] || '127.0.0.1';
+  res.end(`<!DOCTYPE html>
 <html>
 <head>
   <meta charset="utf-8">
@@ -486,38 +489,32 @@ function handleRequest(req, res, isHttps) {
 </head>
 <body>
   <h2>🔒 VREconder Local HTTPS CA Setup</h2>
-  
   <div class="card">
     <span class="badge">Step 1</span>
     <h3>Download & Install Root CA Profile</h3>
     <p>Tap below in iPhone Safari to download the root certificate:</p>
     <a class="btn" href="/ca.crt">📥 Download Root CA Profile</a>
     <ol>
-      <li>Tap <b>Allow</b> when Safari asks <i>"This website is trying to download a configuration profile. Do you want to allow this?"</i>.</li>
-      <li>Open iPhone <b>Settings</b> &rarr; tap <b>Profile Downloaded</b> (top of Settings) &rarr; tap <b>Install</b> (enter device PIN) &rarr; tap <b>Install</b> again.</li>
+      <li>Tap <b>Allow</b> when Safari asks to download profile.</li>
+      <li>Open iPhone <b>Settings</b> &rarr; tap <b>Profile Downloaded</b> &rarr; tap <b>Install</b>.</li>
     </ol>
   </div>
-
   <div class="card">
     <span class="badge">Step 2</span>
     <h3>Enable Full Trust for Root CA</h3>
     <ol>
-      <li>In iPhone <b>Settings</b>, navigate to: <br><code>General &gt; About &gt; Certificate Trust Settings</code> (scroll to the very bottom).</li>
-      <li>Under <b>ENABLE FULL TRUST FOR ROOT CERTIFICATES</b>, turn ON the switch for <b>VREconder LAN Root CA</b>.</li>
-      <li>Tap <b>Continue</b> on the warning modal.</li>
+      <li>In iPhone <b>Settings</b>, go to: <code>General &gt; About &gt; Certificate Trust Settings</code>.</li>
+      <li>Turn ON <b>VREconder LAN Root CA</b> &rarr; tap <b>Continue</b>.</li>
     </ol>
   </div>
-
   <div class="card">
     <span class="badge">Step 3</span>
-    <h3>Open Secure Context Probe</h3>
-    <p>After completing Step 1 & 2, open the HTTPS origin probe:</p>
+    <h3>Open Secure VR Player</h3>
     <a class="btn btn-green" href="https://${primaryIp}:${HTTPS_PORT}/">🚀 Open HTTPS VR Player (https://${primaryIp}:${HTTPS_PORT})</a>
   </div>
 </body>
 </html>`);
-    return;
-  }
+}
 
   res.writeHead(404, { 'Content-Type': 'text/plain' });
   res.end('404 Not Found');

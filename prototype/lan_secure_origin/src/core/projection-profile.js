@@ -101,7 +101,7 @@ export function createDefaultViewerProfile(profileId = 'unknown:uncalibrated') {
       distortion: { model: 'custom-radial-polynomial', k1: 0.25, k2: 0.15 }
     }
   };
-  return presets[profileId] || presets['cardboard:v2_2015'];
+  return presets[profileId] || presets['unknown:uncalibrated'];
 }
 
 export function distortRadius(r, k1 = 0, k2 = 0) {

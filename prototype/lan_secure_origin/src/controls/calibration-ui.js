@@ -84,6 +84,7 @@ export class CalibrationUI {
     this.inputMaxFov = document.getElementById('inputMaxFov');
     this.inputJsonImport = document.getElementById('inputJsonImport');
     this.btnImportJson = document.getElementById('btnImportJson');
+    this.chkStageCReferenceGrid = document.getElementById('chkStageCReferenceGrid');
 
     this.bindEvents();
   }
@@ -108,6 +109,22 @@ export class CalibrationUI {
 
     if (act === 'set_stage') {
       this.switchStage(msg.stage);
+    } else if (act === 'set_viewer_preset' && msg.presetId) {
+      if (state.calibrationStage === 'C') return; // Stage C Viewer Profile is fixed/read-only
+      const presetId = msg.presetId;
+      const currentLensState = this.activeViewerProfile ? this.activeViewerProfile.lensCorrectionEnabled : false;
+      this.activeViewerProfile = createDefaultViewerProfile(presetId);
+      this.activeViewerProfile.lensCorrectionEnabled = currentLensState;
+      this.syncStageBToUI();
+      if (this.onProfileChanged) this.onProfileChanged(this.activeVideoProfile, this.activeViewerProfile);
+      showFeedbackToast(`Viewer Profile: ${presetId}`);
+      logAction('Selected Viewer Preset from PC: ' + presetId);
+    } else if (act === 'set_reference_grid') {
+      state.showReferenceGrid = (msg.enabled === true);
+      if (this.vrRenderer) this.vrRenderer.showReferenceGrid = state.showReferenceGrid;
+      if (this.chkReferenceGrid) this.chkReferenceGrid.checked = state.showReferenceGrid;
+      showFeedbackToast(state.showReferenceGrid ? '▦ Reference Grid: ON' : '▦ Reference Grid: OFF');
+      logAction('Toggled Reference Grid from PC: ' + (state.showReferenceGrid ? 'ON' : 'OFF'));
     } else if (act === 'set_lens_correction') {
       if (this.activeViewerProfile) {
         this.activeViewerProfile.lensCorrectionEnabled = msg.enabled === true;
@@ -171,18 +188,27 @@ export class CalibrationUI {
     if (stage === 'A') {
       // Stage A: Flat Diagnostic View (No Optics, Real Video)
       if (this.onExitVR) this.onExitVR();
-      if (this.vrRenderer) this.vrRenderer.sceneType = 0;
+      if (this.vrRenderer) {
+        this.vrRenderer.sceneType = 0;
+        this.vrRenderer.showReferenceGrid = false;
+      }
       this.currentMode = 'diagnostic';
       showFeedbackToast('Stage A: Flat Diagnostic');
     } else if (stage === 'B') {
       // Stage B: Viewer Optics (Synthetic Grid Only, Headset Stereo)
-      if (this.vrRenderer) this.vrRenderer.sceneType = 1;
+      if (this.vrRenderer) {
+        this.vrRenderer.sceneType = 1;
+        this.vrRenderer.showReferenceGrid = false;
+      }
       this.currentMode = 'vr';
       if (this.onEnterVR) this.onEnterVR();
       showFeedbackToast('Stage B: Synthetic Grid');
     } else if (stage === 'C') {
-      // Stage C: Real Video Verification (Headset Stereo, Fixed Optics)
-      if (this.vrRenderer) this.vrRenderer.sceneType = 0;
+      // Stage C: Real Video Verification (Headset Stereo, Fixed Optics, Optional Grid)
+      if (this.vrRenderer) {
+        this.vrRenderer.sceneType = 0;
+        this.vrRenderer.showReferenceGrid = state.showReferenceGrid;
+      }
       this.currentMode = 'vr';
       if (this.onEnterVR) this.onEnterVR();
       showFeedbackToast('Stage C: Video Verification');
@@ -326,6 +352,15 @@ export class CalibrationUI {
       this.btnToggleHorizon.addEventListener('click', () => {
         this.diagnosticOverlay.showHorizon = !this.diagnosticOverlay.showHorizon;
         this.btnToggleHorizon.classList.toggle('active', this.diagnosticOverlay.showHorizon);
+      });
+    }
+
+    if (this.chkStageCReferenceGrid) {
+      this.chkStageCReferenceGrid.addEventListener('change', (e) => {
+        state.showReferenceGrid = e.target.checked;
+        if (this.vrRenderer) this.vrRenderer.showReferenceGrid = state.showReferenceGrid;
+        showFeedbackToast(state.showReferenceGrid ? '▦ Reference Grid: ON' : '▦ Reference Grid: OFF');
+        logAction('Toggled Reference Grid: ' + (state.showReferenceGrid ? 'ON' : 'OFF'));
       });
     }
 

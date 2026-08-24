@@ -24,6 +24,7 @@ export const fsIdealSceneSource = `
   uniform int uEye;              // 0: Left Eye, 1: Right Eye
   uniform int uEyeSwap;          // 0: Normal, 1: Swapped
   uniform int uSceneType;        // 0: Video, 1: Synthetic Calibration Grid
+  uniform int uShowReferenceGrid; // 0: No overlay, 1: Composite Reference Grid
   uniform int uProjectionMode;    // 0: Equirect-180, 1: Equirect-360, 2: Flat-2D
   uniform int uStereoLayout;     // 0: SBS, 1: TB, 2: Mono
   uniform vec4 uVirtTanBounds;   // vec4(tanVirtLeft, tanVirtRight, tanVirtBottom, tanVirtTop)
@@ -90,40 +91,58 @@ export const fsIdealSceneSource = `
     // Combine Head Tracking and Video Pose Rotation
     vec3 dWorld = uPoseRot * (uCamRot * rayCam);
 
+    vec4 videoCol = vec4(0.0);
     if (uProjectionMode == 2) {
-      gl_FragColor = texture2D(uVideoTexture, vUv);
-      return;
-    }
-
-    float lon = atan(dWorld.x, -dWorld.z);
-    float lat = asin(clamp(dWorld.y, -1.0, 1.0));
-
-    float maxHalfLon = (uProjectionMode == 0) ? (uCoverageRad.x * 0.5) : PI;
-    float maxHalfLat = (uCoverageRad.y * 0.5);
-
-    if (abs(lon) > maxHalfLon || abs(lat) > maxHalfLat) {
-      gl_FragColor = vec4(0.012, 0.016, 0.024, 1.0);
-      return;
-    }
-
-    float uLocal = 0.5 + lon / uCoverageRad.x;
-    float vLocal = 0.5 + lat / uCoverageRad.y;
-
-    uLocal = uCrop.x + uLocal * (1.0 - uCrop.x - uCrop.y);
-    vLocal = uCrop.z + vLocal * (1.0 - uCrop.z - uCrop.w);
-
-    int sourceEye = (uEyeSwap == 1) ? (1 - uEye) : uEye;
-
-    vec2 texUv = vec2(0.0);
-    if (uStereoLayout == 0) {
-      texUv = vec2(0.5 * (uLocal + float(sourceEye)), vLocal);
-    } else if (uStereoLayout == 1) {
-      texUv = vec2(uLocal, 0.5 * (vLocal + float(1 - sourceEye)));
+      videoCol = texture2D(uVideoTexture, vUv);
     } else {
-      texUv = vec2(uLocal, vLocal);
+      float lon = atan(dWorld.x, -dWorld.z);
+      float lat = asin(clamp(dWorld.y, -1.0, 1.0));
+
+      float maxHalfLon = (uProjectionMode == 0) ? (uCoverageRad.x * 0.5) : PI;
+      float maxHalfLat = (uCoverageRad.y * 0.5);
+
+      if (abs(lon) > maxHalfLon || abs(lat) > maxHalfLat) {
+        videoCol = vec4(0.012, 0.016, 0.024, 1.0);
+      } else {
+        float uLocal = 0.5 + lon / uCoverageRad.x;
+        float vLocal = 0.5 + lat / uCoverageRad.y;
+
+        uLocal = uCrop.x + uLocal * (1.0 - uCrop.x - uCrop.y);
+        vLocal = uCrop.z + vLocal * (1.0 - uCrop.z - uCrop.w);
+
+        int sourceEye = (uEyeSwap == 1) ? (1 - uEye) : uEye;
+
+        vec2 texUv = vec2(0.0);
+        if (uStereoLayout == 0) {
+          texUv = vec2(0.5 * (uLocal + float(sourceEye)), vLocal);
+        } else if (uStereoLayout == 1) {
+          texUv = vec2(uLocal, 0.5 * (vLocal + float(1 - sourceEye)));
+        } else {
+          texUv = vec2(uLocal, vLocal);
+        }
+
+        videoCol = texture2D(uVideoTexture, texUv);
+      }
     }
 
-    gl_FragColor = texture2D(uVideoTexture, texUv);
+    // Composite Verification-only Reference Grid in same stereo ideal ray space
+    if (uShowReferenceGrid == 1) {
+      vec2 gridPos = vec2(tanX, tanY) * 6.0;
+      vec2 gridFract = abs(fract(gridPos) - 0.5);
+      float line = step(0.46, max(gridFract.x, gridFract.y));
+      float isCross = (abs(tanX) < 0.005 || abs(tanY) < 0.005) ? 1.0 : 0.0;
+      float isCornerBox = ((abs(abs(tanX) - 0.35) < 0.007 && abs(tanY) <= 0.357) ||
+                           (abs(abs(tanY) - 0.35) < 0.007 && abs(tanX) <= 0.357)) ? 1.0 : 0.0;
+      vec3 gridColor = (uEye == 0) ? vec3(0.0, 0.9, 1.0) : vec3(1.0, 0.7, 0.1);
+      vec3 comp = videoCol.rgb;
+      comp = mix(comp, gridColor, line * 0.55);
+      comp = mix(comp, vec3(1.0, 1.0, 1.0), isCornerBox * 0.85);
+      comp = mix(comp, vec3(1.0, 0.2, 0.2), isCross * 0.75);
+      gl_FragColor = vec4(comp, 1.0);
+      return;
+    }
+
+    gl_FragColor = videoCol;
   }
 `;
 

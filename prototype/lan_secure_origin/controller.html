@@ -169,6 +169,17 @@
         <button class="action-btn btn-save" id="btnSaveViewer" onclick="sendAction('save_viewer_profile')">💾 Accept & Save Viewer Profile</button>
       </div>
 
+      <div class="control-row" style="margin-top:8px;">
+        <div style="font-size:0.75rem; font-weight:700; color:var(--muted); text-transform:uppercase;">Active Viewer Profile (Stage B Only):</div>
+        <select id="selViewerPreset" onchange="onViewerPresetSelect(this.value)" style="width:100%; margin-top:4px; padding:6px 10px; background:#1e293b; color:#fff; border:1px solid #334155; border-radius:6px; font-size:0.8rem; font-weight:600;">
+          <option value="unknown:uncalibrated">Unknown / Uncalibrated (Default)</option>
+          <option value="custom:subjective_working_candidate">Subjective Working Candidate (UNVERIFIED CUSTOM / NOT PHYSICAL GROUND TRUTH)</option>
+          <option value="cardboard:v2_2015">Google Cardboard v2 Historical Reference</option>
+          <option value="cardboard:v1_2014">Google Cardboard v1 Historical Reference</option>
+          <option value="custom:calibrated">Saved Custom Profile (Manual Parameters)</option>
+        </select>
+      </div>
+
       <div class="btn-row" style="margin-top:8px;">
         <button class="action-btn" id="btnSceneToggle" style="background:#8b5cf6;" onclick="toggleScene()">🎬 切换画面: 真实视频 (Stage C)</button>
         <button class="action-btn btn-lens-off" id="btnLensToggle" onclick="toggleLensCorrection()">⚪ LENS CORRECTION: OFF</button>
@@ -178,6 +189,17 @@
 
       <div id="lockNotice" style="display:none; margin-top:6px; font-size:0.72rem; color:#38bdf8; background:rgba(2,132,199,0.15); padding:4px 8px; border-radius:4px; border:1px solid rgba(56,189,248,0.3);">
         🔒 Stage C Lock: Physical geometry & distortion coefficients are locked. Only Lens OFF/ON comparison is active.
+      </div>
+
+      <div id="stageCVerificationPanel" style="display:none; margin-top:6px; padding:8px 12px; background:rgba(30,58,138,0.25); border:1px solid #1e40af; border-radius:8px;">
+        <div style="font-size:0.74rem; font-weight:700; color:#60a5fa; text-transform:uppercase;">Stage C Verification Tools</div>
+        <label style="display:flex; align-items:center; gap:8px; font-size:0.8rem; font-weight:600; color:#38bdf8; cursor:pointer; margin-top:4px;">
+          <input type="checkbox" id="chkReferenceGrid" onchange="toggleReferenceGrid(this.checked)" style="accent-color:#38bdf8; width:16px; height:16px; cursor:pointer;">
+          <span>[ ] Show Reference Grid (Verification Overlay in Stereo Engine)</span>
+        </label>
+        <div style="font-size:0.68rem; color:#94a3b8; margin-top:2px;">
+          Overlay passes through the exact same stereo ideal rendering & lens pre-distortion path as video.
+        </div>
       </div>
 
       <div class="control-grid" id="opticsControlsGrid">
@@ -324,12 +346,48 @@
         btnScene.textContent = isStageC ? '▦ 切换画面: 标定网格 (Stage B)' : '🎬 切换画面: 真实视频 (Stage C)';
       }
 
+      const selPreset = document.getElementById('selViewerPreset');
+      if (selPreset) selPreset.disabled = shouldLockCoeffs;
+
       ['rngK1', 'rngK2', 'rngFov', 'rngScreenToLens', 'rngInterLens', 'rngTrayToLens'].forEach(id => {
         const el = document.getElementById(id);
         if (el) el.disabled = shouldLockCoeffs;
       });
 
+      const btnSaveViewer = document.getElementById('btnSaveViewer');
+      if (btnSaveViewer) btnSaveViewer.disabled = isStageC;
+
       document.getElementById('lockNotice').style.display = isStageC ? 'block' : 'none';
+      const stageCPanel = document.getElementById('stageCVerificationPanel');
+      if (stageCPanel) stageCPanel.style.display = isStageC ? 'block' : 'none';
+    }
+
+    function onViewerPresetSelect(presetId) {
+      if (currentStage !== 'B') return;
+      if (presetId === 'custom:subjective_working_candidate') {
+        document.getElementById('rngK1').value = 0.145;
+        document.getElementById('valK1').textContent = '0.145';
+        document.getElementById('rngK2').value = 0.005;
+        document.getElementById('valK2').textContent = '0.005';
+        document.getElementById('rngFov').value = 65.0;
+        document.getElementById('valFov').textContent = '65.0°';
+        document.getElementById('rngScreenToLens').value = 42.6;
+        document.getElementById('valScreenToLens').textContent = '42.6';
+        document.getElementById('rngInterLens').value = 55.0;
+        document.getElementById('valInterLens').textContent = '55.0';
+        document.getElementById('rngTrayToLens').value = 35.0;
+        document.getElementById('valTrayToLens').textContent = '35.0';
+        const statEl = document.getElementById('txtProfileStatus');
+        if (statEl) {
+          statEl.textContent = '⚙️ UNVERIFIED CUSTOM / SUBJECTIVE WORKING CANDIDATE — NOT PHYSICAL GROUND TRUTH';
+          statEl.style.color = '#38bdf8';
+        }
+      }
+      sendControl({ action: 'set_viewer_preset', presetId: presetId });
+    }
+
+    function toggleReferenceGrid(checked) {
+      sendControl({ action: 'set_reference_grid', enabled: checked });
     }
 
     function toggleLensCorrection() {
@@ -382,6 +440,11 @@
           b.className = 'badge badge-amber';
           b.textContent = '🟡 Tap "Arm Calibration" on iPhone';
         }
+      }
+
+      if (typeof data.showReferenceGrid === 'boolean') {
+        const chk = document.getElementById('chkReferenceGrid');
+        if (chk) chk.checked = data.showReferenceGrid;
       }
 
       if (data.calibrationStage && data.calibrationStage !== currentStage) {

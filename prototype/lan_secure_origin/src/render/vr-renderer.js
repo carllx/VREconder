@@ -25,6 +25,7 @@ export class VRRenderer {
     this.fboHeight = 0;
 
     this.sceneType = 0; // 0: Video, 1: Synthetic Calibration Grid
+    this.showReferenceGrid = false; // Verification-only overlay in Stage C
     this.identityMat3 = [1, 0, 0,  0, 1, 0,  0, 0, 1];
     this.initWebGL();
   }
@@ -166,6 +167,7 @@ export class VRRenderer {
       uEye: gl.getUniformLocation(this.programScene, 'uEye'),
       uEyeSwap: gl.getUniformLocation(this.programScene, 'uEyeSwap'),
       uSceneType: gl.getUniformLocation(this.programScene, 'uSceneType'),
+      uShowReferenceGrid: gl.getUniformLocation(this.programScene, 'uShowReferenceGrid'),
       uProjectionMode: gl.getUniformLocation(this.programScene, 'uProjectionMode'),
       uStereoLayout: gl.getUniformLocation(this.programScene, 'uStereoLayout'),
       uVirtTanBounds: gl.getUniformLocation(this.programScene, 'uVirtTanBounds'),
@@ -200,6 +202,7 @@ export class VRRenderer {
     const tanHalfH = tanHalfV * aspect;
 
     gl.uniform1i(locs.uSceneType, this.sceneType);
+    gl.uniform1i(locs.uShowReferenceGrid, (this.sceneType === 0 && this.showReferenceGrid) ? 1 : 0);
     gl.uniform1i(locs.uProjectionMode, projMode);
     gl.uniform1i(locs.uStereoLayout, stereoLayout);
     gl.uniform1i(locs.uEyeSwap, eyeSwap);
@@ -237,6 +240,7 @@ export class VRRenderer {
       uEye: gl.getUniformLocation(this.programScene, 'uEye'),
       uEyeSwap: gl.getUniformLocation(this.programScene, 'uEyeSwap'),
       uSceneType: gl.getUniformLocation(this.programScene, 'uSceneType'),
+      uShowReferenceGrid: gl.getUniformLocation(this.programScene, 'uShowReferenceGrid'),
       uProjectionMode: gl.getUniformLocation(this.programScene, 'uProjectionMode'),
       uStereoLayout: gl.getUniformLocation(this.programScene, 'uStereoLayout'),
       uVirtTanBounds: gl.getUniformLocation(this.programScene, 'uVirtTanBounds'),
@@ -266,6 +270,7 @@ export class VRRenderer {
     const poseMat = this.computePoseMatrix(vp.pose);
 
     gl.uniform1i(sLocs.uSceneType, this.sceneType);
+    gl.uniform1i(sLocs.uShowReferenceGrid, (this.sceneType === 0 && this.showReferenceGrid) ? 1 : 0);
     gl.uniform1i(sLocs.uProjectionMode, projMode);
     gl.uniform1i(sLocs.uStereoLayout, stereoLayout);
     gl.uniform1i(sLocs.uEyeSwap, eyeSwap);

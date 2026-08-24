@@ -212,6 +212,7 @@
         <div class="label">Viewer Profile:</div>
         <select id="selViewerPreset">
           <option value="unknown:uncalibrated">Unknown / Uncalibrated Viewer (Default)</option>
+          <option value="custom:subjective_working_candidate">Subjective Working Candidate (UNVERIFIED CUSTOM / NOT PHYSICAL GROUND TRUTH)</option>
           <option value="cardboard:v2_2015">Google Cardboard v2 (Historical Ref: Google I/O 2015 Spec)</option>
           <option value="cardboard:v1_2014">Google Cardboard v1 (Historical Ref: Google I/O 2014 Spec)</option>
           <option value="custom:calibrated">Custom Viewer Profile (Manual Device Parameter Input)</option>
@@ -278,6 +279,17 @@
           <input type="range" id="rangeDistortK2" min="-0.30" max="0.80" step="0.005" value="0.0">
           <span class="slider-val" id="valDistortK2">0.000</span>
         </div>
+      </div>
+    </div>
+
+    <!-- Stage C: Real Video Verification -->
+    <div class="card">
+      <div class="label">Stage C — Real Video Verification (Fixed Optics)</div>
+      <div class="control-row" style="margin-top:6px;">
+        <label style="display:flex; align-items:center; gap:8px; font-size:0.75rem; color:#38bdf8; cursor:pointer;">
+          <input type="checkbox" id="chkStageCReferenceGrid" style="accent-color:#38bdf8; width:16px; height:16px;">
+          <span>▦ Show Reference Grid (Verification Overlay via Stereo Pipeline)</span>
+        </label>
       </div>
     </div>
 
