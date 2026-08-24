@@ -223,9 +223,10 @@ export class ProfileStorage {
     } catch (e) {}
   }
 
-  async loadServerProfiles() {
+  async loadServerProfiles(baseUrl = '') {
     try {
-      const res = await fetch('/api/profiles');
+      const url = baseUrl ? `${baseUrl}/api/profiles` : '/api/profiles';
+      const res = await fetch(url);
       if (res.ok) {
         const data = await res.json();
         if (data.videoProfiles) this.videoProfiles = { ...this.videoProfiles, ...data.videoProfiles };

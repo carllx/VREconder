@@ -50,4 +50,10 @@ backup_old_files/
 
 # 忽略配置文件中的敏感信息
 config/*.env
-config/*.key 
+config/*.key
+
+# Prototype runtime persistence files
+prototype/lan_secure_origin/prototype_viewer_profile.json
+prototype/lan_secure_origin/prototype_video_profiles.json
+prototype_viewer_profile.json
+prototype_video_profiles.json

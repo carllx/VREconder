@@ -381,6 +381,7 @@ function handleRequest(req, res, isHttps) {
       try {
         const profile = JSON.parse(body);
         if (profile && (profile.confidence === 'working-user-tuned' || profile.viewerProfileId === 'viewer:my_profile')) {
+          profile.confidence = 'working-user-tuned';
           profile.isCalibrated = false;
           profile.source = 'User-tuned Working Profile (Unvalidated)';
         }
