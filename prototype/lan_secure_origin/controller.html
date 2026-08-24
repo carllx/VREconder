@@ -170,6 +170,7 @@
       </div>
 
       <div class="btn-row" style="margin-top:8px;">
+        <button class="action-btn" id="btnSceneToggle" style="background:#8b5cf6;" onclick="toggleScene()">🎬 切换画面: 真实视频 (Stage C)</button>
         <button class="action-btn btn-lens-off" id="btnLensToggle" onclick="toggleLensCorrection()">⚪ LENS CORRECTION: OFF</button>
         <button class="action-btn btn-recenter" onclick="sendAction('recenter')">🎯 Recenter View</button>
         <button class="action-btn btn-exit" onclick="sendAction('exit_vr')">⚙ Exit VR</button>
@@ -308,17 +309,25 @@
       sendControl({ action: 'set_stage', stage: stage });
     }
 
+    function toggleScene() {
+      const nextStage = (currentStage === 'B') ? 'C' : 'B';
+      setStage(nextStage);
+    }
+
     function applyStageLocks(stage) {
       const isStageC = (stage === 'C');
       const isStageA = (stage === 'A');
-      const shouldLockCoeffs = isStageC || isStageA;
+      const btnScene = document.getElementById('btnSceneToggle');
+      if (btnScene) {
+        btnScene.textContent = isStageC ? '▦ 切换画面: 标定网格 (Stage B)' : '🎬 切换画面: 真实视频 (Stage C)';
+      }
 
       ['rngK1', 'rngK2', 'rngFov', 'rngScreenToLens', 'rngInterLens', 'rngTrayToLens'].forEach(id => {
         const el = document.getElementById(id);
-        if (el) el.disabled = shouldLockCoeffs;
+        if (el) el.disabled = isStageA;
       });
 
-      document.getElementById('lockNotice').style.display = isStageC ? 'block' : 'none';
+      document.getElementById('lockNotice').style.display = 'none';
     }
 
     function toggleLensCorrection() {
@@ -330,7 +339,6 @@
     }
 
     function onOpticsChange() {
-      if (currentStage === 'C') return;
       const k1 = parseFloat(document.getElementById('rngK1').value);
       const k2 = parseFloat(document.getElementById('rngK2').value);
       const fov = parseFloat(document.getElementById('rngFov').value);
