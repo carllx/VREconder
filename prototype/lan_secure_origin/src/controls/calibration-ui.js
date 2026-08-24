@@ -109,6 +109,27 @@ export class CalibrationUI {
 
     if (act === 'set_stage') {
       this.switchStage(msg.stage);
+    } else if (act === 'set_viewer_visual_mode') {
+      state.viewerVisualMode = msg.mode; // 'grid_only' | 'video_grid'
+      if (state.calibrationStage === 'B') {
+        const isVideoGrid = (msg.mode === 'video_grid');
+        if (this.vrRenderer) {
+          this.vrRenderer.sceneType = isVideoGrid ? 0 : 1;
+          this.vrRenderer.showReferenceGrid = isVideoGrid;
+        }
+      }
+      showFeedbackToast(`Stage B Ref: ${msg.mode === 'video_grid' ? 'Video + Grid' : 'Grid Only'}`);
+      logAction('Set Viewer Visual Mode: ' + msg.mode);
+    } else if (act === 'set_video_mapping' && msg.mapping && this.activeVideoProfile) {
+      const m = msg.mapping;
+      if (m.projection) this.activeVideoProfile.projection = m.projection;
+      if (m.stereoMode) this.activeVideoProfile.stereoMode = m.stereoMode;
+      if (typeof m.fovHorizontalDeg === 'number') this.activeVideoProfile.fovHorizontalDeg = m.fovHorizontalDeg;
+      if (m.eyeOrder) this.activeVideoProfile.eyeOrder = m.eyeOrder;
+      this.syncStageAToUI();
+      if (this.onProfileChanged) this.onProfileChanged(this.activeVideoProfile, this.activeViewerProfile);
+      showFeedbackToast(`Mapping: ${this.activeVideoProfile.projection} (${this.activeVideoProfile.stereoMode})`);
+      logAction('Set Video Mapping from PC', m);
     } else if (act === 'set_viewer_preset' && msg.presetId) {
       if (state.calibrationStage === 'C') return; // Stage C Viewer Profile is fixed/read-only
       const presetId = msg.presetId;
@@ -117,7 +138,7 @@ export class CalibrationUI {
       this.activeViewerProfile.lensCorrectionEnabled = currentLensState;
       this.syncStageBToUI();
       if (this.onProfileChanged) this.onProfileChanged(this.activeVideoProfile, this.activeViewerProfile);
-      showFeedbackToast(`Viewer Profile: ${presetId}`);
+      showFeedbackToast(`Viewer Profile: ${this.activeViewerProfile.name}`);
       logAction('Selected Viewer Preset from PC: ' + presetId);
     } else if (act === 'set_reference_grid') {
       state.showReferenceGrid = (msg.enabled === true);
@@ -128,7 +149,6 @@ export class CalibrationUI {
     } else if (act === 'set_lens_correction') {
       if (this.activeViewerProfile) {
         this.activeViewerProfile.lensCorrectionEnabled = msg.enabled === true;
-        // Edits remain draft/unverified until explicit save/validate step
         this.syncStageBToUI();
         if (this.onProfileChanged) this.onProfileChanged(this.activeVideoProfile, this.activeViewerProfile);
         showFeedbackToast(`Lens: ${this.activeViewerProfile.lensCorrectionEnabled ? 'ON' : 'OFF'}`);
@@ -146,7 +166,6 @@ export class CalibrationUI {
         const f = msg.maxFovDeg;
         this.activeViewerProfile.maxFovAngles = { outerDeg: f, innerDeg: f, upperDeg: f, lowerDeg: f };
       }
-      // Draft edits do NOT mark profile as calibrated
       this.syncStageBToUI();
       if (this.onProfileChanged) this.onProfileChanged(this.activeVideoProfile, this.activeViewerProfile);
     } else if (act === 'recenter' && this.commandModel) {
@@ -165,17 +184,20 @@ export class CalibrationUI {
       this.commandModel.previous();
     } else if (act === 'save_viewer_profile') {
       if (this.activeViewerProfile) {
-        this.activeViewerProfile.isCalibrated = true;
-        this.activeViewerProfile.source = 'User Validated / Custom Calibrated';
         this.storage.saveViewerProfile(this.activeViewerProfile);
         this.syncStageBToUI();
-        showFeedbackToast('💾 Calibrated Viewer Profile Saved');
+        showFeedbackToast('💾 My Viewer Profile (working) Saved');
+        logAction('Saved My Viewer Profile', this.activeViewerProfile);
       }
     } else if (act === 'save_video_profile' && this.activeVideoProfile) {
-      this.activeVideoProfile.confidence = 'user-calibrated';
-      this.storage.saveVideoProfile(this.activeVideoProfile);
-      this.syncStageAToUI();
-      showFeedbackToast('💾 Calibrated Video Profile Saved');
+      if (this.activeVideoProfile.projection === 'unknown' || this.activeVideoProfile.stereoMode === 'unknown') {
+        showFeedbackToast('⚠️ Select mapping before saving!');
+      } else {
+        this.storage.saveVideoProfile(this.activeVideoProfile);
+        this.syncStageAToUI();
+        showFeedbackToast('💾 Video Mapping Confirmed & Saved');
+        logAction('Saved Video Mapping', this.activeVideoProfile);
+      }
     }
   }
 
@@ -195,14 +217,15 @@ export class CalibrationUI {
       this.currentMode = 'diagnostic';
       showFeedbackToast('Stage A: Flat Diagnostic');
     } else if (stage === 'B') {
-      // Stage B: Viewer Optics (Synthetic Grid Only, Headset Stereo)
+      // Stage B: Viewer Optics (Editable Optics, Grid Only or Video + Grid)
+      const isVideoGrid = (state.viewerVisualMode === 'video_grid');
       if (this.vrRenderer) {
-        this.vrRenderer.sceneType = 1;
-        this.vrRenderer.showReferenceGrid = false;
+        this.vrRenderer.sceneType = isVideoGrid ? 0 : 1;
+        this.vrRenderer.showReferenceGrid = isVideoGrid;
       }
       this.currentMode = 'vr';
       if (this.onEnterVR) this.onEnterVR();
-      showFeedbackToast('Stage B: Synthetic Grid');
+      showFeedbackToast(`Stage B: Viewer Optics (${isVideoGrid ? 'Video + Grid' : 'Grid Only'})`);
     } else if (stage === 'C') {
       // Stage C: Real Video Verification (Headset Stereo, Fixed Optics, Optional Grid)
       if (this.vrRenderer) {
@@ -517,11 +540,27 @@ export class CalibrationUI {
       });
     }
 
+    if (this.btnSaveVideoProfile) {
+      this.btnSaveVideoProfile.addEventListener('click', async () => {
+        if (!this.activeVideoProfile) return;
+        if (this.activeVideoProfile.projection === 'unknown' || this.activeVideoProfile.stereoMode === 'unknown') {
+          showFeedbackToast('⚠️ Select mapping before saving!');
+          return;
+        }
+        await this.storage.saveVideoProfile(this.activeVideoProfile);
+        this.syncStageAToUI();
+        showFeedbackToast('💾 Video Mapping Confirmed & Saved');
+        logAction('Saved Video Mapping', this.activeVideoProfile);
+      });
+    }
+
     if (this.btnSaveViewerProfile) {
       this.btnSaveViewerProfile.addEventListener('click', async () => {
         if (this.activeViewerProfile) {
           await this.storage.saveViewerProfile(this.activeViewerProfile);
-          showFeedbackToast('💾 Viewer Profile Saved');
+          this.syncStageBToUI();
+          showFeedbackToast('💾 My Viewer Profile (working) Saved');
+          logAction('Saved My Viewer Profile', this.activeViewerProfile);
         }
       });
     }

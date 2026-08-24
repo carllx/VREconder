@@ -363,6 +363,7 @@ setInterval(() => {
     mediaStatus: state.firstFrameTimings.statusText || 'Ready',
     devStatus: state.inVR ? `In VR (Stage ${state.calibrationStage})` : `Diagnostic (Stage ${state.calibrationStage})`,
     showReferenceGrid: state.showReferenceGrid === true,
+    viewerVisualMode: state.viewerVisualMode || 'grid_only',
     viewerProfile: calibrationUI.activeViewerProfile,
     videoProfile: activeVideoProfile,
     timings: state.firstFrameTimings

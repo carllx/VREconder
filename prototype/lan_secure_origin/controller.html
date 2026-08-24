@@ -5,87 +5,22 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>VREconder - PC Calibration Controller</title>
   <style>
-    :root {
-      --bg: #090d16;
-      --card: #131b2e;
-      --border: #243048;
-      --text: #f8fafc;
-      --muted: #94a3b8;
-      --blue: #2563eb;
-      --green: #10b981;
-      --red: #ef4444;
-      --amber: #f59e0b;
-      --cyan: #06b6d4;
-    }
+    :root { --bg: #090d16; --card: #131b2e; --border: #243048; --text: #f8fafc; --muted: #94a3b8; }
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    body {
-      background: var(--bg);
-      color: var(--text);
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-      padding: 16px;
-      line-height: 1.4;
-    }
-    .container {
-      max-width: 960px;
-      margin: 0 auto;
-      display: flex;
-      flex-direction: column;
-      gap: 12px;
-    }
-    .card {
-      background: var(--card);
-      border: 1px solid var(--border);
-      border-radius: 10px;
-      padding: 12px 16px;
-    }
+    body { background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; padding: 16px; line-height: 1.4; }
+    .container { max-width: 960px; margin: 0 auto; display: flex; flex-direction: column; gap: 12px; }
+    .card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 12px 16px; }
     h1 { font-size: 1.15rem; font-weight: 700; color: #fff; display: flex; align-items: center; justify-content: space-between; }
     .subtitle { font-size: 0.78rem; color: var(--muted); margin-top: 2px; }
     .badge { display: inline-block; padding: 3px 8px; border-radius: 6px; font-size: 0.75rem; font-weight: bold; }
     .badge-green { background: #065f46; color: #34d399; }
     .badge-amber { background: #78350f; color: #fbbf24; }
-    .badge-blue { background: #1e3a8a; color: #60a5fa; }
-    .badge-red { background: #7f1d1d; color: #f87171; }
-    
-    .stage-grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr 1fr;
-      gap: 8px;
-      margin-top: 8px;
-    }
-    .stage-btn {
-      padding: 10px 8px;
-      background: #1e293b;
-      color: #94a3b8;
-      border: 2px solid #334155;
-      border-radius: 8px;
-      font-size: 0.82rem;
-      font-weight: 700;
-      cursor: pointer;
-      text-align: center;
-      transition: all 0.2s ease;
-    }
+    .stage-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-top: 8px; }
+    .stage-btn { padding: 10px 8px; background: #1e293b; color: #94a3b8; border: 2px solid #334155; border-radius: 8px; font-size: 0.82rem; font-weight: 700; cursor: pointer; text-align: center; }
     .stage-btn:hover { border-color: #64748b; color: #fff; }
-    .stage-btn.active {
-      background: #1e3a8a;
-      color: #fff;
-      border-color: #38bdf8;
-      box-shadow: 0 0 12px rgba(56, 189, 248, 0.35);
-    }
-
+    .stage-btn.active { background: #1e3a8a; color: #fff; border-color: #38bdf8; box-shadow: 0 0 12px rgba(56, 189, 248, 0.35); }
     .btn-row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 6px; }
-    .action-btn {
-      padding: 8px 14px;
-      border-radius: 6px;
-      border: none;
-      font-size: 0.8rem;
-      font-weight: 600;
-      cursor: pointer;
-      color: #fff;
-      background: #334155;
-      display: flex;
-      align-items: center;
-      gap: 4px;
-    }
+    .action-btn { padding: 8px 14px; border-radius: 6px; border: none; font-size: 0.8rem; font-weight: 600; cursor: pointer; color: #fff; background: #334155; display: flex; align-items: center; gap: 4px; }
     .action-btn:hover { opacity: 0.9; }
     .action-btn:disabled { opacity: 0.4; cursor: not-allowed; }
     .btn-lens-on { background: #059669; }
@@ -93,37 +28,13 @@
     .btn-recenter { background: #0284c7; }
     .btn-exit { background: #dc2626; }
     .btn-save { background: #059669; }
-
-    .control-grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 10px;
-      margin-top: 8px;
-    }
-    .slider-row {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 8px;
-      margin-top: 4px;
-      font-size: 0.78rem;
-    }
+    .control-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 8px; }
+    .slider-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 4px; font-size: 0.78rem; }
     .slider-row input[type="range"] { flex: 1; accent-color: #38bdf8; }
     .slider-row input[type="range"]:disabled { opacity: 0.35; }
     .slider-row .val { width: 65px; text-align: right; font-family: monospace; color: #38bdf8; font-weight: bold; }
-
-    .timing-table {
-      width: 100%;
-      border-collapse: collapse;
-      font-size: 0.75rem;
-      font-family: ui-monospace, monospace;
-      margin-top: 6px;
-    }
-    .timing-table th, .timing-table td {
-      border: 1px solid #334155;
-      padding: 4px 8px;
-      text-align: left;
-    }
+    .timing-table { width: 100%; border-collapse: collapse; font-size: 0.75rem; font-family: ui-monospace, monospace; margin-top: 6px; }
+    .timing-table th, .timing-table td { border: 1px solid #334155; padding: 4px 8px; text-align: left; }
     .timing-table th { background: #1e293b; color: #cbd5e1; }
   </style>
 </head>
@@ -137,7 +48,7 @@
           <span class="badge badge-green" id="badgeConnection">🟢 SSE Connected</span>
         </div>
       </h1>
-      <div class="subtitle">Live Stage Control & Viewer Optics Tuning for iPhone (Issue #13)</div>
+      <div class="subtitle">Authoritative Calibration & Verification Gate (Issue #13)</div>
     </div>
 
     <!-- Mutually Exclusive Calibration Stages -->
@@ -145,50 +56,107 @@
       <div style="font-size:0.8rem; font-weight:700; color:var(--muted); text-transform:uppercase;">1. Active Calibration Stage</div>
       <div class="stage-grid">
         <button class="stage-btn active" id="btnStageA" onclick="setStage('A')">
-          Stage A: Source Geometry<br>
+          Stage A: Video Mapping<br>
           <span style="font-size:0.68rem; font-weight:normal; opacity:0.85;">Flat Diagnostic (No Optics)</span>
         </button>
         <button class="stage-btn" id="btnStageB" onclick="setStage('B')">
-          Stage B: Viewer Optics<br>
-          <span style="font-size:0.68rem; font-weight:normal; opacity:0.85;">Synthetic Grid in Headset</span>
+          Stage B: Viewer Calibration<br>
+          <span style="font-size:0.68rem; font-weight:normal; opacity:0.85;">Live Tuning (Grid / Video+Grid)</span>
         </button>
         <button class="stage-btn" id="btnStageC" onclick="setStage('C')">
-          Stage C: Video Verification<br>
+          Stage C: Verification<br>
           <span style="font-size:0.68rem; font-weight:normal; opacity:0.85;">Real Video (Locked Optics)</span>
         </button>
       </div>
     </div>
 
-    <!-- Viewer Optics Live Tuning Panel (Active in Stage B, Read-only in Stage C) -->
+    <!-- Stage A: Video Mapping Panel -->
+    <div class="card" id="cardStageA">
+      <div style="display:flex; justify-content:space-between; align-items:center;">
+        <div>
+          <div style="font-size:0.8rem; font-weight:700; color:var(--muted); text-transform:uppercase;">2. Video Mapping (Stage A)</div>
+          <div id="txtVideoMappingStatus" style="font-size:0.72rem; color:#f87171; font-weight:bold;">⚠️ Unconfirmed Video Mapping</div>
+        </div>
+        <button class="action-btn btn-save" id="btnSaveVideoMapping" onclick="saveVideoMapping()">💾 Save Video Mapping</button>
+      </div>
+      <div class="control-grid" style="margin-top:8px;">
+        <div>
+          <div class="slider-row">
+            <span style="width:110px;">Projection:</span>
+            <select id="selProjection" onchange="onVideoMappingChange()" style="flex:1; background:#1e293b; color:#fff; border:1px solid #334155; padding:4px 6px; border-radius:4px; font-size:0.75rem;">
+              <option value="equirectangular">Equirectangular (Spherical)</option>
+              <option value="flat">Flat / Rectilinear (2D)</option>
+            </select>
+          </div>
+          <div class="slider-row">
+            <span style="width:110px;">Stereo Mode:</span>
+            <select id="selStereo" onchange="onVideoMappingChange()" style="flex:1; background:#1e293b; color:#fff; border:1px solid #334155; padding:4px 6px; border-radius:4px; font-size:0.75rem;">
+              <option value="left-right">Side-by-Side (SBS 3D)</option>
+              <option value="top-bottom">Top-Bottom (Over-Under)</option>
+              <option value="mono">Mono (2D)</option>
+            </select>
+          </div>
+        </div>
+        <div>
+          <div class="slider-row">
+            <span style="width:120px;">Coverage FOV:</span>
+            <select id="selCoverageFov" onchange="onVideoMappingChange()" style="flex:1; background:#1e293b; color:#fff; border:1px solid #334155; padding:4px 6px; border-radius:4px; font-size:0.75rem;">
+              <option value="180">180° Half-Dome VR</option>
+              <option value="360">360° Full Sphere</option>
+            </select>
+          </div>
+          <div class="slider-row">
+            <span style="width:120px;">Eye Order:</span>
+            <select id="selEyeOrder" onchange="onVideoMappingChange()" style="flex:1; background:#1e293b; color:#fff; border:1px solid #334155; padding:4px 6px; border-radius:4px; font-size:0.75rem;">
+              <option value="left-first">Normal (Left Eye First)</option>
+              <option value="right-first">Swapped (Right Eye First)</option>
+            </select>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Viewer Optics Live Tuning Panel (Stage B & Stage C) -->
     <div class="card" id="cardOptics">
       <div style="display:flex; justify-content:space-between; align-items:center;">
         <div>
-          <div style="font-size:0.8rem; font-weight:700; color:var(--muted); text-transform:uppercase;">2. Viewer Optics Parameters (Live to iPhone)</div>
+          <div style="font-size:0.8rem; font-weight:700; color:var(--muted); text-transform:uppercase;">3. Viewer Optics Calibration (Stage B/C)</div>
           <div id="txtProfileStatus" style="font-size:0.72rem; color:#f87171; font-weight:bold;">⚠️ Unknown / Uncalibrated Profile</div>
         </div>
-        <button class="action-btn btn-save" id="btnSaveViewer" onclick="sendAction('save_viewer_profile')">💾 Accept & Save Viewer Profile</button>
+        <button class="action-btn btn-save" id="btnSaveViewer" onclick="saveMyViewerProfile()">💾 Save My Viewer Profile</button>
       </div>
 
       <div class="control-row" style="margin-top:8px;">
         <div style="font-size:0.75rem; font-weight:700; color:var(--muted); text-transform:uppercase;">Active Viewer Profile (Stage B Only):</div>
         <select id="selViewerPreset" onchange="onViewerPresetSelect(this.value)" style="width:100%; margin-top:4px; padding:6px 10px; background:#1e293b; color:#fff; border:1px solid #334155; border-radius:6px; font-size:0.8rem; font-weight:600;">
-          <option value="unknown:uncalibrated">Unknown / Uncalibrated (Default)</option>
-          <option value="custom:subjective_working_candidate">Subjective Working Candidate (UNVERIFIED CUSTOM / NOT PHYSICAL GROUND TRUTH)</option>
-          <option value="cardboard:v2_2015">Google Cardboard v2 Historical Reference</option>
-          <option value="cardboard:v1_2014">Google Cardboard v1 Historical Reference</option>
-          <option value="custom:calibrated">Saved Custom Profile (Manual Parameters)</option>
+          <option value="cardboard:reference_50deg">Cardboard-inspired Reference (50° Guidance)</option>
+          <option value="viewer:my_profile">My Viewer Profile (Working / User-tuned)</option>
         </select>
       </div>
 
+      <!-- Stage B Visual Reference Sub-modes -->
+      <div id="stageBVisualRefPanel" style="margin-top:8px;">
+        <div style="font-size:0.74rem; font-weight:700; color:var(--muted); text-transform:uppercase;">Stage B Visual Reference (Both Allow Live Tuning):</div>
+        <div class="stage-grid" style="grid-template-columns: 1fr 1fr; margin-top:4px;">
+          <button class="stage-btn active" id="btnVisualGridOnly" onclick="setViewerVisualMode('grid_only')">
+            ▦ Grid Only<br>
+            <span style="font-size:0.68rem; font-weight:normal; opacity:0.85;">Pure Synthetic Lines & 90° Corners</span>
+          </button>
+          <button class="stage-btn" id="btnVisualVideoGrid" onclick="setViewerVisualMode('video_grid')">
+            🎬 Video + Grid<br>
+            <span style="font-size:0.68rem; font-weight:normal; opacity:0.85;">Real VR Video + Stereo Reference Grid</span>
+          </button>
+        </div>
+      </div>
+
       <div class="btn-row" style="margin-top:8px;">
-        <button class="action-btn" id="btnSceneToggle" style="background:#8b5cf6;" onclick="toggleScene()">🎬 切换画面: 真实视频 (Stage C)</button>
         <button class="action-btn btn-lens-off" id="btnLensToggle" onclick="toggleLensCorrection()">⚪ LENS CORRECTION: OFF</button>
         <button class="action-btn btn-recenter" onclick="sendAction('recenter')">🎯 Recenter View</button>
         <button class="action-btn btn-exit" onclick="sendAction('exit_vr')">⚙ Exit VR</button>
       </div>
 
       <div id="lockNotice" style="display:none; margin-top:6px; font-size:0.72rem; color:#38bdf8; background:rgba(2,132,199,0.15); padding:4px 8px; border-radius:4px; border:1px solid rgba(56,189,248,0.3);">
-        🔒 Stage C Lock: Physical geometry & distortion coefficients are locked. Only Lens OFF/ON comparison is active.
+        🔒 Stage C Lock: Physical geometry & distortion coefficients are strictly locked. Test Video A / Video B under identical Viewer Profile.
       </div>
 
       <div id="stageCVerificationPanel" style="display:none; margin-top:6px; padding:8px 12px; background:rgba(30,58,138,0.25); border:1px solid #1e40af; border-radius:8px;">
@@ -198,7 +166,7 @@
           <span>[ ] Show Reference Grid (Verification Overlay in Stereo Engine)</span>
         </label>
         <div style="font-size:0.68rem; color:#94a3b8; margin-top:2px;">
-          Overlay passes through the exact same stereo ideal rendering & lens pre-distortion path as video.
+          Passes through the exact same stereo ideal rendering & lens pre-distortion path as video.
         </div>
       </div>
 
@@ -240,22 +208,21 @@
       </div>
     </div>
 
-    <!-- Playback & Navigation Controls -->
-    <div class="card">
-      <div style="font-size:0.8rem; font-weight:700; color:var(--muted); text-transform:uppercase;">3. Session Media Controls</div>
+    <!-- Session Media Controls (Cleaned) -->
+    <div class="card" id="cardSession">
+      <div style="font-size:0.8rem; font-weight:700; color:var(--muted); text-transform:uppercase;">4. Session Media Controls</div>
       <div class="btn-row" style="margin-top:6px;">
         <button class="action-btn" onclick="sendAction('playPause')">⏯ Play / Pause</button>
         <button class="action-btn" onclick="sendAction('seekBackward')">⏪ -5s</button>
         <button class="action-btn" onclick="sendAction('seekForward')">+5s ⏩</button>
         <button class="action-btn" onclick="sendAction('previous')">⏮ Previous Video</button>
         <button class="action-btn" onclick="sendAction('next')">⏭ Next Video</button>
-        <button class="action-btn btn-save" onclick="sendAction('save_video_profile')">💾 Accept & Save Video Profile</button>
       </div>
     </div>
 
-    <!-- Real-time Device Telemetry & First-Frame Timings -->
+    <!-- iPhone Telemetry & Measured Timings -->
     <div class="card">
-      <div style="font-size:0.8rem; font-weight:700; color:var(--muted); text-transform:uppercase;">4. iPhone Telemetry & Measured Timings</div>
+      <div style="font-size:0.8rem; font-weight:700; color:var(--muted); text-transform:uppercase;">5. iPhone Telemetry & Measured Timings</div>
       <table class="timing-table">
         <tr><th>Metric</th><th>Live Value</th><th>Measured Latency</th></tr>
         <tr><td>Device / Headset State</td><td id="valDevStatus">Standby</td><td id="valFps">-- FPS</td></tr>
@@ -271,6 +238,7 @@
 
   <script>
     let currentStage = 'A';
+    let currentVisualMode = 'grid_only';
     let lensEnabled = false;
     let isArmed = false;
     let hasInitializedFromDevice = false;
@@ -283,12 +251,8 @@
 
     function initEventSource() {
       const es = new EventSource('/api/calibration/events');
-      es.onopen = () => {
-        setConnectedBadge('🟢 SSE Connected');
-      };
-      es.onerror = () => {
-        // SSE will retry automatically; keep calm unless fetch also fails
-      };
+      es.onopen = () => { setConnectedBadge('🟢 SSE Connected'); };
+      es.onerror = () => {};
       es.onmessage = (e) => {
         setConnectedBadge('🟢 SSE Connected');
         try {
@@ -299,7 +263,6 @@
     }
     initEventSource();
 
-    // Fallback sync polling so PC Controller stays live in all LAN environments
     setInterval(async () => {
       try {
         const res = await fetch('/api/telemetry');
@@ -331,20 +294,17 @@
       sendControl({ action: 'set_stage', stage: stage });
     }
 
-    function toggleScene() {
-      const nextStage = (currentStage === 'B') ? 'C' : 'B';
-      setStage(nextStage);
+    function setViewerVisualMode(mode) {
+      currentVisualMode = mode;
+      document.getElementById('btnVisualGridOnly').classList.toggle('active', mode === 'grid_only');
+      document.getElementById('btnVisualVideoGrid').classList.toggle('active', mode === 'video_grid');
+      sendControl({ action: 'set_viewer_visual_mode', mode: mode });
     }
 
     function applyStageLocks(stage) {
       const isStageC = (stage === 'C');
       const isStageA = (stage === 'A');
       const shouldLockCoeffs = isStageC || isStageA;
-
-      const btnScene = document.getElementById('btnSceneToggle');
-      if (btnScene) {
-        btnScene.textContent = isStageC ? '▦ 切换画面: 标定网格 (Stage B)' : '🎬 切换画面: 真实视频 (Stage C)';
-      }
 
       const selPreset = document.getElementById('selViewerPreset');
       if (selPreset) selPreset.disabled = shouldLockCoeffs;
@@ -360,11 +320,13 @@
       document.getElementById('lockNotice').style.display = isStageC ? 'block' : 'none';
       const stageCPanel = document.getElementById('stageCVerificationPanel');
       if (stageCPanel) stageCPanel.style.display = isStageC ? 'block' : 'none';
+      const stageBVisual = document.getElementById('stageBVisualRefPanel');
+      if (stageBVisual) stageBVisual.style.display = (stage === 'B') ? 'block' : 'none';
     }
 
     function onViewerPresetSelect(presetId) {
       if (currentStage !== 'B') return;
-      if (presetId === 'custom:subjective_working_candidate') {
+      if (presetId === 'viewer:my_profile' || presetId === 'custom:subjective_working_candidate') {
         document.getElementById('rngK1').value = 0.145;
         document.getElementById('valK1').textContent = '0.145';
         document.getElementById('rngK2').value = 0.005;
@@ -379,11 +341,54 @@
         document.getElementById('valTrayToLens').textContent = '35.0';
         const statEl = document.getElementById('txtProfileStatus');
         if (statEl) {
-          statEl.textContent = '⚙️ UNVERIFIED CUSTOM / SUBJECTIVE WORKING CANDIDATE — NOT PHYSICAL GROUND TRUTH';
+          statEl.textContent = '⚙️ My Viewer Profile (working / user-tuned) [Not Ground Truth]';
           statEl.style.color = '#38bdf8';
+        }
+      } else if (presetId === 'cardboard:reference_50deg' || presetId === 'cardboard:v2_2015') {
+        document.getElementById('rngK1').value = 0.336;
+        document.getElementById('valK1').textContent = '0.336';
+        document.getElementById('rngK2').value = 0.553;
+        document.getElementById('valK2').textContent = '0.553';
+        document.getElementById('rngFov').value = 50.0;
+        document.getElementById('valFov').textContent = '50.0°';
+        document.getElementById('rngScreenToLens').value = 39.3;
+        document.getElementById('valScreenToLens').textContent = '39.3';
+        document.getElementById('rngInterLens').value = 63.9;
+        document.getElementById('valInterLens').textContent = '63.9';
+        document.getElementById('rngTrayToLens').value = 35.0;
+        document.getElementById('valTrayToLens').textContent = '35.0';
+        const statEl = document.getElementById('txtProfileStatus');
+        if (statEl) {
+          statEl.textContent = '✓ Cardboard-inspired Reference (50° Guidance)';
+          statEl.style.color = '#34d399';
         }
       }
       sendControl({ action: 'set_viewer_preset', presetId: presetId });
+    }
+
+    function onVideoMappingChange() {
+      const proj = document.getElementById('selProjection').value;
+      const stereo = document.getElementById('selStereo').value;
+      const fov = parseFloat(document.getElementById('selCoverageFov').value);
+      const eye = document.getElementById('selEyeOrder').value;
+      sendControl({
+        action: 'set_video_mapping',
+        mapping: { projection: proj, stereoMode: stereo, fovHorizontalDeg: fov, eyeOrder: eye }
+      });
+    }
+
+    function saveVideoMapping() {
+      const proj = document.getElementById('selProjection').value;
+      const stereo = document.getElementById('selStereo').value;
+      if (proj === 'unknown' || stereo === 'unknown') {
+        alert('Cannot save unknown mapping. Please select Projection and Stereo Mode first.');
+        return;
+      }
+      sendControl({ action: 'save_video_profile' });
+    }
+
+    function saveMyViewerProfile() {
+      sendControl({ action: 'save_viewer_profile' });
     }
 
     function toggleReferenceGrid(checked) {
@@ -424,9 +429,7 @@
       });
     }
 
-    function sendAction(act) {
-      sendControl({ action: act });
-    }
+    function sendAction(act) { sendControl({ action: act }); }
 
     function updateTelemetryUI(data) {
       if (!data) return;
@@ -447,6 +450,12 @@
         if (chk) chk.checked = data.showReferenceGrid;
       }
 
+      if (data.viewerVisualMode && data.viewerVisualMode !== currentVisualMode) {
+        currentVisualMode = data.viewerVisualMode;
+        document.getElementById('btnVisualGridOnly').classList.toggle('active', currentVisualMode === 'grid_only');
+        document.getElementById('btnVisualVideoGrid').classList.toggle('active', currentVisualMode === 'video_grid');
+      }
+
       if (data.calibrationStage && data.calibrationStage !== currentStage) {
         currentStage = data.calibrationStage;
         ['A', 'B', 'C'].forEach(s => {
@@ -455,12 +464,22 @@
         applyStageLocks(currentStage);
       }
 
+      if (data.videoProfile) {
+        const vstat = document.getElementById('txtVideoMappingStatus');
+        if (data.videoProfile.confidence === 'user-confirmed') {
+          vstat.textContent = '✓ Confirmed Video Mapping';
+          vstat.style.color = '#34d399';
+        } else {
+          vstat.textContent = '⚠️ Unconfirmed Video Mapping (' + (data.videoProfile.confidence || 'unverified') + ')';
+          vstat.style.color = '#f87171';
+        }
+      }
+
       if (data.fps) document.getElementById('valFps').textContent = data.fps + ' FPS';
       if (data.mediaName) document.getElementById('valMediaName').textContent = data.mediaName;
       if (data.mediaStatus) document.getElementById('valMediaStatus').textContent = data.mediaStatus;
       if (data.devStatus) document.getElementById('valDevStatus').textContent = data.devStatus;
 
-      // Sync actual Viewer Profile from iPhone
       const vp = data.viewerProfile;
       if (vp) {
         lensEnabled = vp.lensCorrectionEnabled === true;
@@ -469,14 +488,14 @@
         btn.className = 'action-btn ' + (lensEnabled ? 'btn-lens-on' : 'btn-lens-off');
 
         const statEl = document.getElementById('txtProfileStatus');
-        if (vp.confidence === 'unverified-custom') {
-          statEl.textContent = '⚙️ ' + (vp.name || 'Subjective Working Candidate') + ' [Subjective preset — not physical ground truth]';
+        if (vp.confidence === 'working-user-tuned' || vp.confidence === 'unverified-custom') {
+          statEl.textContent = '⚙️ ' + (vp.name || 'My Viewer Profile') + ' [Working / User-tuned — Not Ground Truth]';
           statEl.style.color = '#38bdf8';
         } else if (!vp.isCalibrated) {
           statEl.textContent = '⚠️ UNCALIBRATED BASELINE (Draft edits not validated)';
           statEl.style.color = '#f87171';
         } else {
-          statEl.textContent = '✓ ' + (vp.viewerProfileId || 'Calibrated') + ' [' + (vp.source || 'Validated') + ']';
+          statEl.textContent = '✓ ' + (vp.name || vp.viewerProfileId || 'Calibrated') + ' [' + (vp.source || 'Validated') + ']';
           statEl.style.color = '#34d399';
         }
 
@@ -485,46 +504,29 @@
           if (vp.distortion && typeof vp.distortion.k1 === 'number') {
             document.getElementById('rngK1').value = vp.distortion.k1;
             document.getElementById('valK1').textContent = vp.distortion.k1.toFixed(3);
-          } else {
-            document.getElementById('valK1').textContent = 'UNKNOWN';
           }
-
           if (vp.distortion && typeof vp.distortion.k2 === 'number') {
             document.getElementById('rngK2').value = vp.distortion.k2;
             document.getElementById('valK2').textContent = vp.distortion.k2.toFixed(3);
-          } else {
-            document.getElementById('valK2').textContent = 'UNKNOWN';
           }
-
           if (vp.screenToLensDistance) {
             const mm = vp.screenToLensDistance * 1000;
             document.getElementById('rngScreenToLens').value = mm;
             document.getElementById('valScreenToLens').textContent = mm.toFixed(1);
-          } else {
-            document.getElementById('valScreenToLens').textContent = 'UNKNOWN';
           }
-
           if (vp.interLensDistance) {
             const mm = vp.interLensDistance * 1000;
             document.getElementById('rngInterLens').value = mm;
             document.getElementById('valInterLens').textContent = mm.toFixed(1);
-          } else {
-            document.getElementById('valInterLens').textContent = 'UNKNOWN';
           }
-
           if (vp.trayToLensDistance) {
             const mm = vp.trayToLensDistance * 1000;
             document.getElementById('rngTrayToLens').value = mm;
             document.getElementById('valTrayToLens').textContent = mm.toFixed(1);
-          } else {
-            document.getElementById('valTrayToLens').textContent = 'UNKNOWN';
           }
-
           if (vp.maxFovAngles && vp.maxFovAngles.outerDeg) {
             document.getElementById('rngFov').value = vp.maxFovAngles.outerDeg;
             document.getElementById('valFov').textContent = vp.maxFovAngles.outerDeg.toFixed(1) + '°';
-          } else {
-            document.getElementById('valFov').textContent = 'UNKNOWN';
           }
         }
       }

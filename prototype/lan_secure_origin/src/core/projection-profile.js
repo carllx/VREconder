@@ -28,26 +28,12 @@ export function createDefaultVideoProfile(mediaId, name = '') {
   };
 }
 
-export function createDefaultViewerProfile(profileId = 'unknown:uncalibrated') {
+export function createDefaultViewerProfile(profileId = 'cardboard:reference_50deg') {
   const presets = {
-    'unknown:uncalibrated': {
-      viewerProfileId: 'unknown:uncalibrated',
-      name: 'Unknown / Uncalibrated Viewer (Default)',
-      source: 'Uncalibrated Baseline — Requires Calibration or Profile Import',
-      confidence: 'uncalibrated',
-      isCalibrated: false,
-      lensCorrectionEnabled: false,
-      screenToLensDistance: 0.0393,
-      interLensDistance: 0.0639,
-      verticalAlignment: 'BOTTOM',
-      trayToLensDistance: 0.0350,
-      maxFovAngles: { outerDeg: 50.0, innerDeg: 50.0, upperDeg: 50.0, lowerDeg: 50.0 },
-      distortion: { model: 'uncalibrated', k1: 0.0, k2: 0.0 }
-    },
-    'cardboard:v2_2015': {
-      viewerProfileId: 'cardboard:v2_2015',
-      name: 'Google Cardboard v2 (Historical Ref: Google I/O 2015 Spec)',
-      source: 'Google Cardboard Device Parameters Specification (v2.0, with 50° FOV guidance)',
+    'cardboard:reference_50deg': {
+      viewerProfileId: 'cardboard:reference_50deg',
+      name: 'Cardboard-inspired Reference (50° Guidance)',
+      source: 'Cardboard-inspired Reference Optics (50° FOV Guidance — Not Factory Ground Truth)',
       confidence: 'historical-reference',
       isCalibrated: true,
       lensCorrectionEnabled: false,
@@ -58,26 +44,12 @@ export function createDefaultViewerProfile(profileId = 'unknown:uncalibrated') {
       maxFovAngles: { outerDeg: 50.0, innerDeg: 50.0, upperDeg: 50.0, lowerDeg: 50.0 },
       distortion: { model: 'cardboard-radial-polynomial', k1: 0.33582564, k2: 0.55348791 }
     },
-    'cardboard:v1_2014': {
-      viewerProfileId: 'cardboard:v1_2014',
-      name: 'Google Cardboard v1 (Historical Ref: Google I/O 2014 Spec)',
-      source: 'Google Cardboard Device Parameters Specification (v1.0)',
-      confidence: 'historical-reference',
+    'viewer:my_profile': {
+      viewerProfileId: 'viewer:my_profile',
+      name: 'My Viewer Profile (Working / User-tuned)',
+      source: 'User-tuned Working Profile (Not Physical Ground Truth)',
+      confidence: 'working-user-tuned',
       isCalibrated: true,
-      lensCorrectionEnabled: false,
-      screenToLensDistance: 0.0420, // 42.0 mm
-      interLensDistance: 0.0600,    // 60.0 mm
-      verticalAlignment: 'BOTTOM',
-      trayToLensDistance: 0.0350,   // 35.0 mm
-      maxFovAngles: { outerDeg: 40.0, innerDeg: 40.0, upperDeg: 40.0, lowerDeg: 40.0 },
-      distortion: { model: 'cardboard-radial-polynomial', k1: 0.441, k2: 0.156 }
-    },
-    'custom:subjective_working_candidate': {
-      viewerProfileId: 'custom:subjective_working_candidate',
-      name: 'Subjective Working Candidate (Unverified Custom Preset)',
-      source: 'User Subjective Candidate — Not Physical Ground Truth',
-      confidence: 'unverified-custom',
-      isCalibrated: false,
       lensCorrectionEnabled: true,
       screenToLensDistance: 0.0426, // 42.6 mm
       interLensDistance: 0.0550,    // 55.0 mm
@@ -86,22 +58,27 @@ export function createDefaultViewerProfile(profileId = 'unknown:uncalibrated') {
       maxFovAngles: { outerDeg: 65.0, innerDeg: 65.0, upperDeg: 65.0, lowerDeg: 65.0 },
       distortion: { model: 'cardboard-radial-polynomial', k1: 0.145, k2: 0.005 }
     },
-    'custom:calibrated': {
-      viewerProfileId: 'custom:calibrated',
-      name: 'Custom Viewer Profile (Manual Device Parameter Input)',
-      source: 'User Defined Optical Calibration',
-      confidence: 'user-calibrated',
-      isCalibrated: true,
+    'unknown:uncalibrated': {
+      viewerProfileId: 'unknown:uncalibrated',
+      name: 'Unknown / Uncalibrated Baseline (Internal)',
+      source: 'Internal Fail-closed Baseline',
+      confidence: 'uncalibrated',
+      isCalibrated: false,
       lensCorrectionEnabled: false,
-      screenToLensDistance: 0.0400,
-      interLensDistance: 0.0640,
+      screenToLensDistance: 0.0393,
+      interLensDistance: 0.0639,
       verticalAlignment: 'BOTTOM',
       trayToLensDistance: 0.0350,
       maxFovAngles: { outerDeg: 50.0, innerDeg: 50.0, upperDeg: 50.0, lowerDeg: 50.0 },
-      distortion: { model: 'custom-radial-polynomial', k1: 0.25, k2: 0.15 }
+      distortion: { model: 'uncalibrated', k1: 0.0, k2: 0.0 }
     }
   };
-  return presets[profileId] || presets['unknown:uncalibrated'];
+  // Aliases for backwards compatibility
+  presets['cardboard:v2_2015'] = presets['cardboard:reference_50deg'];
+  presets['custom:subjective_working_candidate'] = presets['viewer:my_profile'];
+  presets['custom:calibrated'] = presets['viewer:my_profile'];
+
+  return presets[profileId] || presets['cardboard:reference_50deg'];
 }
 
 export function distortRadius(r, k1 = 0, k2 = 0) {
@@ -261,8 +238,12 @@ export class ProfileStorage {
   }
 
   async saveVideoProfile(profile) {
-    if (!profile || !profile.mediaId) return;
-    profile.confidence = 'user-calibrated';
+    if (!profile || !profile.mediaId) return false;
+    if (profile.projection === 'unknown' || profile.stereoMode === 'unknown') {
+      console.warn('[ProfileStorage] Cannot save unknown mapping without explicit user selection.');
+      return false;
+    }
+    profile.confidence = 'user-confirmed';
     profile.updatedAt = new Date().toISOString();
     this.videoProfiles[profile.mediaId] = profile;
     this.saveToLocalStorage();
@@ -274,10 +255,16 @@ export class ProfileStorage {
         body: JSON.stringify(profile)
       });
     } catch (e) {}
+    return true;
   }
 
   async saveViewerProfile(viewerProfile) {
-    if (!viewerProfile) return;
+    if (!viewerProfile) return false;
+    viewerProfile.viewerProfileId = 'viewer:my_profile';
+    viewerProfile.name = 'My Viewer Profile (Working / User-tuned)';
+    viewerProfile.source = 'User-tuned Working Profile (Not Physical Ground Truth)';
+    viewerProfile.confidence = 'working-user-tuned';
+    viewerProfile.isCalibrated = true;
     viewerProfile.updatedAt = new Date().toISOString();
     this.activeViewerProfile = viewerProfile;
     this.saveToLocalStorage();
@@ -289,6 +276,7 @@ export class ProfileStorage {
         body: JSON.stringify(viewerProfile)
       });
     } catch (e) {}
+    return true;
   }
 }
 

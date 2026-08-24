@@ -131,10 +131,10 @@
     <div class="card">
       <div style="display:flex; justify-content:space-between; align-items:center;">
         <div>
-          <div class="label">Stage A — Source Mapping</div>
+          <div class="label">Stage A — Video Mapping (Source Geometry)</div>
           <div id="txtMappingStatus" style="font-size:0.72rem; font-weight:bold; color:#f87171;">⚠️ Untagged Media</div>
         </div>
-        <button class="btn-save" id="btnSaveVideoProfile">💾 Save Video Profile</button>
+        <button class="btn-save" id="btnSaveVideoProfile">💾 Save Video Mapping</button>
       </div>
 
       <div class="control-row" style="margin-top:6px;">
@@ -202,20 +202,17 @@
     <div class="card">
       <div style="display:flex; justify-content:space-between; align-items:center;">
         <div>
-          <div class="label">Stage B — Viewer Optics (Hardware Ground Truth)</div>
+          <div class="label">Stage B — Viewer Optics Calibration</div>
           <div id="txtViewerSourceInfo" style="font-size:0.70rem; color:var(--muted);">Unknown / Uncalibrated Viewer</div>
         </div>
-        <button class="btn-save" id="btnSaveViewerProfile">💾 Save Viewer Profile</button>
+        <button class="btn-save" id="btnSaveViewerProfile">💾 Save My Viewer Profile</button>
       </div>
 
       <div class="control-row" style="margin-top:6px;">
         <div class="label">Viewer Profile:</div>
         <select id="selViewerPreset">
-          <option value="unknown:uncalibrated">Unknown / Uncalibrated Viewer (Default)</option>
-          <option value="custom:subjective_working_candidate">Subjective Working Candidate (UNVERIFIED CUSTOM / NOT PHYSICAL GROUND TRUTH)</option>
-          <option value="cardboard:v2_2015">Google Cardboard v2 (Historical Ref: Google I/O 2015 Spec)</option>
-          <option value="cardboard:v1_2014">Google Cardboard v1 (Historical Ref: Google I/O 2014 Spec)</option>
-          <option value="custom:calibrated">Custom Viewer Profile (Manual Device Parameter Input)</option>
+          <option value="cardboard:reference_50deg">Cardboard-inspired Reference (50° Guidance)</option>
+          <option value="viewer:my_profile">My Viewer Profile (Working / User-tuned)</option>
         </select>
       </div>
 

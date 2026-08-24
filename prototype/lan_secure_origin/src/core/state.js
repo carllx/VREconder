@@ -14,7 +14,8 @@ export const state = {
   calibrationStage: 'A',
   pcConnected: false,
   isArmed: false,
-  showReferenceGrid: false, // Verification-only Reference Grid in Stage C
+  showReferenceGrid: false, // Verification-only Reference Grid in Stage C / Video+Grid
+  viewerVisualMode: 'grid_only', // Stage B sub-mode: 'grid_only' | 'video_grid'
 
   // First-Frame Timing & Black-Screen Instrumentation
   firstFrameTimings: {
