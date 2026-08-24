@@ -75,9 +75,15 @@ export class ControllerInputProbe {
     if (trap) {
       trap.addEventListener('input', (e) => {
         const val = trap.value;
+        const text = (e.data || val || '').toLowerCase();
         trap.value = '';
         this.recordEvent('INPUT_DATA', { data: e.data || val, inputType: e.inputType });
-        showFeedbackToast(`⌨️ 输入: ${e.data || val}`);
+
+        if (text.includes('s')) {
+          this.adjustDistance(-0.001);
+        } else if (text.includes('w')) {
+          this.adjustDistance(+0.001);
+        }
       });
       trap.addEventListener('beforeinput', (e) => {
         this.recordEvent('BEFORE_INPUT', { data: e.data, inputType: e.inputType });
@@ -153,6 +159,10 @@ export class ControllerInputProbe {
   }
 
   adjustDistance(delta) {
+    const now = Date.now();
+    if (now - (this.lastDistanceAdjustTime || 0) < 100) return;
+    this.lastDistanceAdjustTime = now;
+
     const baseD = 0.0433;
     state.temporaryScreenToLensOffset = Math.max(-0.005, Math.min(0.005, (state.temporaryScreenToLensOffset || 0) + delta));
     const effMm = (baseD + state.temporaryScreenToLensOffset) * 1000;
