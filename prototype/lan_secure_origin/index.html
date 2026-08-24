@@ -8,8 +8,35 @@
   <meta name="apple-mobile-web-app-title" content="VREconder">
   <meta name="apple-touch-fullscreen" content="yes">
   <link rel="manifest" href="/manifest.json">
-  <link rel="stylesheet" href="./styles.css?v=20260824_v2">
+  <link rel="stylesheet" href="./styles.css?v=20260824_v3">
   <title>VREconder - Optics & Projection Calibration</title>
+  <script>
+    window.onerror = function(msg, url, line, col, err) {
+      var banner = document.getElementById('errorBanner');
+      if (banner) {
+        banner.style.display = 'block';
+        banner.textContent = '❌ JS ERROR: ' + msg + ' (L' + line + ')';
+      }
+      fetch('/api/log', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ level: 'CRITICAL_ERROR', message: msg + ' at ' + url + ':' + line + ':' + col, stack: err ? err.stack : null })
+      }).catch(function() {});
+    };
+    window.onunhandledrejection = function(e) {
+      var reason = e.reason ? (e.reason.message || e.reason.stack || String(e.reason)) : 'Unhandled rejection';
+      var banner = document.getElementById('errorBanner');
+      if (banner) {
+        banner.style.display = 'block';
+        banner.textContent = '❌ REJECTION: ' + reason;
+      }
+      fetch('/api/log', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ level: 'CRITICAL_REJECTION', message: reason })
+      }).catch(function() {});
+    };
+  </script>
 </head>
 <body>
 
@@ -45,6 +72,16 @@
   <!-- 2D Configuration, Staged Calibration & Diagnostic Panel -->
   <div id="uiOverlay">
     <div id="errorBanner"></div>
+
+    <!-- Prominent Top Action Button -->
+    <div class="card" style="background:#064e3b; border-color:#059669;">
+      <button class="btn-main" id="btnEnterVRTop" style="background:#10b981; font-size:1.05rem;">
+        <span>🛡️ 立即进入 VR (Arm & Enter VR)</span>
+      </button>
+      <div class="subtitle" style="text-align:center; margin-top:4px; color:#a7f3d0;">
+        已默认加载 180° SBS + Cardboard v2 镜头反畸变，点击直接进入立体头显
+      </div>
+    </div>
 
     <div class="card">
       <div style="display:flex; justify-content:space-between; align-items:center;">
@@ -255,6 +292,6 @@
     </div>
   </div>
 
-  <script type="module" src="./src/main.js?v=20260824_v2"></script>
+  <script type="module" src="./src/main.js?v=20260824_v3"></script>
 </body>
 </html>

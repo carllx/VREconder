@@ -189,11 +189,22 @@ function exitVRMode() {
 }
 
 // Event Listeners
-btnEnterVR.addEventListener('click', enterVRMode);
-btnEnterVR.addEventListener('touchend', (e) => {
-  e.preventDefault();
-  enterVRMode();
-});
+if (btnEnterVR) {
+  btnEnterVR.addEventListener('click', enterVRMode);
+  btnEnterVR.addEventListener('touchend', (e) => {
+    e.preventDefault();
+    enterVRMode();
+  });
+}
+
+const btnEnterVRTop = document.getElementById('btnEnterVRTop');
+if (btnEnterVRTop) {
+  btnEnterVRTop.addEventListener('click', enterVRMode);
+  btnEnterVRTop.addEventListener('touchend', (e) => {
+    e.preventDefault();
+    enterVRMode();
+  });
+}
 
 btnVrReset.addEventListener('click', (e) => {
   e.stopPropagation();

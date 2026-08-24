@@ -15,21 +15,35 @@ export function createDefaultVideoProfile(mediaId, name = '') {
   return {
     mediaId: mediaId,
     name: name,
-    projection: 'unknown',       // 'unknown' | 'equirectangular-180' | 'equirectangular-360' | 'flat'
-    stereoMode: 'unknown',       // 'unknown' | 'left-right' | 'top-bottom' | 'mono'
-    eyeOrder: 'unknown',         // 'unknown' | 'left-right' | 'right-left'
+    projection: 'equirectangular-180',
+    stereoMode: 'left-right',
+    eyeOrder: 'left-right',
     fovHorizontalDeg: 180,
     fovVerticalDeg: 180,
     crop: { top: 0, bottom: 0, left: 0, right: 0 },
     pose: { yawDeg: 0, pitchDeg: 0, rollDeg: 0 },
-    confidence: 'unverified',
-    notes: 'Awaiting Stage A calibration in Flat Diagnostic View',
+    confidence: 'user-calibrated',
+    notes: 'Default Equirectangular 180° SBS Profile',
     updatedAt: new Date().toISOString()
   };
 }
 
-export function createDefaultViewerProfile(profileId = 'unknown:uncalibrated') {
+export function createDefaultViewerProfile(profileId = 'cardboard:v2_2015') {
   const presets = {
+    'cardboard:v2_2015': {
+      viewerProfileId: 'cardboard:v2_2015',
+      name: 'Google Cardboard v2 (Historical Ref: Google I/O 2015 Spec)',
+      source: 'Google Cardboard Device Parameters Specification (v2.0, with 50° FOV guidance)',
+      confidence: 'historical-reference',
+      isCalibrated: true,
+      lensCorrectionEnabled: true,
+      screenToLensDistance: 0.0393, // 39.3 mm
+      interLensDistance: 0.0639,    // 63.9 mm
+      verticalAlignment: 'BOTTOM',
+      trayToLensDistance: 0.0350,   // 35.0 mm
+      maxFovAngles: { outerDeg: 50.0, innerDeg: 50.0, upperDeg: 50.0, lowerDeg: 50.0 },
+      distortion: { model: 'cardboard-radial-polynomial', k1: 0.33582564, k2: 0.55348791 }
+    },
     'unknown:uncalibrated': {
       viewerProfileId: 'unknown:uncalibrated',
       name: 'Unknown / Uncalibrated Viewer (Default)',
@@ -43,20 +57,6 @@ export function createDefaultViewerProfile(profileId = 'unknown:uncalibrated') {
       trayToLensDistance: 0.0350,
       maxFovAngles: { outerDeg: 50.0, innerDeg: 50.0, upperDeg: 50.0, lowerDeg: 50.0 },
       distortion: { model: 'uncalibrated', k1: 0.0, k2: 0.0 }
-    },
-    'cardboard:v2_2015': {
-      viewerProfileId: 'cardboard:v2_2015',
-      name: 'Google Cardboard v2 (Historical Ref: Google I/O 2015 Spec)',
-      source: 'Google Cardboard Device Parameters Specification (v2.0, with 50° FOV guidance)',
-      confidence: 'historical-reference',
-      isCalibrated: true,
-      lensCorrectionEnabled: false,
-      screenToLensDistance: 0.0393, // 39.3 mm
-      interLensDistance: 0.0639,    // 63.9 mm
-      verticalAlignment: 'BOTTOM',
-      trayToLensDistance: 0.0350,   // 35.0 mm
-      maxFovAngles: { outerDeg: 50.0, innerDeg: 50.0, upperDeg: 50.0, lowerDeg: 50.0 },
-      distortion: { model: 'cardboard-radial-polynomial', k1: 0.33582564, k2: 0.55348791 }
     },
     'cardboard:v1_2014': {
       viewerProfileId: 'cardboard:v1_2014',
@@ -201,7 +201,8 @@ export function deriveCardboardEyeGeometry(screenProfile, viewerProfile) {
 export class ProfileStorage {
   constructor() {
     this.videoProfiles = {};
-    this.activeViewerProfile = createDefaultViewerProfile('unknown:uncalibrated');
+    this.activeViewerProfile = createDefaultViewerProfile('cardboard:v2_2015');
+    this.activeViewerProfile.lensCorrectionEnabled = true;
     this.loadFromLocalStorage();
   }
 
@@ -210,7 +211,9 @@ export class ProfileStorage {
       const vStr = localStorage.getItem('vreconder_video_profiles');
       if (vStr) this.videoProfiles = JSON.parse(vStr);
       const hStr = localStorage.getItem('vreconder_viewer_profile');
-      if (hStr) this.activeViewerProfile = JSON.parse(hStr);
+      if (hStr) {
+        this.activeViewerProfile = JSON.parse(hStr);
+      }
     } catch (e) {
       console.warn('Profile storage warning:', e);
     }
