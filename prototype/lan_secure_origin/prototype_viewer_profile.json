@@ -1,0 +1,24 @@
+{
+  "viewerProfileId": "viewer:my_profile",
+  "name": "My Viewer Profile (working)",
+  "source": "User-tuned Working Profile (Unvalidated)",
+  "confidence": "working-user-tuned",
+  "isCalibrated": false,
+  "lensCorrectionEnabled": true,
+  "screenToLensDistance": 0.0419,
+  "interLensDistance": 0.055,
+  "verticalAlignment": "BOTTOM",
+  "trayToLensDistance": 0.0345,
+  "maxFovAngles": {
+    "outerDeg": 50,
+    "innerDeg": 50,
+    "upperDeg": 50,
+    "lowerDeg": 50
+  },
+  "distortion": {
+    "model": "custom-radial-polynomial",
+    "k1": 0.175,
+    "k2": 0.16
+  },
+  "updatedAt": "2026-08-24T03:18:30.162Z"
+}

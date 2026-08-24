@@ -324,25 +324,57 @@
       if (stageBVisual) stageBVisual.style.display = (stage === 'B') ? 'block' : 'none';
     }
 
+    let latestSavedMyProfile = null;
+
+    function populateSlidersFromProfile(p) {
+      if (!p) return;
+      if (p.distortion && typeof p.distortion.k1 === 'number') {
+        document.getElementById('rngK1').value = p.distortion.k1;
+        document.getElementById('valK1').textContent = p.distortion.k1.toFixed(3);
+      }
+      if (p.distortion && typeof p.distortion.k2 === 'number') {
+        document.getElementById('rngK2').value = p.distortion.k2;
+        document.getElementById('valK2').textContent = p.distortion.k2.toFixed(3);
+      }
+      if (p.screenToLensDistance) {
+        const mm = p.screenToLensDistance * 1000;
+        document.getElementById('rngScreenToLens').value = mm;
+        document.getElementById('valScreenToLens').textContent = mm.toFixed(1);
+      }
+      if (p.interLensDistance) {
+        const mm = p.interLensDistance * 1000;
+        document.getElementById('rngInterLens').value = mm;
+        document.getElementById('valInterLens').textContent = mm.toFixed(1);
+      }
+      if (p.trayToLensDistance) {
+        const mm = p.trayToLensDistance * 1000;
+        document.getElementById('rngTrayToLens').value = mm;
+        document.getElementById('valTrayToLens').textContent = mm.toFixed(1);
+      }
+      if (p.maxFovAngles && p.maxFovAngles.outerDeg) {
+        document.getElementById('rngFov').value = p.maxFovAngles.outerDeg;
+        document.getElementById('valFov').textContent = p.maxFovAngles.outerDeg.toFixed(1) + '°';
+      }
+    }
+
     function onViewerPresetSelect(presetId) {
       if (currentStage !== 'B') return;
-      if (presetId === 'viewer:my_profile' || presetId === 'custom:subjective_working_candidate') {
-        document.getElementById('rngK1').value = 0.145;
-        document.getElementById('valK1').textContent = '0.145';
-        document.getElementById('rngK2').value = 0.005;
-        document.getElementById('valK2').textContent = '0.005';
-        document.getElementById('rngFov').value = 65.0;
-        document.getElementById('valFov').textContent = '65.0°';
-        document.getElementById('rngScreenToLens').value = 42.6;
-        document.getElementById('valScreenToLens').textContent = '42.6';
-        document.getElementById('rngInterLens').value = 55.0;
-        document.getElementById('valInterLens').textContent = '55.0';
-        document.getElementById('rngTrayToLens').value = 35.0;
-        document.getElementById('valTrayToLens').textContent = '35.0';
-        const statEl = document.getElementById('txtProfileStatus');
-        if (statEl) {
-          statEl.textContent = '⚙️ My Viewer Profile (working / user-tuned) [Not Ground Truth]';
-          statEl.style.color = '#38bdf8';
+      if (presetId === 'viewer:my_profile') {
+        if (latestSavedMyProfile) {
+          populateSlidersFromProfile(latestSavedMyProfile);
+          const statEl = document.getElementById('txtProfileStatus');
+          if (statEl) {
+            statEl.textContent = '⚙️ My Viewer Profile (working) [Unvalidated / User-tuned — Not Ground Truth]';
+            statEl.style.color = '#38bdf8';
+          }
+          sendControl({ action: 'set_viewer_preset', presetId: presetId });
+        } else {
+          const statEl = document.getElementById('txtProfileStatus');
+          if (statEl) {
+            statEl.textContent = '⚠️ My Viewer Profile: Not saved yet (Tune sliders below & click Save)';
+            statEl.style.color = '#fbbf24';
+          }
+          alert('⚠️ My Viewer Profile has not been saved yet.\nPlease tune the sliders in Stage B and click "Save My Viewer Profile" first.');
         }
       } else if (presetId === 'cardboard:reference_50deg' || presetId === 'cardboard:v2_2015') {
         document.getElementById('rngK1').value = 0.336;
@@ -359,11 +391,11 @@
         document.getElementById('valTrayToLens').textContent = '35.0';
         const statEl = document.getElementById('txtProfileStatus');
         if (statEl) {
-          statEl.textContent = '✓ Cardboard-inspired Reference (50° Guidance)';
+          statEl.textContent = '✓ Cardboard-inspired Reference (50° Guidance) [Reference Optics — Not Ground Truth]';
           statEl.style.color = '#34d399';
         }
+        sendControl({ action: 'set_viewer_preset', presetId: presetId });
       }
-      sendControl({ action: 'set_viewer_preset', presetId: presetId });
     }
 
     function onVideoMappingChange() {
@@ -445,6 +477,16 @@
         }
       }
 
+      if (typeof data.savedMyViewerProfileExists === 'boolean') {
+        latestSavedMyProfile = data.savedMyViewerProfile || null;
+        const opt = document.querySelector('#selViewerPreset option[value="viewer:my_profile"]');
+        if (opt) {
+          opt.textContent = data.savedMyViewerProfileExists
+            ? 'My Viewer Profile (Saved Working Profile)'
+            : 'My Viewer Profile (Not saved yet)';
+        }
+      }
+
       if (typeof data.showReferenceGrid === 'boolean') {
         const chk = document.getElementById('chkReferenceGrid');
         if (chk) chk.checked = data.showReferenceGrid;
@@ -488,46 +530,20 @@
         btn.className = 'action-btn ' + (lensEnabled ? 'btn-lens-on' : 'btn-lens-off');
 
         const statEl = document.getElementById('txtProfileStatus');
-        if (vp.confidence === 'working-user-tuned' || vp.confidence === 'unverified-custom') {
-          statEl.textContent = '⚙️ ' + (vp.name || 'My Viewer Profile') + ' [Working / User-tuned — Not Ground Truth]';
+        if (vp.confidence === 'working-user-tuned' || vp.viewerProfileId === 'viewer:my_profile') {
+          statEl.textContent = '⚙️ ' + (vp.name || 'My Viewer Profile') + ' [Unvalidated / User-tuned — Not Ground Truth]';
           statEl.style.color = '#38bdf8';
-        } else if (!vp.isCalibrated) {
+        } else if (vp.confidence === 'historical-reference' || vp.viewerProfileId === 'cardboard:reference_50deg') {
+          statEl.textContent = '✓ ' + (vp.name || 'Cardboard Reference') + ' [Reference Optics — Not Ground Truth]';
+          statEl.style.color = '#34d399';
+        } else {
           statEl.textContent = '⚠️ UNCALIBRATED BASELINE (Draft edits not validated)';
           statEl.style.color = '#f87171';
-        } else {
-          statEl.textContent = '✓ ' + (vp.name || vp.viewerProfileId || 'Calibrated') + ' [' + (vp.source || 'Validated') + ']';
-          statEl.style.color = '#34d399';
         }
 
-        if (!hasInitializedFromDevice || !vp.isCalibrated) {
+        if (!hasInitializedFromDevice) {
           hasInitializedFromDevice = true;
-          if (vp.distortion && typeof vp.distortion.k1 === 'number') {
-            document.getElementById('rngK1').value = vp.distortion.k1;
-            document.getElementById('valK1').textContent = vp.distortion.k1.toFixed(3);
-          }
-          if (vp.distortion && typeof vp.distortion.k2 === 'number') {
-            document.getElementById('rngK2').value = vp.distortion.k2;
-            document.getElementById('valK2').textContent = vp.distortion.k2.toFixed(3);
-          }
-          if (vp.screenToLensDistance) {
-            const mm = vp.screenToLensDistance * 1000;
-            document.getElementById('rngScreenToLens').value = mm;
-            document.getElementById('valScreenToLens').textContent = mm.toFixed(1);
-          }
-          if (vp.interLensDistance) {
-            const mm = vp.interLensDistance * 1000;
-            document.getElementById('rngInterLens').value = mm;
-            document.getElementById('valInterLens').textContent = mm.toFixed(1);
-          }
-          if (vp.trayToLensDistance) {
-            const mm = vp.trayToLensDistance * 1000;
-            document.getElementById('rngTrayToLens').value = mm;
-            document.getElementById('valTrayToLens').textContent = mm.toFixed(1);
-          }
-          if (vp.maxFovAngles && vp.maxFovAngles.outerDeg) {
-            document.getElementById('rngFov').value = vp.maxFovAngles.outerDeg;
-            document.getElementById('valFov').textContent = vp.maxFovAngles.outerDeg.toFixed(1) + '°';
-          }
+          populateSlidersFromProfile(vp);
         }
       }
 

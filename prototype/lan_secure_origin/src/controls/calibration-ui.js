@@ -134,12 +134,26 @@ export class CalibrationUI {
       if (state.calibrationStage === 'C') return; // Stage C Viewer Profile is fixed/read-only
       const presetId = msg.presetId;
       const currentLensState = this.activeViewerProfile ? this.activeViewerProfile.lensCorrectionEnabled : false;
-      this.activeViewerProfile = createDefaultViewerProfile(presetId);
-      this.activeViewerProfile.lensCorrectionEnabled = currentLensState;
-      this.syncStageBToUI();
-      if (this.onProfileChanged) this.onProfileChanged(this.activeVideoProfile, this.activeViewerProfile);
-      showFeedbackToast(`Viewer Profile: ${this.activeViewerProfile.name}`);
-      logAction('Selected Viewer Preset from PC: ' + presetId);
+      let targetProfile = null;
+      if (presetId === 'viewer:my_profile') {
+        if (this.storage && this.storage.savedMyViewerProfile) {
+          targetProfile = JSON.parse(JSON.stringify(this.storage.savedMyViewerProfile));
+        } else {
+          showFeedbackToast('⚠️ My Viewer Profile: Not saved yet');
+          logAction('Attempted to load My Viewer Profile from PC, but none saved yet');
+          return;
+        }
+      } else {
+        targetProfile = createDefaultViewerProfile(presetId);
+      }
+      if (targetProfile) {
+        this.activeViewerProfile = targetProfile;
+        this.activeViewerProfile.lensCorrectionEnabled = currentLensState;
+        this.syncStageBToUI();
+        if (this.onProfileChanged) this.onProfileChanged(this.activeVideoProfile, this.activeViewerProfile);
+        showFeedbackToast(`Viewer Profile: ${this.activeViewerProfile.name}`);
+        logAction('Selected Viewer Preset from PC: ' + presetId);
+      }
     } else if (act === 'set_reference_grid') {
       state.showReferenceGrid = (msg.enabled === true);
       if (this.vrRenderer) this.vrRenderer.showReferenceGrid = state.showReferenceGrid;
@@ -258,10 +272,8 @@ export class CalibrationUI {
     const pose = vp.pose || { yawDeg: 0, pitchDeg: 0, rollDeg: 0 };
     if (this.rangePoseYaw) this.rangePoseYaw.value = pose.yawDeg || 0;
     if (this.valPoseYaw) this.valPoseYaw.textContent = (pose.yawDeg || 0) + '°';
-
     if (this.rangePosePitch) this.rangePosePitch.value = pose.pitchDeg || 0;
     if (this.valPosePitch) this.valPosePitch.textContent = (pose.pitchDeg || 0) + '°';
-
     if (this.rangePoseRoll) this.rangePoseRoll.value = pose.rollDeg || 0;
     if (this.valPoseRoll) this.valPoseRoll.textContent = (pose.rollDeg || 0) + '°';
 
@@ -280,7 +292,15 @@ export class CalibrationUI {
     const hp = this.activeViewerProfile;
     if (!hp) return;
 
-    if (this.selViewerPreset) this.selViewerPreset.value = hp.viewerProfileId || 'unknown:uncalibrated';
+    if (this.selViewerPreset) {
+      this.selViewerPreset.value = hp.viewerProfileId || 'cardboard:reference_50deg';
+      const optMy = this.selViewerPreset.querySelector('option[value="viewer:my_profile"]');
+      if (optMy) {
+        optMy.textContent = (this.storage && this.storage.savedMyViewerProfile)
+          ? 'My Viewer Profile (Saved Working Profile)'
+          : 'My Viewer Profile (Not saved yet)';
+      }
+    }
     this.updateLensBtnState();
 
     const dist = hp.distortion || { k1: 0.0, k2: 0.0 };
@@ -306,7 +326,14 @@ export class CalibrationUI {
     if (this.txtDerivedFov) {
       const geom = deriveCardboardEyeGeometry(activeScreenProfile, hp);
       const l = geom.leftEye;
-      const statusStr = hp.isCalibrated ? '<span style="color:#34d399;">✓ [CALIBRATED PROFILE]</span>' : '<span style="color:#f87171;">⚠️ [UNCALIBRATED BASELINE (Draft)]</span>';
+      let statusStr = '';
+      if (hp.confidence === 'working-user-tuned' || hp.viewerProfileId === 'viewer:my_profile') {
+        statusStr = '<span style="color:#38bdf8;">⚙️ [WORKING USER-TUNED (Unvalidated — Not Ground Truth)]</span>';
+      } else if (hp.confidence === 'historical-reference' || hp.viewerProfileId === 'cardboard:reference_50deg') {
+        statusStr = '<span style="color:#34d399;">✓ [HISTORICAL REFERENCE (50° Guidance)]</span>';
+      } else {
+        statusStr = '<span style="color:#f87171;">⚠️ [UNCALIBRATED BASELINE (Draft)]</span>';
+      }
       this.txtDerivedFov.innerHTML = `
         ${statusStr}<br>
         <b>Left Eye Virt FOV:</b> L:${l.fovDeg.left.toFixed(1)}° R:${l.fovDeg.right.toFixed(1)}° U:${l.fovDeg.top.toFixed(1)}° D:${l.fovDeg.bottom.toFixed(1)}°<br>
@@ -357,26 +384,15 @@ export class CalibrationUI {
       });
     }
 
-    if (this.btnToggleGrid) {
-      this.btnToggleGrid.addEventListener('click', () => {
-        this.diagnosticOverlay.showGrid = !this.diagnosticOverlay.showGrid;
-        this.btnToggleGrid.classList.toggle('active', this.diagnosticOverlay.showGrid);
+    const bindToggle = (btn, key) => {
+      if (btn) btn.addEventListener('click', () => {
+        this.diagnosticOverlay[key] = !this.diagnosticOverlay[key];
+        btn.classList.toggle('active', this.diagnosticOverlay[key]);
       });
-    }
-
-    if (this.btnTogglePlumb) {
-      this.btnTogglePlumb.addEventListener('click', () => {
-        this.diagnosticOverlay.showPlumbLines = !this.diagnosticOverlay.showPlumbLines;
-        this.btnTogglePlumb.classList.toggle('active', this.diagnosticOverlay.showPlumbLines);
-      });
-    }
-
-    if (this.btnToggleHorizon) {
-      this.btnToggleHorizon.addEventListener('click', () => {
-        this.diagnosticOverlay.showHorizon = !this.diagnosticOverlay.showHorizon;
-        this.btnToggleHorizon.classList.toggle('active', this.diagnosticOverlay.showHorizon);
-      });
-    }
+    };
+    bindToggle(this.btnToggleGrid, 'showGrid');
+    bindToggle(this.btnTogglePlumb, 'showPlumbLines');
+    bindToggle(this.btnToggleHorizon, 'showHorizon');
 
     if (this.chkStageCReferenceGrid) {
       this.chkStageCReferenceGrid.addEventListener('change', (e) => {
@@ -431,19 +447,16 @@ export class CalibrationUI {
 
     const updatePose = () => {
       if (!this.activeVideoProfile) return;
-      if (!this.activeVideoProfile.pose) this.activeVideoProfile.pose = {};
-      this.activeVideoProfile.pose.yawDeg = parseFloat(this.rangePoseYaw ? this.rangePoseYaw.value : 0);
-      this.activeVideoProfile.pose.pitchDeg = parseFloat(this.rangePosePitch ? this.rangePosePitch.value : 0);
-      this.activeVideoProfile.pose.rollDeg = parseFloat(this.rangePoseRoll ? this.rangePoseRoll.value : 0);
-      if (this.valPoseYaw) this.valPoseYaw.textContent = this.activeVideoProfile.pose.yawDeg + '°';
-      if (this.valPosePitch) this.valPosePitch.textContent = this.activeVideoProfile.pose.pitchDeg + '°';
-      if (this.valPoseRoll) this.valPoseRoll.textContent = this.activeVideoProfile.pose.rollDeg + '°';
+      const pose = this.activeVideoProfile.pose || (this.activeVideoProfile.pose = {});
+      pose.yawDeg = parseFloat(this.rangePoseYaw?.value || 0);
+      pose.pitchDeg = parseFloat(this.rangePosePitch?.value || 0);
+      pose.rollDeg = parseFloat(this.rangePoseRoll?.value || 0);
+      if (this.valPoseYaw) this.valPoseYaw.textContent = pose.yawDeg + '°';
+      if (this.valPosePitch) this.valPosePitch.textContent = pose.pitchDeg + '°';
+      if (this.valPoseRoll) this.valPoseRoll.textContent = pose.rollDeg + '°';
       notifyChange();
     };
-
-    if (this.rangePoseYaw) this.rangePoseYaw.addEventListener('input', updatePose);
-    if (this.rangePosePitch) this.rangePosePitch.addEventListener('input', updatePose);
-    if (this.rangePoseRoll) this.rangePoseRoll.addEventListener('input', updatePose);
+    [this.rangePoseYaw, this.rangePosePitch, this.rangePoseRoll].forEach(r => r?.addEventListener('input', updatePose));
 
     if (this.btnResetPose) {
       this.btnResetPose.addEventListener('click', () => {
@@ -469,11 +482,26 @@ export class CalibrationUI {
       this.selViewerPreset.addEventListener('change', (e) => {
         const presetId = e.target.value;
         const currentLensState = this.activeViewerProfile ? this.activeViewerProfile.lensCorrectionEnabled : false;
-        this.activeViewerProfile = createDefaultViewerProfile(presetId);
-        this.activeViewerProfile.lensCorrectionEnabled = currentLensState;
-        this.syncStageBToUI();
-        notifyChange();
-        logAction('Selected Viewer Preset: ' + presetId);
+        let targetProfile = null;
+        if (presetId === 'viewer:my_profile') {
+          if (this.storage && this.storage.savedMyViewerProfile) {
+            targetProfile = JSON.parse(JSON.stringify(this.storage.savedMyViewerProfile));
+          } else {
+            showFeedbackToast('⚠️ My Viewer Profile: Not saved yet');
+            logAction('Attempted to load My Viewer Profile, but none saved yet');
+            this.syncStageBToUI();
+            return;
+          }
+        } else {
+          targetProfile = createDefaultViewerProfile(presetId);
+        }
+        if (targetProfile) {
+          this.activeViewerProfile = targetProfile;
+          this.activeViewerProfile.lensCorrectionEnabled = currentLensState;
+          this.syncStageBToUI();
+          notifyChange();
+          logAction('Selected Viewer Preset: ' + presetId);
+        }
       });
     }
 
@@ -510,7 +538,6 @@ export class CalibrationUI {
       this.activeViewerProfile.trayToLensDistance = parseFloat(this.inputTrayToLens.value || 35) / 1000;
       const fovVal = parseFloat(this.inputMaxFov.value || 50);
       this.activeViewerProfile.maxFovAngles = { outerDeg: fovVal, innerDeg: fovVal, upperDeg: fovVal, lowerDeg: fovVal };
-      this.activeViewerProfile.isCalibrated = true;
       this.syncStageBToUI();
       notifyChange();
     };

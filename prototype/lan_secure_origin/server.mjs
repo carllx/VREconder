@@ -336,7 +336,13 @@ function handleRequest(req, res, isHttps) {
     let viewerProfile = null;
     try {
       if (fs.existsSync(VIDEO_PROFILES_FILE)) videoProfiles = JSON.parse(fs.readFileSync(VIDEO_PROFILES_FILE, 'utf8'));
-      if (fs.existsSync(VIEWER_PROFILE_FILE)) viewerProfile = JSON.parse(fs.readFileSync(VIEWER_PROFILE_FILE, 'utf8'));
+      if (fs.existsSync(VIEWER_PROFILE_FILE)) {
+        viewerProfile = JSON.parse(fs.readFileSync(VIEWER_PROFILE_FILE, 'utf8'));
+        if (viewerProfile && (viewerProfile.confidence === 'working-user-tuned' || viewerProfile.viewerProfileId === 'viewer:my_profile')) {
+          viewerProfile.isCalibrated = false;
+          viewerProfile.source = 'User-tuned Working Profile (Unvalidated)';
+        }
+      }
     } catch (e) {}
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ videoProfiles, viewerProfile }));
@@ -374,6 +380,10 @@ function handleRequest(req, res, isHttps) {
     req.on('end', () => {
       try {
         const profile = JSON.parse(body);
+        if (profile && (profile.confidence === 'working-user-tuned' || profile.viewerProfileId === 'viewer:my_profile')) {
+          profile.isCalibrated = false;
+          profile.source = 'User-tuned Working Profile (Unvalidated)';
+        }
         fs.writeFileSync(VIEWER_PROFILE_FILE, JSON.stringify(profile, null, 2), 'utf8');
         console.log(`[Profile] Saved Viewer Profile: ${profile.viewerProfileId} (Lens: ${profile.lensCorrectionEnabled ? 'ON' : 'OFF'})`);
         res.writeHead(200, { 'Content-Type': 'application/json' });

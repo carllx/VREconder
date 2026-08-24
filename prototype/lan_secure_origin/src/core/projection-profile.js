@@ -35,7 +35,7 @@ export function createDefaultViewerProfile(profileId = 'cardboard:reference_50de
       name: 'Cardboard-inspired Reference (50° Guidance)',
       source: 'Cardboard-inspired Reference Optics (50° FOV Guidance — Not Factory Ground Truth)',
       confidence: 'historical-reference',
-      isCalibrated: true,
+      isCalibrated: false,
       lensCorrectionEnabled: false,
       screenToLensDistance: 0.0393, // 39.3 mm
       interLensDistance: 0.0639,    // 63.9 mm
@@ -43,20 +43,6 @@ export function createDefaultViewerProfile(profileId = 'cardboard:reference_50de
       trayToLensDistance: 0.0350,   // 35.0 mm
       maxFovAngles: { outerDeg: 50.0, innerDeg: 50.0, upperDeg: 50.0, lowerDeg: 50.0 },
       distortion: { model: 'cardboard-radial-polynomial', k1: 0.33582564, k2: 0.55348791 }
-    },
-    'viewer:my_profile': {
-      viewerProfileId: 'viewer:my_profile',
-      name: 'My Viewer Profile (Working / User-tuned)',
-      source: 'User-tuned Working Profile (Not Physical Ground Truth)',
-      confidence: 'working-user-tuned',
-      isCalibrated: true,
-      lensCorrectionEnabled: true,
-      screenToLensDistance: 0.0426, // 42.6 mm
-      interLensDistance: 0.0550,    // 55.0 mm
-      verticalAlignment: 'BOTTOM',
-      trayToLensDistance: 0.0350,   // 35.0 mm
-      maxFovAngles: { outerDeg: 65.0, innerDeg: 65.0, upperDeg: 65.0, lowerDeg: 65.0 },
-      distortion: { model: 'cardboard-radial-polynomial', k1: 0.145, k2: 0.005 }
     },
     'unknown:uncalibrated': {
       viewerProfileId: 'unknown:uncalibrated',
@@ -75,8 +61,13 @@ export function createDefaultViewerProfile(profileId = 'cardboard:reference_50de
   };
   // Aliases for backwards compatibility
   presets['cardboard:v2_2015'] = presets['cardboard:reference_50deg'];
-  presets['custom:subjective_working_candidate'] = presets['viewer:my_profile'];
-  presets['custom:calibrated'] = presets['viewer:my_profile'];
+
+  if (profileId === 'viewer:my_profile' || profileId === 'custom:subjective_working_candidate' || profileId === 'custom:calibrated') {
+    if (typeof profileStorage !== 'undefined' && profileStorage.savedMyViewerProfile) {
+      return JSON.parse(JSON.stringify(profileStorage.savedMyViewerProfile));
+    }
+    return null;
+  }
 
   return presets[profileId] || presets['cardboard:reference_50deg'];
 }
@@ -192,18 +183,29 @@ export function deriveCardboardEyeGeometry(screenProfile, viewerProfile) {
 export class ProfileStorage {
   constructor() {
     this.videoProfiles = {};
-    this.activeViewerProfile = createDefaultViewerProfile('unknown:uncalibrated');
+    this.savedMyViewerProfile = null;
+    this.activeViewerProfile = createDefaultViewerProfile('cardboard:reference_50deg');
     this.loadFromLocalStorage();
   }
 
   loadFromLocalStorage() {
     try {
       if (typeof localStorage === 'undefined') return;
+      const myStr = localStorage.getItem('vreconder_saved_my_profile');
+      if (myStr) {
+        this.savedMyViewerProfile = JSON.parse(myStr);
+        if (this.savedMyViewerProfile) this.savedMyViewerProfile.isCalibrated = false;
+      }
       const vStr = localStorage.getItem('vreconder_video_profiles');
       if (vStr) this.videoProfiles = JSON.parse(vStr);
       const hStr = localStorage.getItem('vreconder_viewer_profile');
       if (hStr) {
         this.activeViewerProfile = JSON.parse(hStr);
+        if (this.activeViewerProfile && this.activeViewerProfile.confidence === 'working-user-tuned') {
+          this.activeViewerProfile.isCalibrated = false;
+        }
+      } else if (this.savedMyViewerProfile) {
+        this.activeViewerProfile = JSON.parse(JSON.stringify(this.savedMyViewerProfile));
       }
     } catch (e) {
       console.warn('Profile storage warning:', e);
@@ -215,6 +217,9 @@ export class ProfileStorage {
       if (typeof localStorage === 'undefined') return;
       localStorage.setItem('vreconder_video_profiles', JSON.stringify(this.videoProfiles));
       localStorage.setItem('vreconder_viewer_profile', JSON.stringify(this.activeViewerProfile));
+      if (this.savedMyViewerProfile) {
+        localStorage.setItem('vreconder_saved_my_profile', JSON.stringify(this.savedMyViewerProfile));
+      }
     } catch (e) {}
   }
 
@@ -224,7 +229,14 @@ export class ProfileStorage {
       if (res.ok) {
         const data = await res.json();
         if (data.videoProfiles) this.videoProfiles = { ...this.videoProfiles, ...data.videoProfiles };
-        if (data.viewerProfile) this.activeViewerProfile = { ...this.activeViewerProfile, ...data.viewerProfile };
+        if (data.viewerProfile && (data.viewerProfile.viewerProfileId === 'viewer:my_profile' || data.viewerProfile.confidence === 'working-user-tuned')) {
+          data.viewerProfile.isCalibrated = false;
+          data.viewerProfile.source = 'User-tuned Working Profile (Unvalidated)';
+          this.savedMyViewerProfile = data.viewerProfile;
+          this.activeViewerProfile = data.viewerProfile;
+        } else if (data.viewerProfile) {
+          this.activeViewerProfile = { ...this.activeViewerProfile, ...data.viewerProfile };
+        }
         this.saveToLocalStorage();
       }
     } catch (e) {}
@@ -261,11 +273,12 @@ export class ProfileStorage {
   async saveViewerProfile(viewerProfile) {
     if (!viewerProfile) return false;
     viewerProfile.viewerProfileId = 'viewer:my_profile';
-    viewerProfile.name = 'My Viewer Profile (Working / User-tuned)';
-    viewerProfile.source = 'User-tuned Working Profile (Not Physical Ground Truth)';
+    viewerProfile.name = 'My Viewer Profile (working)';
+    viewerProfile.source = 'User-tuned Working Profile (Unvalidated)';
     viewerProfile.confidence = 'working-user-tuned';
-    viewerProfile.isCalibrated = true;
+    viewerProfile.isCalibrated = false; // Fail-honest: unvalidated until 2-video gate pass
     viewerProfile.updatedAt = new Date().toISOString();
+    this.savedMyViewerProfile = JSON.parse(JSON.stringify(viewerProfile));
     this.activeViewerProfile = viewerProfile;
     this.saveToLocalStorage();
 
