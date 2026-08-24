@@ -162,6 +162,9 @@ const controllerProbe = new ControllerInputProbe(commandModel);
 // Load server profiles
 profileStorage.loadServerProfiles();
 
+// Calibration UI Setup
+let activeVideoProfile = null;
+
 export function getEffectiveViewerProfile(baseProfile) {
   if (!baseProfile) return baseProfile;
   const baseD = baseProfile.screenToLensDistance || 0.0433;
