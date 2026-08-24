@@ -1,9 +1,14 @@
-// ==========================================
-// Staged Calibration & Diagnostic UI Controls (Stage A / B / C & PC Remote Bridge)
-// ==========================================
 import { state, showFeedbackToast } from '../core/state.js';
 import { createDefaultViewerProfile, deriveCardboardEyeGeometry } from '../core/projection-profile.js';
 import { activeScreenProfile } from '../core/screen-profile.js';
+
+function logAction(msg, data = null) {
+  fetch('/api/log', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ level: 'PHONE_ACTION', message: msg, data, time: new Date().toISOString() })
+  }).catch(() => {});
+}
 
 export class CalibrationUI {
   constructor(options) {
@@ -392,9 +397,11 @@ export class CalibrationUI {
     if (this.btnSaveVideoProfile) {
       this.btnSaveVideoProfile.addEventListener('click', async () => {
         if (this.activeVideoProfile) {
+          this.activeVideoProfile.confidence = 'user-calibrated';
           await this.storage.saveVideoProfile(this.activeVideoProfile);
           this.syncStageAToUI();
           showFeedbackToast('💾 Projection Profile Saved');
+          logAction('Saved Video Profile', this.activeVideoProfile);
         }
       });
     }
@@ -407,6 +414,7 @@ export class CalibrationUI {
         this.activeViewerProfile.lensCorrectionEnabled = currentLensState;
         this.syncStageBToUI();
         notifyChange();
+        logAction('Selected Viewer Preset: ' + presetId);
       });
     }
 
@@ -417,6 +425,7 @@ export class CalibrationUI {
         this.updateLensBtnState();
         showFeedbackToast(`Lens: ${this.activeViewerProfile.lensCorrectionEnabled ? 'ON' : 'OFF'}`);
         notifyChange();
+        logAction('Toggled Lens: ' + (this.activeViewerProfile.lensCorrectionEnabled ? 'ON' : 'OFF'));
       });
     }
 
