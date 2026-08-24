@@ -543,6 +543,26 @@ export function updateTelemetryUI(data) {
     document.getElementById('valRenderAt').textContent = t.firstRenderAt ? (t.firstRenderAt - t.selectedAt).toFixed(1) + ' ms' : '--';
     document.getElementById('valTotalLat').textContent = t.firstRenderAt ? (t.firstRenderAt - t.selectedAt).toFixed(1) + ' ms' : (t.statusText || '--');
   }
+
+  if (data.controllerInput) {
+    const ci = data.controllerInput;
+    const statEl = document.getElementById('valControllerStatus');
+    const evtEl = document.getElementById('valControllerEvent');
+    if (statEl) {
+      if (ci.gamepadConnected && ci.activeGamepads && ci.activeGamepads.length > 0) {
+        statEl.textContent = `🎮 Gamepad Active (${ci.activeGamepads[0].id || 'SHINECON'})`;
+      } else if (ci.lastKeyDown) {
+        statEl.textContent = `⌨️ Keyboard (${ci.lastKeyDown.key || ci.lastKeyDown.code})`;
+      } else if (ci.lastPointer) {
+        statEl.textContent = `🖱️ Pointer (${ci.lastPointer.pointerType})`;
+      } else {
+        statEl.textContent = 'Standby (Listening)';
+      }
+    }
+    if (evtEl && ci.lastEvent) {
+      evtEl.textContent = `${ci.lastEvent.type}: ${JSON.stringify(ci.lastEvent.data || {})}`;
+    }
+  }
 }
 
 // Window Globals for inline HTML event handlers

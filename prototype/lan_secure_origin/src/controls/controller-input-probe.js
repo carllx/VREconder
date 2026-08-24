@@ -1,0 +1,217 @@
+// ==========================================
+// Controller Input Probe & Telemetry Reporter (Issue #15)
+// Detects and logs Gamepad, Keyboard, Pointer, and MediaSession inputs
+// ==========================================
+import { state } from '../core/state.js';
+
+let remoteLogFn = () => {};
+
+export function setRemoteLogFunction(fn) {
+  if (typeof fn === 'function') remoteLogFn = fn;
+}
+
+function logEvent(type, data) {
+  remoteLogFn('INFO', `CONTROLLER_INPUT:${type}`, data);
+}
+
+export class ControllerInputProbe {
+  constructor(commandModel = null) {
+    this.commandModel = commandModel;
+    this.gamepadConnected = false;
+    this.lastGamepadId = '';
+    this.lastButtonStates = {};
+    this.lastAxesStates = {};
+    this.lastEvent = null;
+    this.recentEvents = [];
+    this.activeInputs = {
+      gamepads: [],
+      lastKeyDown: null,
+      lastPointer: null,
+      lastMediaSessionAction: null
+    };
+
+    this.initListeners();
+    this.initMediaSession();
+  }
+
+  initListeners() {
+    if (typeof window === 'undefined') return;
+
+    // 1. Gamepad API Connection Events
+    window.addEventListener('gamepadconnected', (e) => {
+      const gp = e.gamepad;
+      this.gamepadConnected = true;
+      this.lastGamepadId = gp.id || 'Generic Gamepad';
+      logEvent('GAMEPAD_CONNECTED', {
+        id: gp.id,
+        index: gp.index,
+        mapping: gp.mapping,
+        buttonsCount: gp.buttons ? gp.buttons.length : 0,
+        axesCount: gp.axes ? gp.axes.length : 0
+      });
+    });
+
+    window.addEventListener('gamepaddisconnected', (e) => {
+      this.gamepadConnected = false;
+      logEvent('GAMEPAD_DISCONNECTED', {
+        id: e.gamepad ? e.gamepad.id : '',
+        index: e.gamepad ? e.gamepad.index : -1
+      });
+    });
+
+    // 2. Keyboard Input Events (SHINECON / Mini VR remote keyboard mode)
+    const onKey = (e, isDown) => {
+      const info = {
+        type: isDown ? 'keydown' : 'keyup',
+        key: e.key,
+        code: e.code,
+        keyCode: e.keyCode,
+        which: e.which,
+        location: e.location,
+        ctrlKey: e.ctrlKey,
+        altKey: e.altKey,
+        shiftKey: e.shiftKey,
+        metaKey: e.metaKey,
+        repeat: e.repeat,
+        timestamp: Date.now()
+      };
+
+      if (isDown) {
+        this.activeInputs.lastKeyDown = info;
+        this.recordEvent('KEYBOARD_DOWN', info);
+      } else {
+        this.recordEvent('KEYBOARD_UP', info);
+      }
+    };
+
+    window.addEventListener('keydown', (e) => onKey(e, true), { capture: true, passive: false });
+    window.addEventListener('keyup', (e) => onKey(e, false), { capture: true, passive: false });
+
+    // 3. Pointer / Mouse / Touch Events (SHINECON mouse/cursor mode)
+    const onPointer = (e, action) => {
+      const info = {
+        action,
+        pointerType: e.pointerType || 'unknown',
+        button: e.button,
+        buttons: e.buttons,
+        clientX: e.clientX,
+        clientY: e.clientY,
+        timestamp: Date.now()
+      };
+      this.activeInputs.lastPointer = info;
+      this.recordEvent(`POINTER_${action.toUpperCase()}`, info);
+    };
+
+    window.addEventListener('pointerdown', (e) => onPointer(e, 'down'), { passive: true });
+    window.addEventListener('pointerup', (e) => onPointer(e, 'up'), { passive: true });
+    window.addEventListener('contextmenu', (e) => {
+      this.recordEvent('CONTEXT_MENU', { clientX: e.clientX, clientY: e.clientY, timestamp: Date.now() });
+    }, { passive: true });
+  }
+
+  initMediaSession() {
+    if (typeof navigator === 'undefined' || !('mediaSession' in navigator)) return;
+
+    const actions = [
+      ['play', () => this.handleMediaAction('play')],
+      ['pause', () => this.handleMediaAction('pause')],
+      ['previoustrack', () => this.handleMediaAction('previoustrack')],
+      ['nexttrack', () => this.handleMediaAction('nexttrack')],
+      ['seekbackward', (details) => this.handleMediaAction('seekbackward', details)],
+      ['seekforward', (details) => this.handleMediaAction('seekforward', details)],
+      ['stop', () => this.handleMediaAction('stop')]
+    ];
+
+    for (const [actionName, handler] of actions) {
+      try {
+        navigator.mediaSession.setActionHandler(actionName, handler);
+      } catch (e) {}
+    }
+  }
+
+  handleMediaAction(action, details = null) {
+    const info = { action, details, timestamp: Date.now() };
+    this.activeInputs.lastMediaSessionAction = info;
+    this.recordEvent('MEDIA_SESSION_ACTION', info);
+  }
+
+  recordEvent(type, data) {
+    this.lastEvent = { type, data, time: new Date().toISOString() };
+    this.recentEvents.unshift(this.lastEvent);
+    if (this.recentEvents.length > 20) this.recentEvents.pop();
+    logEvent(type, data);
+  }
+
+  // Polling loop for Gamepad states (called in renderLoop / 60Hz)
+  pollGamepads() {
+    if (typeof navigator === 'undefined' || typeof navigator.getGamepads !== 'function') return;
+
+    const gamepads = navigator.getGamepads();
+    if (!gamepads) return;
+
+    const activeList = [];
+    for (let i = 0; i < gamepads.length; i++) {
+      const gp = gamepads[i];
+      if (!gp) continue;
+
+      activeList.push({
+        id: gp.id,
+        index: gp.index,
+        mapping: gp.mapping,
+        connected: gp.connected,
+        buttons: (gp.buttons || []).map((b, bIdx) => ({
+          index: bIdx,
+          pressed: b.pressed,
+          value: b.value
+        })),
+        axes: (gp.axes || []).map((a, aIdx) => ({
+          index: aIdx,
+          value: Math.round(a * 1000) / 1000
+        }))
+      });
+
+      // Detect button edge transitions
+      if (gp.buttons) {
+        for (let b = 0; b < gp.buttons.length; b++) {
+          const btn = gp.buttons[b];
+          const key = `${gp.index}_b_${b}`;
+          const wasPressed = !!this.lastButtonStates[key];
+          if (btn.pressed && !wasPressed) {
+            this.lastButtonStates[key] = true;
+            this.recordEvent('GAMEPAD_BUTTON_DOWN', { gamepadIndex: gp.index, buttonIndex: b, value: btn.value });
+          } else if (!btn.pressed && wasPressed) {
+            this.lastButtonStates[key] = false;
+            this.recordEvent('GAMEPAD_BUTTON_UP', { gamepadIndex: gp.index, buttonIndex: b, value: btn.value });
+          }
+        }
+      }
+
+      // Detect axis deflection transitions (deadzone 0.25)
+      if (gp.axes) {
+        for (let a = 0; a < gp.axes.length; a++) {
+          const val = gp.axes[a];
+          const key = `${gp.index}_a_${a}`;
+          const prevVal = this.lastAxesStates[key] || 0;
+          if (Math.abs(val - prevVal) > 0.35) {
+            this.lastAxesStates[key] = val;
+            this.recordEvent('GAMEPAD_AXIS_MOVE', { gamepadIndex: gp.index, axisIndex: a, value: Math.round(val * 100) / 100 });
+          }
+        }
+      }
+    }
+
+    this.activeInputs.gamepads = activeList;
+  }
+
+  getTelemetryData() {
+    return {
+      gamepadConnected: this.gamepadConnected || this.activeInputs.gamepads.length > 0,
+      activeGamepads: this.activeInputs.gamepads,
+      lastEvent: this.lastEvent,
+      recentEvents: this.recentEvents.slice(0, 8),
+      lastKeyDown: this.activeInputs.lastKeyDown,
+      lastPointer: this.activeInputs.lastPointer,
+      lastMediaSessionAction: this.activeInputs.lastMediaSessionAction
+    };
+  }
+}

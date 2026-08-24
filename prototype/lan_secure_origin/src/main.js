@@ -14,6 +14,7 @@ import { telemetry } from './telemetry/telemetry.js';
 import { initAudioContext } from './controls/audio-haptics.js';
 import { profileStorage, computeMediaFingerprint } from './core/projection-profile.js';
 import { CalibrationUI } from './controls/calibration-ui.js';
+import { ControllerInputProbe, setRemoteLogFunction } from './controls/controller-input-probe.js';
 
 // Global error handlers & Remote Diagnostics
 export function remoteLog(level, message, data = null) {
@@ -23,6 +24,7 @@ export function remoteLog(level, message, data = null) {
     body: JSON.stringify({ level, message, data, url: location.href, time: new Date().toISOString() })
   }).catch(() => {});
 }
+setRemoteLogFunction(remoteLog);
 
 function showError(msg) {
   const banner = document.getElementById('errorBanner');
@@ -155,6 +157,7 @@ const diagnosticOverlay = new DiagnosticOverlay(uiCanvas);
 const mediaController = new MediaController(video, null);
 const commandModel = new CommandModel(mediaController);
 const gazeEngine = new GazeEngine(commandModel, video);
+const controllerProbe = new ControllerInputProbe(commandModel);
 
 // Load server profiles
 profileStorage.loadServerProfiles();
@@ -341,6 +344,9 @@ function renderLoop(now) {
     uiCanvas.height = height;
   }
 
+  // Poll Gamepad states
+  controllerProbe.pollGamepads();
+
   // Upload video frame if dirty
   if (mediaController.shouldUploadTexture()) {
     vrRenderer.updateVideoTexture(video);
@@ -417,7 +423,8 @@ setInterval(() => {
     videoPaused: !!video.paused,
     currentTime: video.currentTime || 0,
     duration: video.duration || 0,
-    mediaList: (state.videoList || []).map(v => ({ relPath: v.relPath, name: v.name, sizeGB: v.sizeGB }))
+    mediaList: (state.videoList || []).map(v => ({ relPath: v.relPath, name: v.name, sizeGB: v.sizeGB })),
+    controllerInput: controllerProbe.getTelemetryData()
   };
   fetch('/api/telemetry', {
     method: 'POST',
