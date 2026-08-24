@@ -37,7 +37,7 @@ export function recenterPose() {
   state.qRefInv = [qRefInv.x, qRefInv.y, qRefInv.z, qRefInv.w];
   state.qCamera = [qCamera.x, qCamera.y, qCamera.z, qCamera.w];
 
-  const elFwd = document.getElementById('valCamFwd');
+  const elFwd = (typeof document !== 'undefined') ? document.getElementById('valCamFwd') : null;
   if (elFwd) {
     elFwd.textContent = state.cameraForward[0].toFixed(2) + ',' + state.cameraForward[1].toFixed(2) + ',' + state.cameraForward[2].toFixed(2);
   }

@@ -58,13 +58,6 @@ export class GazeEngine {
       return;
     }
 
-    // Natural auto-dismiss when user looks back up towards the video (Pitch >= -18 deg)
-    const lookPitch = state.cameraForward[1];
-    if (lookPitch > -0.32) {
-      if (state.patternA_open) state.patternA_open = false;
-      if (state.patternB_open) state.patternB_open = false;
-      if (state.patternC_open) state.patternC_open = false;
-    }
 
     const items = getActiveInteractiveItems(this.cmd, this.video);
     let bestItem = null;

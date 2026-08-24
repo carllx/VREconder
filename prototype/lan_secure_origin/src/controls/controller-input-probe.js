@@ -153,6 +153,26 @@ export class ControllerInputProbe {
 
     window.addEventListener('pointerdown', (e) => onPointer(e, 'down'), { passive: true });
     window.addEventListener('pointerup', (e) => onPointer(e, 'up'), { passive: true });
+    window.addEventListener('pointermove', (e) => {
+      const now = Date.now();
+      if (now - (this.lastPointerMoveLogTime || 0) > 50) {
+        this.lastPointerMoveLogTime = now;
+        this.recordEvent('POINTER_MOVE', {
+          clientX: e.clientX,
+          clientY: e.clientY,
+          pointerType: e.pointerType || 'unknown',
+          timestamp: now
+        });
+      }
+    }, { passive: true });
+    window.addEventListener('click', (e) => {
+      this.recordEvent('CLICK', {
+        clientX: e.clientX,
+        clientY: e.clientY,
+        detail: e.detail,
+        timestamp: Date.now()
+      });
+    }, { passive: true });
     window.addEventListener('contextmenu', (e) => {
       this.recordEvent('CONTEXT_MENU', { clientX: e.clientX, clientY: e.clientY, timestamp: Date.now() });
     }, { passive: true });
@@ -201,17 +221,17 @@ export class ControllerInputProbe {
     } else if (action === 'nexttrack') {
       this.adjustDistance(+0.001);
     } else if (action === 'play' || action === 'pause') {
-      // Confirm Tap: Single tap -> Open Menu, Double tap (350ms) -> Recenter
+      // Confirm Tap: Single tap -> Toggle Menu (Open/Close), Double tap (350ms) -> Recenter
       if (this.confirmTapTimer) {
         clearTimeout(this.confirmTapTimer);
         this.confirmTapTimer = null;
-        showFeedbackToast('🎯 Recenter');
+        this.recordEvent('DOUBLE_CONFIRM', { timestamp: Date.now() });
         if (this.commandModel) this.commandModel.recenter();
       } else {
         this.confirmTapTimer = setTimeout(() => {
           this.confirmTapTimer = null;
-          showFeedbackToast('⚡ 打开菜单');
-          if (this.commandModel) this.commandModel.openControls();
+          this.recordEvent('SINGLE_CONFIRM', { timestamp: Date.now() });
+          if (this.commandModel) this.commandModel.toggleControls();
         }, 350);
       }
     }

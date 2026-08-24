@@ -226,31 +226,31 @@ export function applyStageLocks(stage) {
 export function populateSlidersFromProfile(p) {
   if (!p) return;
   if (p.distortion && typeof p.distortion.k1 === 'number') {
-    document.getElementById('rngK1').value = p.distortion.k1;
-    document.getElementById('valK1').textContent = p.distortion.k1.toFixed(3);
+    const el = document.getElementById('rngK1'); if (el) el.value = p.distortion.k1;
+    const val = document.getElementById('valK1'); if (val) val.textContent = p.distortion.k1.toFixed(3);
   }
   if (p.distortion && typeof p.distortion.k2 === 'number') {
-    document.getElementById('rngK2').value = p.distortion.k2;
-    document.getElementById('valK2').textContent = p.distortion.k2.toFixed(3);
+    const el = document.getElementById('rngK2'); if (el) el.value = p.distortion.k2;
+    const val = document.getElementById('valK2'); if (val) val.textContent = p.distortion.k2.toFixed(3);
   }
   if (p.screenToLensDistance) {
     const mm = p.screenToLensDistance * 1000;
-    document.getElementById('rngScreenToLens').value = mm;
-    document.getElementById('valScreenToLens').textContent = mm.toFixed(1);
+    const el = document.getElementById('rngScreenToLens'); if (el) el.value = mm;
+    const val = document.getElementById('valScreenToLens'); if (val) val.textContent = mm.toFixed(1);
   }
   if (p.interLensDistance) {
     const mm = p.interLensDistance * 1000;
-    document.getElementById('rngInterLens').value = mm;
-    document.getElementById('valInterLens').textContent = mm.toFixed(1);
+    const el = document.getElementById('rngInterLens'); if (el) el.value = mm;
+    const val = document.getElementById('valInterLens'); if (val) val.textContent = mm.toFixed(1);
   }
   if (p.trayToLensDistance) {
     const mm = p.trayToLensDistance * 1000;
-    document.getElementById('rngTrayToLens').value = mm;
-    document.getElementById('valTrayToLens').textContent = mm.toFixed(1);
+    const el = document.getElementById('rngTrayToLens'); if (el) el.value = mm;
+    const val = document.getElementById('valTrayToLens'); if (val) val.textContent = mm.toFixed(1);
   }
   if (p.maxFovAngles && p.maxFovAngles.outerDeg) {
-    document.getElementById('rngFov').value = p.maxFovAngles.outerDeg;
-    document.getElementById('valFov').textContent = p.maxFovAngles.outerDeg.toFixed(1) + '°';
+    const el = document.getElementById('rngFov'); if (el) el.value = p.maxFovAngles.outerDeg;
+    const val = document.getElementById('valFov'); if (val) val.textContent = p.maxFovAngles.outerDeg.toFixed(1) + '°';
   }
 }
 
@@ -449,26 +449,13 @@ export function updateTelemetryUI(data) {
         vstat.style.color = '#f87171';
       }
     }
-    const selProj = document.getElementById('selProjection');
-    if (selProj) {
-      selProj.value = vp.projection || 'unknown';
-    }
-    const selStereo = document.getElementById('selStereo');
-    if (selStereo) {
-      selStereo.value = vp.stereoMode || 'unknown';
-    }
-    const selEye = document.getElementById('selEyeOrder');
-    if (selEye) {
-      selEye.value = vp.eyeOrder || 'unknown';
-    }
+    const selProj = document.getElementById('selProjection'); if (selProj) selProj.value = vp.projection || 'unknown';
+    const selStereo = document.getElementById('selStereo'); if (selStereo) selStereo.value = vp.stereoMode || 'unknown';
+    const selEye = document.getElementById('selEyeOrder'); if (selEye) selEye.value = vp.eyeOrder || 'unknown';
     const selCov = document.getElementById('selCoverageFov');
     if (selCov) {
-      if (!vp.projection || vp.projection === 'unknown') {
-        selCov.value = 'unknown';
-        selCov.disabled = true;
-      } else if (vp.projection === 'flat') {
-        selCov.value = 'unknown';
-        selCov.disabled = true;
+      if (!vp.projection || vp.projection === 'unknown' || vp.projection === 'flat') {
+        selCov.value = 'unknown'; selCov.disabled = true;
       } else {
         selCov.disabled = false;
         const hCov = (typeof vp.horizontalCoverageDeg === 'number') ? vp.horizontalCoverageDeg : 180;
@@ -479,18 +466,12 @@ export function updateTelemetryUI(data) {
       const y = (typeof vp.pose.yawDeg === 'number') ? vp.pose.yawDeg : 0;
       const p = (typeof vp.pose.pitchDeg === 'number') ? vp.pose.pitchDeg : 0;
       const r = (typeof vp.pose.rollDeg === 'number') ? vp.pose.rollDeg : 0;
-      const rngY = document.getElementById('rngPoseYaw');
-      const rngP = document.getElementById('rngPosePitch');
-      const rngR = document.getElementById('rngPoseRoll');
-      if (rngY) rngY.value = y;
-      if (rngP) rngP.value = p;
-      if (rngR) rngR.value = r;
-      const valY = document.getElementById('valPoseYaw');
-      const valP = document.getElementById('valPosePitch');
-      const valR = document.getElementById('valPoseRoll');
-      if (valY) valY.textContent = y.toFixed(1) + '°';
-      if (valP) valP.textContent = p.toFixed(1) + '°';
-      if (valR) valR.textContent = r.toFixed(1) + '°';
+      const rngY = document.getElementById('rngPoseYaw'); if (rngY) rngY.value = y;
+      const rngP = document.getElementById('rngPosePitch'); if (rngP) rngP.value = p;
+      const rngR = document.getElementById('rngPoseRoll'); if (rngR) rngR.value = r;
+      const valY = document.getElementById('valPoseYaw'); if (valY) valY.textContent = y.toFixed(1) + '°';
+      const valP = document.getElementById('valPosePitch'); if (valP) valP.textContent = p.toFixed(1) + '°';
+      const valR = document.getElementById('valPoseRoll'); if (valR) valR.textContent = r.toFixed(1) + '°';
     }
   }
 

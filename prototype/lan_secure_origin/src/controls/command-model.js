@@ -63,14 +63,23 @@ export class CommandModel {
     if (state.activePattern === 'B') state.patternB_open = true;
     if (state.activePattern === 'C') state.patternC_open = true;
     telemetry.menuOpenTime = performance.now();
-    showFeedbackToast('菜单已展开');
+    showFeedbackToast('⚡ 打开菜单');
   }
 
   closeControls() {
     state.patternA_open = false;
     state.patternB_open = false;
     state.patternC_open = false;
-    showFeedbackToast('菜单已收起');
+    showFeedbackToast('✕ 关闭菜单');
+  }
+
+  toggleControls() {
+    const menuOpen = state.patternA_open || state.patternB_open || state.patternC_open;
+    if (menuOpen) {
+      this.closeControls();
+    } else {
+      this.openControls();
+    }
   }
 
   cyclePattern() {

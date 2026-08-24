@@ -88,19 +88,23 @@ export class TelemetryEngine {
 
   markTaskDone(taskKey) {
     this.completedTasks[taskKey] = true;
-    const row = document.querySelector('.checklist-row[data-task="' + taskKey + '"] .chk-status');
-    if (row) {
-      row.textContent = '✓ Done';
-      row.className = 'chk-status chk-done';
+    if (typeof document !== 'undefined') {
+      const row = document.querySelector('.checklist-row[data-task="' + taskKey + '"] .chk-status');
+      if (row) {
+        row.textContent = '✓ Done';
+        row.className = 'chk-status chk-done';
+      }
     }
   }
 
   resetTasks() {
     for (const k in this.completedTasks) this.completedTasks[k] = false;
-    document.querySelectorAll('.checklist-row .chk-status').forEach(el => {
-      el.textContent = 'Pending';
-      el.className = 'chk-status chk-pending';
-    });
+    if (typeof document !== 'undefined') {
+      document.querySelectorAll('.checklist-row .chk-status').forEach(el => {
+        el.textContent = 'Pending';
+        el.className = 'chk-status chk-pending';
+      });
+    }
   }
 
   updateTable() {

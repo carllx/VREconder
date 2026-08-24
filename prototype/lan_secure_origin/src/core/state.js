@@ -1,7 +1,6 @@
 // ==========================================
 // Global Application & Interaction State
-// ==========================================
-export const isStandalone = (window.navigator.standalone === true) || window.matchMedia('(display-mode: standalone)').matches;
+export const isStandalone = (typeof window !== 'undefined' && window.navigator && ((window.navigator.standalone === true) || (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches))) || false;
 
 export const state = {
   inVR: false,
@@ -50,9 +49,11 @@ export const state = {
   qRefInv: [0, 0, 0, 1],
   qCamera: [0, 0, 0, 1],
   cameraForward: [0, 0, -1],
-  cameraUp: [0, 1, 0],
-  viewport: { w: window.innerWidth, h: window.innerHeight, dpr: window.devicePixelRatio },
-  headStateText: 'Center',
+  viewport: {
+    w: typeof window !== 'undefined' ? window.innerWidth : 1920,
+    h: typeof window !== 'undefined' ? window.innerHeight : 1080,
+    dpr: typeof window !== 'undefined' ? window.devicePixelRatio : 1
+  },
 
   // Pattern States - Default 100% Hidden in floor zone
   patternA_open: false,
