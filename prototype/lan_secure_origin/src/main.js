@@ -394,15 +394,18 @@ function renderLoop(now) {
     // 2. Stereo VR Mode: Dual Viewports with Optional Lens Pre-Distortion
     gazeEngine.update(now);
 
+    renderStereoUI(uiCtx, gazeEngine, commandModel, video, now, width, height, effectiveViewerProfile);
+
     vrRenderer.renderStereoVR(
       width,
       height,
       activeVideoProfile,
       effectiveViewerProfile,
-      cameraMat3
+      cameraMat3,
+      uiCanvas
     );
 
-    renderStereoUI(uiCtx, gazeEngine, commandModel, video, now, width, height);
+    uiCtx.clearRect(0, 0, width, height);
   }
 }
 

@@ -16,6 +16,7 @@ export const state = {
   showReferenceGrid: false, // Verification-only Reference Grid in Stage C / Video+Grid
   viewerVisualMode: 'grid_only', // Stage B sub-mode: 'grid_only' | 'video_grid'
   temporaryScreenToLensOffset: 0.0, // Session-only runtime viewing distance offset (Issue #15 / #17)
+  menuVirtualDepth: 2.0, // Virtual Depth in meters for 3D UI convergence (1.5m / 2.0m / 3.0m)
 
   // First-Frame Timing & Black-Screen Instrumentation
   firstFrameTimings: {

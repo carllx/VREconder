@@ -3,7 +3,7 @@
 // (Faithful implementation of Google CardboardView & CardboardBarrelDistortion)
 // With Explicit COMPILE_STATUS and LINK_STATUS Validation
 // ==========================================
-import { vsSource, fsIdealSceneSource, fsDistortionPassSource } from './shaders.js';
+import { vsSource, fsIdealSceneSource, fsDistortionPassSource, fsUIOverlaySource } from './shaders.js';
 import { Quat } from '../core/quaternion.js';
 import { activeScreenProfile } from '../core/screen-profile.js';
 import { deriveCardboardEyeGeometry } from '../core/projection-profile.js';
@@ -15,8 +15,10 @@ export class VRRenderer {
     this.gl = null;
     this.programScene = null;
     this.programDistort = null;
+    this.programUI = null;
     this.posBuffer = null;
     this.videoTex = null;
+    this.uiTex = null;
 
     // Offscreen Framebuffer for Ideal Undistorted Dual-Eye Texture
     this.eyeFbo = null;
@@ -84,6 +86,9 @@ export class VRRenderer {
     // 2. Pass 2: Screen-Space Distortion Shader Program (with LINK_STATUS check)
     this.programDistort = this.createProgram(gl, vsSource, fsDistortionPassSource, 'Pass 2 Distortion Program');
 
+    // 3. Pass 1 UI Overlay Shader Program
+    this.programUI = this.createProgram(gl, vsSource, fsUIOverlaySource, 'Pass 1 UI Overlay Program');
+
     // Quad geometry
     this.posBuffer = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, this.posBuffer);
@@ -100,6 +105,14 @@ export class VRRenderer {
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([10, 15, 25, 255]));
+
+    // UI Overlay Texture
+    this.uiTex = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, this.uiTex);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
   }
 
   ensureEyeFbo(width, height) {
@@ -219,7 +232,7 @@ export class VRRenderer {
   }
 
   // Stereo VR 2-Pass Mode: Renders Ideal Left/Right Scene -> Cardboard Screen-Space Barrel Distortion Pass
-  renderStereoVR(width, height, videoProfile, viewerProfile, headCamRotMat3) {
+  renderStereoVR(width, height, videoProfile, viewerProfile, headCamRotMat3, uiCanvas = null) {
     const gl = this.gl;
     if (!gl || !this.programScene || !this.programDistort) return;
 
@@ -301,6 +314,32 @@ export class VRRenderer {
     const rVirtTan = eyeGeom.rightEye.virtTanBounds;
     gl.uniform4f(sLocs.uVirtTanBounds, rVirtTan[0], rVirtTan[1], rVirtTan[2], rVirtTan[3]);
     gl.drawArrays(gl.TRIANGLES, 0, 6);
+
+    // Composite Ideal Dual-Eye UI Canvas into eyeFbo (Pass 1 UI Overlay)
+    if (uiCanvas && this.programUI) {
+      gl.viewport(0, 0, width, height);
+      gl.scissor(0, 0, width, height);
+      gl.bindTexture(gl.TEXTURE_2D, this.uiTex);
+      gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, uiCanvas);
+
+      gl.useProgram(this.programUI);
+      const uiPosLoc = gl.getAttribLocation(this.programUI, 'aPosition');
+      const uiTexLoc = gl.getUniformLocation(this.programUI, 'uUITexture');
+
+      gl.enableVertexAttribArray(uiPosLoc);
+      gl.bindBuffer(gl.ARRAY_BUFFER, this.posBuffer);
+      gl.vertexAttribPointer(uiPosLoc, 2, gl.FLOAT, false, 0, 0);
+
+      gl.activeTexture(gl.TEXTURE0);
+      gl.bindTexture(gl.TEXTURE_2D, this.uiTex);
+      gl.uniform1i(uiTexLoc, 0);
+
+      gl.enable(gl.BLEND);
+      gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+      gl.drawArrays(gl.TRIANGLES, 0, 6);
+      gl.disable(gl.BLEND);
+    }
 
     // ==========================================
     // Pass 2: Screen-Space Distortion Pass to Display Screen

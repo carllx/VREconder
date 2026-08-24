@@ -190,3 +190,13 @@ export const fsDistortionPassSource = `
     gl_FragColor = texture2D(uEyeTexture, vec2(uFbo, vEye));
   }
 `;
+
+// Pass 1: UI Texture Alpha Composite Shader (Overlays Ideal Dual-Eye UI onto eyeFbo)
+export const fsUIOverlaySource = `
+  precision highp float;
+  varying vec2 vUv;
+  uniform sampler2D uUITexture;
+  void main() {
+    gl_FragColor = texture2D(uUITexture, vUv);
+  }
+`;

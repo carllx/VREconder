@@ -5,26 +5,46 @@
 import { state } from '../core/state.js';
 import { qCameraInv } from '../core/orientation.js';
 import { getActiveInteractiveItems } from './patterns.js';
+import { deriveCardboardEyeGeometry } from '../core/projection-profile.js';
+import { activeScreenProfile } from '../core/screen-profile.js';
 
-const FOV_RAD = 1.65;
-const TAN_HALF_FOV = Math.tan(FOV_RAD * 0.5);
+export function projectWorldDirToEye(dirWorld, eyeIndex, eyeGeom, halfW, height, depth = null) {
+  if (!dirWorld || !eyeGeom) return null;
+  const d = (typeof depth === 'number' && depth > 0) ? depth : (state.menuVirtualDepth || 2.0);
+  const eye = (eyeIndex === 0) ? eyeGeom.leftEye : eyeGeom.rightEye;
+  const [tanL, tanR, tanB, tanT] = eye.virtTanBounds;
 
-export function projectWorldDirToEye(dirWorld, eyeIndex, halfW, height) {
-  if (!dirWorld) return null;
-  const aspect = halfW / height;
-  const dCam = qCameraInv.transformVector(dirWorld);
-  if (dCam[2] >= -0.01) return null;
+  // 1. World point at virtual depth D
+  const pWorld = [dirWorld[0] * d, dirWorld[1] * d, dirWorld[2] * d];
 
-  const zDepth = -dCam[2];
-  const ndcX = dCam[0] / (zDepth * TAN_HALF_FOV * aspect);
-  const ndcY = dCam[1] / (zDepth * TAN_HALF_FOV);
+  // 2. Head / Camera space via qCameraInv
+  const pHead = qCameraInv.transformVector(pWorld);
 
-  if (Math.abs(ndcX) > 1.35 || Math.abs(ndcY) > 1.35) return null;
+  // 3. Subtract eye offset from head: P_eye = P_head - eyeFromHeadMeters
+  const eyeOffset = eye.eyeFromHeadMeters || [0, 0, 0];
+  const pEye = [
+    pHead[0] - eyeOffset[0],
+    pHead[1] - eyeOffset[1],
+    pHead[2] - eyeOffset[2]
+  ];
 
-  const stereoDisparityPx = (eyeIndex === 0 ? +5.5 : -5.5);
-  const px = (eyeIndex * halfW) + (ndcX * 0.5 + 0.5) * halfW + stereoDisparityPx;
-  const py = (1.0 - (ndcY * 0.5 + 0.5)) * height;
-  return { x: px, y: py, ndcX, ndcY, zDepth };
+  if (pEye[2] >= -0.01) return null;
+  const zDepth = -pEye[2];
+
+  // 4. Ray tangents
+  const tanX = pEye[0] / zDepth;
+  const tanY = pEye[1] / zDepth;
+
+  // 5. Asymmetric viewport mapping [0, 1]
+  const u = (tanX + tanL) / (tanL + tanR);
+  const v = (tanY + tanB) / (tanB + tanT);
+
+  if (u < -0.35 || u > 1.35 || v < -0.35 || v > 1.35) return null;
+
+  const px = (eyeIndex * halfW) + u * halfW;
+  const py = (1.0 - v) * height;
+
+  return { x: px, y: py, u, v, zDepth, tanSpanX: tanL + tanR };
 }
 
 export function roundRect(ctx, x, y, width, height, radius, fill, stroke) {
@@ -44,16 +64,28 @@ export function roundRect(ctx, x, y, width, height, radius, fill, stroke) {
   if (stroke) ctx.stroke();
 }
 
-export function renderStereoUI(uiCtx, gazeEngine, commandModel, videoElement, now, width, height) {
+export function renderStereoUI(uiCtx, gazeEngine, commandModel, videoElement, now, width, height, viewerProfile = null) {
   if (!uiCtx) return;
   uiCtx.clearRect(0, 0, width, height);
   if (!state.inVR) return;
 
+  const eyeGeom = deriveCardboardEyeGeometry(activeScreenProfile, viewerProfile);
   const halfW = Math.floor(width / 2);
+  const virtualDepth = state.menuVirtualDepth || 2.0;
+
   for (let eye = 0; eye < 2; eye++) {
     const eyeOffsetX = eye * halfW;
-    const eyeCenterX = eyeOffsetX + halfW * 0.5;
-    const eyeCenterY = height * 0.5;
+    const eyeData = (eye === 0) ? eyeGeom.leftEye : eyeGeom.rightEye;
+    const [tanL, tanR, tanB, tanT] = eyeData.virtTanBounds;
+    const eyeOffset = eyeData.eyeFromHeadMeters || [0, 0, 0];
+
+    // Compute optical reticle/head center in ideal eye coordinates for depth virtualDepth
+    const centerTanX = -eyeOffset[0] / virtualDepth;
+    const centerTanY = -eyeOffset[1] / virtualDepth;
+    const centerU = (centerTanX + tanL) / (tanL + tanR);
+    const centerV = (centerTanY + tanB) / (tanB + tanT);
+    const eyeCenterX = eyeOffsetX + centerU * halfW;
+    const eyeCenterY = (1.0 - centerV) * height;
 
     uiCtx.save();
     uiCtx.beginPath();
@@ -152,16 +184,17 @@ export function renderStereoUI(uiCtx, gazeEngine, commandModel, videoElement, no
       continue;
     }
 
-    // 3. Draw Interactive Circular Icon Nodes (Only in non-calibration general playback)
+    // 3. Draw Interactive Circular Icon Nodes (Derived from 3D world geometry)
     const items = getActiveInteractiveItems(commandModel, videoElement);
     items.forEach(item => {
       if (!item.dirWorld) return;
-      const p = projectWorldDirToEye(item.dirWorld, eye, halfW, height);
+      const p = projectWorldDirToEye(item.dirWorld, eye, eyeGeom, halfW, height, virtualDepth);
       if (!p) return;
 
       const isHovered = (gazeEngine.currentHoveredItem && gazeEngine.currentHoveredItem.id === item.id);
       const isActivated = (gazeEngine.activatedItemId === item.id && (now - gazeEngine.activationFlashTime < 300));
-      const btnR = Math.max(20, (item.radiusDeg * 4.6) * (halfW / 400));
+      const radRad = (item.radiusDeg || 4.2) * (Math.PI / 180);
+      const btnR = Math.max(16, (Math.tan(radRad) / p.tanSpanX) * halfW);
 
       uiCtx.save();
       uiCtx.beginPath();
