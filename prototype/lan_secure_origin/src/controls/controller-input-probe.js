@@ -168,6 +168,25 @@ export class ControllerInputProbe {
     this.activeInputs.lastMediaSessionAction = info;
     this.recordEvent('MEDIA_SESSION_ACTION', info);
     showFeedbackToast(`🎵 媒体动作: ${action}`);
+
+    // Minimal SC-B03 MediaSession Adapter (Issue #15 Phase 2)
+    if (!this.commandModel) return;
+
+    if (action === 'previoustrack') {
+      this.commandModel.previous();
+    } else if (action === 'nexttrack') {
+      this.commandModel.next();
+    } else if (action === 'play') {
+      const video = this.commandModel.media ? this.commandModel.media.video : null;
+      if (video && video.paused === true) {
+        this.commandModel.playPause();
+      }
+    } else if (action === 'pause') {
+      const video = this.commandModel.media ? this.commandModel.media.video : null;
+      if (video && video.paused === false) {
+        this.commandModel.playPause();
+      }
+    }
   }
 
   recordEvent(type, data) {
