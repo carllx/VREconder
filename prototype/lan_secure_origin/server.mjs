@@ -3,8 +3,9 @@ import https from 'node:https';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
-import { execSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { getLocalIPs, ensureCertificates } from './src/server/cert-helper.mjs';
+import { streamVideo } from './src/media/video-streamer.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -57,132 +58,6 @@ function scanRealVRVideos() {
   cachedVideos = results;
   console.log(`[Media] Scanned and cached ${cachedVideos.length} VR videos from ${MEDIA_ROOT}`);
   return results;
-}
-
-// Collect all local IPv4 addresses
-function getLocalIPs() {
-  const interfaces = os.networkInterfaces();
-  const ips = [];
-  for (const name of Object.keys(interfaces)) {
-    for (const net of interfaces[name]) {
-      if (net.family === 'IPv4' && !net.internal) {
-        ips.push(net.address);
-      }
-    }
-  }
-  return ips;
-}
-
-// Generate Certificates if not present
-function ensureCertificates() {
-  if (!fs.existsSync(CERTS_DIR)) {
-    fs.mkdirSync(CERTS_DIR, { recursive: true });
-  }
-
-  const caKey = path.join(CERTS_DIR, 'ca.key');
-  const caCrt = path.join(CERTS_DIR, 'ca.crt');
-  const serverKey = path.join(CERTS_DIR, 'server.key');
-  const serverCsr = path.join(CERTS_DIR, 'server.csr');
-  const serverCrt = path.join(CERTS_DIR, 'server.crt');
-  const extCnf = path.join(CERTS_DIR, 'ext.cnf');
-
-  if (fs.existsSync(caCrt) && fs.existsSync(serverCrt) && fs.existsSync(serverKey)) {
-    console.log('[Cert] Using existing certificates in', CERTS_DIR);
-    return;
-  }
-
-  console.log('[Cert] Generating local Root CA and Server Certificate with OpenSSL...');
-  const localIps = getLocalIPs();
-  const hostname = os.hostname();
-
-  // 1. Root CA
-  if (!fs.existsSync(caKey) || !fs.existsSync(caCrt)) {
-    execSync(`openssl req -x509 -newkey rsa:2048 -nodes -keyout "${caKey}" -out "${caCrt}" -days 3650 -subj "/CN=VREconder LAN Root CA/O=VREconder/OU=Dev"`, { stdio: 'inherit' });
-  }
-
-  // 2. Server SAN config
-  let sanList = ['IP.1 = 127.0.0.1', 'DNS.1 = localhost', `DNS.2 = ${hostname}`, `DNS.3 = ${hostname}.local`];
-  localIps.forEach((ip, idx) => {
-    sanList.push(`IP.${idx + 2} = ${ip}`);
-  });
-
-  const extContent = `
-authorityKeyIdentifier=keyid,issuer
-basicConstraints=CA:FALSE
-keyUsage = digitalSignature, nonRepudiation, keyEncipherment, dataEncipherment
-subjectAltName = @alt_names
-
-[alt_names]
-${sanList.join('\n')}
-`;
-  fs.writeFileSync(extCnf, extContent.trim(), 'utf8');
-
-  // 3. Server CSR & Cert
-  execSync(`openssl req -newkey rsa:2048 -nodes -keyout "${serverKey}" -out "${serverCsr}" -subj "/CN=VREconder Server/O=VREconder/OU=Dev"`, { stdio: 'inherit' });
-  execSync(`openssl x509 -req -in "${serverCsr}" -CA "${caCrt}" -CAkey "${caKey}" -CAcreateserial -out "${serverCrt}" -days 825 -extfile "${extCnf}"`, { stdio: 'inherit' });
-
-  console.log('[Cert] Certificates generated successfully with SAN:\n' + sanList.join('\n'));
-}
-
-// Range Request handler for MP4
-function streamVideo(req, res, filePath) {
-  if (!fs.existsSync(filePath)) {
-    res.writeHead(404, { 'Content-Type': 'text/plain' });
-    res.end('Video file not found: ' + filePath);
-    return;
-  }
-
-  const stat = fs.statSync(filePath);
-  const fileSize = stat.size;
-  const range = req.headers.range;
-
-  if (req.method === 'HEAD') {
-    res.writeHead(200, {
-      'Content-Length': fileSize,
-      'Content-Type': 'video/mp4',
-      'Accept-Ranges': 'bytes',
-      'Access-Control-Allow-Origin': '*'
-    });
-    res.end();
-    return;
-  }
-
-  if (range) {
-    const parts = range.replace(/bytes=/, "").split("-");
-    const start = parseInt(parts[0], 10);
-    const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
-
-    if (start >= fileSize || end >= fileSize) {
-      res.writeHead(416, {
-        'Content-Range': `bytes */${fileSize}`,
-        'Content-Type': 'video/mp4'
-      });
-      res.end();
-      return;
-    }
-
-    const chunksize = (end - start) + 1;
-    const file = fs.createReadStream(filePath, { start, end });
-    const head = {
-      'Content-Range': `bytes ${start}-${end}/${fileSize}`,
-      'Accept-Ranges': 'bytes',
-      'Content-Length': chunksize,
-      'Content-Type': 'video/mp4',
-      'Access-Control-Allow-Origin': '*'
-    };
-
-    res.writeHead(206, head);
-    file.pipe(res);
-  } else {
-    const head = {
-      'Content-Length': fileSize,
-      'Content-Type': 'video/mp4',
-      'Accept-Ranges': 'bytes',
-      'Access-Control-Allow-Origin': '*'
-    };
-    res.writeHead(200, head);
-    fs.createReadStream(filePath).pipe(res);
-  }
 }
 
 let latestTelemetry = null;
@@ -331,11 +206,63 @@ function handleRequest(req, res, isHttps) {
   const VIDEO_PROFILES_FILE = path.join(__dirname, 'prototype_video_profiles.json');
   const VIEWER_PROFILE_FILE = path.join(__dirname, 'prototype_viewer_profile.json');
 
+  function normalizeServerVideoProfile(raw, defaultMediaId = '') {
+    if (!raw) return null;
+    const mediaId = raw.mediaId || defaultMediaId;
+    let projection = raw.projection || 'unknown';
+    let horizontalCoverageDeg = (typeof raw.horizontalCoverageDeg === 'number')
+      ? raw.horizontalCoverageDeg
+      : ((typeof raw.fovHorizontalDeg === 'number') ? raw.fovHorizontalDeg : 180);
+    let verticalCoverageDeg = (typeof raw.verticalCoverageDeg === 'number')
+      ? raw.verticalCoverageDeg
+      : ((typeof raw.fovVerticalDeg === 'number') ? raw.fovVerticalDeg : 180);
+
+    if (projection === 'equirectangular-180') {
+      projection = 'equirectangular';
+      horizontalCoverageDeg = 180;
+      verticalCoverageDeg = 180;
+    } else if (projection === 'equirectangular-360') {
+      projection = 'equirectangular';
+      horizontalCoverageDeg = 360;
+      verticalCoverageDeg = 180;
+    } else if (projection !== 'equirectangular' && projection !== 'flat') {
+      projection = 'unknown';
+    }
+
+    let stereoMode = raw.stereoMode || 'unknown';
+    if (!['left-right', 'top-bottom', 'mono', 'unknown'].includes(stereoMode)) stereoMode = 'unknown';
+
+    let eyeOrder = raw.eyeOrder || 'unknown';
+    if (eyeOrder === 'left-first') eyeOrder = 'left-right';
+    else if (eyeOrder === 'right-first') eyeOrder = 'right-left';
+    if (!['left-right', 'right-left', 'unknown'].includes(eyeOrder)) eyeOrder = 'unknown';
+
+    return {
+      mediaId,
+      name: raw.name || '',
+      projection,
+      horizontalCoverageDeg,
+      verticalCoverageDeg,
+      stereoMode,
+      eyeOrder,
+      crop: raw.crop || { top: 0, bottom: 0, left: 0, right: 0 },
+      pose: raw.pose || { yawDeg: 0, pitchDeg: 0, rollDeg: 0 },
+      confidence: raw.confidence || 'unverified',
+      notes: raw.notes || 'Awaiting Stage A calibration in Flat Diagnostic View',
+      updatedAt: raw.updatedAt || new Date().toISOString()
+    };
+  }
+
   if ((pathname === '/api/profiles' || pathname === '/api/profiles/videos') && req.method === 'GET') {
     let videoProfiles = {};
     let viewerProfile = null;
     try {
-      if (fs.existsSync(VIDEO_PROFILES_FILE)) videoProfiles = JSON.parse(fs.readFileSync(VIDEO_PROFILES_FILE, 'utf8'));
+      if (fs.existsSync(VIDEO_PROFILES_FILE)) {
+        const rawMap = JSON.parse(fs.readFileSync(VIDEO_PROFILES_FILE, 'utf8'));
+        for (const [k, v] of Object.entries(rawMap)) {
+          videoProfiles[k] = normalizeServerVideoProfile(v, k);
+        }
+      }
       if (fs.existsSync(VIEWER_PROFILE_FILE)) {
         viewerProfile = JSON.parse(fs.readFileSync(VIEWER_PROFILE_FILE, 'utf8'));
         if (viewerProfile && (viewerProfile.confidence === 'working-user-tuned' || viewerProfile.viewerProfileId === 'viewer:my_profile')) {
@@ -357,12 +284,18 @@ function handleRequest(req, res, isHttps) {
         const profile = JSON.parse(body);
         let existing = {};
         if (fs.existsSync(VIDEO_PROFILES_FILE)) {
-          try { existing = JSON.parse(fs.readFileSync(VIDEO_PROFILES_FILE, 'utf8')); } catch (e) {}
+          try {
+            const rawMap = JSON.parse(fs.readFileSync(VIDEO_PROFILES_FILE, 'utf8'));
+            for (const [k, v] of Object.entries(rawMap)) {
+              existing[k] = normalizeServerVideoProfile(v, k);
+            }
+          } catch (e) {}
         }
         if (profile && profile.mediaId) {
-          existing[profile.mediaId] = profile;
+          const canonical = normalizeServerVideoProfile(profile, profile.mediaId);
+          existing[profile.mediaId] = canonical;
           fs.writeFileSync(VIDEO_PROFILES_FILE, JSON.stringify(existing, null, 2), 'utf8');
-          console.log(`[Profile] Saved Projection Profile for ${profile.mediaId} (${profile.projection})`);
+          console.log(`[Profile] Saved Projection Profile for ${profile.mediaId} (${canonical.projection})`);
         }
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ status: 'ok', saved: true }));
@@ -542,7 +475,7 @@ function renderOnboardingPage(res) {
 }
 
 // Start Servers
-ensureCertificates();
+ensureCertificates(CERTS_DIR);
 scanRealVRVideos();
 
 const localIps = getLocalIPs();

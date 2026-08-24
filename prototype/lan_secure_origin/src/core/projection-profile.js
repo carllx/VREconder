@@ -16,10 +16,8 @@ export function createDefaultVideoProfile(mediaId, name = '') {
     mediaId: mediaId,
     name: name,
     projection: 'unknown',            // 'unknown' | 'equirectangular' | 'flat'
-    horizontalCoverageDeg: 180,       // 180 | 360
-    verticalCoverageDeg: 180,         // 180 | 90
-    fovHorizontalDeg: 180,            // alias for backward compatibility
-    fovVerticalDeg: 180,              // alias for backward compatibility
+    horizontalCoverageDeg: 180,       // number (e.g. 180 | 360)
+    verticalCoverageDeg: 180,         // number (e.g. 180 | 90)
     stereoMode: 'unknown',            // 'unknown' | 'left-right' | 'top-bottom' | 'mono'
     eyeOrder: 'unknown',              // 'unknown' | 'left-right' | 'right-left'
     crop: { top: 0, bottom: 0, left: 0, right: 0 },
@@ -27,6 +25,63 @@ export function createDefaultVideoProfile(mediaId, name = '') {
     confidence: 'unverified',
     notes: 'Awaiting Stage A calibration in Flat Diagnostic View',
     updatedAt: new Date().toISOString()
+  };
+}
+
+export function normalizeVideoProfile(raw, defaultMediaId = '', defaultName = '') {
+  if (!raw) return createDefaultVideoProfile(defaultMediaId, defaultName);
+
+  const mediaId = raw.mediaId || defaultMediaId;
+  const name = raw.name || defaultName || '';
+
+  // Canonical projection mapping
+  let projection = raw.projection || 'unknown';
+  let horizontalCoverageDeg = (typeof raw.horizontalCoverageDeg === 'number')
+    ? raw.horizontalCoverageDeg
+    : ((typeof raw.fovHorizontalDeg === 'number') ? raw.fovHorizontalDeg : 180);
+  let verticalCoverageDeg = (typeof raw.verticalCoverageDeg === 'number')
+    ? raw.verticalCoverageDeg
+    : ((typeof raw.fovVerticalDeg === 'number') ? raw.fovVerticalDeg : 180);
+
+  if (projection === 'equirectangular-180') {
+    projection = 'equirectangular';
+    horizontalCoverageDeg = 180;
+    verticalCoverageDeg = 180;
+  } else if (projection === 'equirectangular-360') {
+    projection = 'equirectangular';
+    horizontalCoverageDeg = 360;
+    verticalCoverageDeg = 180;
+  } else if (projection !== 'equirectangular' && projection !== 'flat') {
+    projection = 'unknown';
+  }
+
+  // Canonical stereoMode mapping
+  let stereoMode = raw.stereoMode || 'unknown';
+  if (!['left-right', 'top-bottom', 'mono', 'unknown'].includes(stereoMode)) {
+    stereoMode = 'unknown';
+  }
+
+  // Canonical eyeOrder mapping
+  let eyeOrder = raw.eyeOrder || 'unknown';
+  if (eyeOrder === 'left-first') eyeOrder = 'left-right';
+  else if (eyeOrder === 'right-first') eyeOrder = 'right-left';
+  if (!['left-right', 'right-left', 'unknown'].includes(eyeOrder)) {
+    eyeOrder = 'unknown';
+  }
+
+  return {
+    mediaId,
+    name,
+    projection,
+    horizontalCoverageDeg,
+    verticalCoverageDeg,
+    stereoMode,
+    eyeOrder,
+    crop: raw.crop || { top: 0, bottom: 0, left: 0, right: 0 },
+    pose: raw.pose || { yawDeg: 0, pitchDeg: 0, rollDeg: 0 },
+    confidence: raw.confidence || 'unverified',
+    notes: raw.notes || 'Awaiting Stage A calibration in Flat Diagnostic View',
+    updatedAt: raw.updatedAt || new Date().toISOString()
   };
 }
 
@@ -61,10 +116,8 @@ export function createDefaultViewerProfile(profileId = 'cardboard:reference_50de
       distortion: { model: 'uncalibrated', k1: 0.0, k2: 0.0 }
     }
   };
-  // Aliases for backwards compatibility
-  presets['cardboard:v2_2015'] = presets['cardboard:reference_50deg'];
 
-  if (profileId === 'viewer:my_profile' || profileId === 'custom:subjective_working_candidate' || profileId === 'custom:calibrated') {
+  if (profileId === 'viewer:my_profile') {
     if (typeof profileStorage !== 'undefined' && profileStorage.savedMyViewerProfile) {
       return JSON.parse(JSON.stringify(profileStorage.savedMyViewerProfile));
     }
@@ -199,7 +252,13 @@ export class ProfileStorage {
         if (this.savedMyViewerProfile) this.savedMyViewerProfile.isCalibrated = false;
       }
       const vStr = localStorage.getItem('vreconder_video_profiles');
-      if (vStr) this.videoProfiles = JSON.parse(vStr);
+      if (vStr) {
+        const rawMap = JSON.parse(vStr);
+        this.videoProfiles = {};
+        for (const [k, v] of Object.entries(rawMap)) {
+          this.videoProfiles[k] = normalizeVideoProfile(v, k);
+        }
+      }
       const hStr = localStorage.getItem('vreconder_viewer_profile');
       if (hStr) {
         this.activeViewerProfile = JSON.parse(hStr);
@@ -231,7 +290,11 @@ export class ProfileStorage {
       const res = await fetch(url);
       if (res.ok) {
         const data = await res.json();
-        if (data.videoProfiles) this.videoProfiles = { ...this.videoProfiles, ...data.videoProfiles };
+        if (data.videoProfiles) {
+          for (const [k, v] of Object.entries(data.videoProfiles)) {
+            this.videoProfiles[k] = normalizeVideoProfile(v, k);
+          }
+        }
         if (data.viewerProfile && (data.viewerProfile.viewerProfileId === 'viewer:my_profile' || data.viewerProfile.confidence === 'working-user-tuned')) {
           data.viewerProfile.isCalibrated = false;
           data.viewerProfile.source = 'User-tuned Working Profile (Unvalidated)';
@@ -248,6 +311,8 @@ export class ProfileStorage {
   getVideoProfile(mediaId, name = '') {
     if (!this.videoProfiles[mediaId]) {
       this.videoProfiles[mediaId] = createDefaultVideoProfile(mediaId, name);
+    } else {
+      this.videoProfiles[mediaId] = normalizeVideoProfile(this.videoProfiles[mediaId], mediaId, name);
     }
     return this.videoProfiles[mediaId];
   }
@@ -258,16 +323,17 @@ export class ProfileStorage {
       console.warn('[ProfileStorage] Cannot save unknown mapping without explicit user selection.');
       return false;
     }
-    profile.confidence = 'user-confirmed';
-    profile.updatedAt = new Date().toISOString();
-    this.videoProfiles[profile.mediaId] = profile;
+    const canonical = normalizeVideoProfile(profile);
+    canonical.confidence = 'user-confirmed';
+    canonical.updatedAt = new Date().toISOString();
+    this.videoProfiles[canonical.mediaId] = canonical;
     this.saveToLocalStorage();
 
     try {
       await fetch('/api/profiles/video', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(profile)
+        body: JSON.stringify(canonical)
       });
     } catch (e) {}
     return true;

@@ -38,9 +38,12 @@ export function initEventSource() {
 export async function loadVideoList() {
   try {
     const res = await fetch('/api/videos');
-    const list = await res.json();
-    if (Array.isArray(list)) {
-      videoList = list;
+    const data = await res.json();
+    if (data && Array.isArray(data.videos)) {
+      videoList = data.videos;
+      renderVideoSelect();
+    } else if (Array.isArray(data)) {
+      videoList = data;
       renderVideoSelect();
     }
   } catch (e) {}
@@ -186,23 +189,6 @@ export function onViewerPresetSelect(presetId) {
     } else {
       alert('⚠️ My Viewer Profile has not been saved yet.\nPlease tune sliders and click Save My Viewer Profile.');
     }
-  } else if (presetId === 'subjective:working_candidate') {
-    document.getElementById('rngK1').value = 0.145;
-    document.getElementById('valK1').textContent = '0.145';
-    document.getElementById('rngK2').value = 0.005;
-    document.getElementById('valK2').textContent = '0.005';
-    document.getElementById('rngFov').value = 65.0;
-    document.getElementById('valFov').textContent = '65.0°';
-    document.getElementById('rngScreenToLens').value = 42.6;
-    document.getElementById('valScreenToLens').textContent = '42.6';
-    document.getElementById('rngInterLens').value = 55.0;
-    document.getElementById('valInterLens').textContent = '55.0';
-    document.getElementById('rngTrayToLens').value = 35.0;
-    document.getElementById('valTrayToLens').textContent = '35.0';
-    sendControl({
-      action: 'set_viewer_params',
-      k1: 0.145, k2: 0.005, maxFovDeg: 65, screenToLensMm: 42.6, interLensMm: 55.0, trayToLensMm: 35.0
-    });
   } else if (presetId === 'cardboard:reference_50deg') {
     document.getElementById('rngK1').value = 0.336;
     document.getElementById('valK1').textContent = '0.336';
@@ -231,7 +217,7 @@ export function onVideoMappingChange() {
       projection: proj,
       stereoMode: stereo,
       horizontalCoverageDeg: fov,
-      fovHorizontalDeg: fov,
+      verticalCoverageDeg: 180,
       eyeOrder: eye
     }
   });
@@ -392,7 +378,7 @@ export function updateTelemetryUI(data) {
     }
     const selCov = document.getElementById('selCoverageFov');
     if (selCov) {
-      const hCov = vp.horizontalCoverageDeg || vp.fovHorizontalDeg || 180;
+      const hCov = (typeof vp.horizontalCoverageDeg === 'number') ? vp.horizontalCoverageDeg : 180;
       selCov.value = (hCov > 270) ? '360' : '180';
     }
   }

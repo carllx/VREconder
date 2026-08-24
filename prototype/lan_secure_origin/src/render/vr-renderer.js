@@ -184,16 +184,16 @@ export class VRRenderer {
     gl.uniform1i(locs.uVideoTexture, 0);
 
     const vp = videoProfile || {};
-    const hDeg = (typeof vp.horizontalCoverageDeg === 'number') ? vp.horizontalCoverageDeg : (vp.fovHorizontalDeg || 180);
-    const vDeg = (typeof vp.verticalCoverageDeg === 'number') ? vp.verticalCoverageDeg : (vp.fovVerticalDeg || 180);
+    const hDeg = (typeof vp.horizontalCoverageDeg === 'number') ? vp.horizontalCoverageDeg : 180;
+    const vDeg = (typeof vp.verticalCoverageDeg === 'number') ? vp.verticalCoverageDeg : 180;
 
     let projMode = 0;
     if (vp.projection === 'flat') projMode = 2;
     else if (vp.projection === 'unknown') projMode = 3;
-    else projMode = (hDeg > 270 || vp.projection === 'equirectangular-360') ? 1 : 0;
+    else projMode = (hDeg > 270) ? 1 : 0;
 
     const stereoLayout = vp.stereoMode === 'top-bottom' ? 1 : (vp.stereoMode === 'mono' ? 2 : 0);
-    const eyeSwap = (vp.eyeOrder === 'right-left' || vp.eyeOrder === 'right-first') ? 1 : 0;
+    const eyeSwap = (vp.eyeOrder === 'right-left') ? 1 : 0;
     const covH = (hDeg * Math.PI) / 180;
     const covV = (vDeg * Math.PI) / 180;
     const crop = vp.crop || { left: 0, right: 0, top: 0, bottom: 0 };
@@ -258,16 +258,16 @@ export class VRRenderer {
     gl.bindTexture(gl.TEXTURE_2D, this.videoTex);
     gl.uniform1i(sLocs.uVideoTexture, 0);
 
-    const vhDeg = (typeof vp.horizontalCoverageDeg === 'number') ? vp.horizontalCoverageDeg : (vp.fovHorizontalDeg || 180);
-    const vvDeg = (typeof vp.verticalCoverageDeg === 'number') ? vp.verticalCoverageDeg : (vp.fovVerticalDeg || 180);
+    const vhDeg = (typeof vp.horizontalCoverageDeg === 'number') ? vp.horizontalCoverageDeg : 180;
+    const vvDeg = (typeof vp.verticalCoverageDeg === 'number') ? vp.verticalCoverageDeg : 180;
 
     let stereoProjMode = 0;
     if (vp.projection === 'flat') stereoProjMode = 2;
     else if (vp.projection === 'unknown') stereoProjMode = 3;
-    else stereoProjMode = (vhDeg > 270 || vp.projection === 'equirectangular-360') ? 1 : 0;
+    else stereoProjMode = (vhDeg > 270) ? 1 : 0;
 
     const sLayout = vp.stereoMode === 'top-bottom' ? 1 : (vp.stereoMode === 'mono' ? 2 : 0);
-    const sEyeSwap = (vp.eyeOrder === 'right-left' || vp.eyeOrder === 'right-first') ? 1 : 0;
+    const sEyeSwap = (vp.eyeOrder === 'right-left') ? 1 : 0;
     const sCovH = (vhDeg * Math.PI) / 180;
     const sCovV = (vvDeg * Math.PI) / 180;
     const sCrop = vp.crop || { left: 0, right: 0, top: 0, bottom: 0 };

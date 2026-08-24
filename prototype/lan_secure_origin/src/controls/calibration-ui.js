@@ -86,16 +86,13 @@ export class CalibrationUI {
       if (m.stereoMode) this.activeVideoProfile.stereoMode = m.stereoMode;
       if (typeof m.horizontalCoverageDeg === 'number') {
         this.activeVideoProfile.horizontalCoverageDeg = m.horizontalCoverageDeg;
-        this.activeVideoProfile.fovHorizontalDeg = m.horizontalCoverageDeg;
-      } else if (typeof m.fovHorizontalDeg === 'number') {
-        this.activeVideoProfile.horizontalCoverageDeg = m.fovHorizontalDeg;
-        this.activeVideoProfile.fovHorizontalDeg = m.fovHorizontalDeg;
       }
       if (typeof m.verticalCoverageDeg === 'number') {
         this.activeVideoProfile.verticalCoverageDeg = m.verticalCoverageDeg;
-        this.activeVideoProfile.fovVerticalDeg = m.verticalCoverageDeg;
       }
       if (m.eyeOrder) this.activeVideoProfile.eyeOrder = m.eyeOrder;
+      delete this.activeVideoProfile.fovHorizontalDeg;
+      delete this.activeVideoProfile.fovVerticalDeg;
       if (this.onProfileChanged) this.onProfileChanged(this.activeVideoProfile, this.activeViewerProfile);
       showFeedbackToast(`Mapping: ${this.activeVideoProfile.projection} (${this.activeVideoProfile.stereoMode})`);
       logAction('Set Video Mapping from PC', m);
