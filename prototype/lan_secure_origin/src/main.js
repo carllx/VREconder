@@ -132,21 +132,32 @@ function showFloatingBar() {
   }, 4000);
 }
 window.addEventListener('touchstart', showFloatingBar, { passive: true });
-window.addEventListener('click', showFloatingBar);
+function localArmAndEnterVR() {
+  if (btnEnterVR) {
+    btnEnterVR.style.background = '#10b981';
+    const span = btnEnterVR.querySelector('span');
+    if (span) span.textContent = '🚀 Entering VR...';
+  }
+  const topBtn = document.getElementById('btnEnterVRTop');
+  if (topBtn) {
+    topBtn.style.background = '#10b981';
+    const span = topBtn.querySelector('span');
+    if (span) span.textContent = '🚀 Entering VR...';
+  }
 
-function enterVRMode() {
-  btnEnterVR.style.background = '#10b981';
-  const span = btnEnterVR.querySelector('span');
-  if (span) span.textContent = '🚀 Entering VR...';
-
-  state.isArmed = true;
-  updateScreenOrientation();
-
+  // Genuinely request motion permission on local iPhone user gesture
   if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
     DeviceOrientationEvent.requestPermission().then((perm) => {
       state.motionPermission = perm;
+      state.isArmed = (perm === 'granted');
       updateScreenOrientation();
-    }).catch(() => {});
+    }).catch(() => {
+      state.isArmed = false;
+    });
+  } else {
+    // Non-iOS Safari environment
+    state.isArmed = true;
+    updateScreenOrientation();
   }
 
   requestWakeLock();
@@ -157,6 +168,15 @@ function enterVRMode() {
     video.muted = true;
     video.play().catch(e2 => console.log('Muted play error:', e2));
   });
+
+  enterVRMode(true);
+}
+
+function enterVRMode(fromLocalGesture = false) {
+  if (!state.isArmed && !fromLocalGesture) {
+    console.warn('[VR] Remote enterVRMode ignored: Device not armed by local user gesture.');
+    return;
+  }
 
   // If entering VR from Stage A, promote to Stage B (Synthetic Grid stereo VR)
   if (state.calibrationStage === 'A') {
@@ -190,19 +210,19 @@ function exitVRMode() {
 
 // Event Listeners
 if (btnEnterVR) {
-  btnEnterVR.addEventListener('click', enterVRMode);
+  btnEnterVR.addEventListener('click', localArmAndEnterVR);
   btnEnterVR.addEventListener('touchend', (e) => {
     e.preventDefault();
-    enterVRMode();
+    localArmAndEnterVR();
   });
 }
 
 const btnEnterVRTop = document.getElementById('btnEnterVRTop');
 if (btnEnterVRTop) {
-  btnEnterVRTop.addEventListener('click', enterVRMode);
+  btnEnterVRTop.addEventListener('click', localArmAndEnterVR);
   btnEnterVRTop.addEventListener('touchend', (e) => {
     e.preventDefault();
-    enterVRMode();
+    localArmAndEnterVR();
   });
 }
 

@@ -72,6 +72,20 @@ export function createDefaultViewerProfile(profileId = 'cardboard:v2_2015') {
       maxFovAngles: { outerDeg: 40.0, innerDeg: 40.0, upperDeg: 40.0, lowerDeg: 40.0 },
       distortion: { model: 'cardboard-radial-polynomial', k1: 0.441, k2: 0.156 }
     },
+    'custom:subjective_working_candidate': {
+      viewerProfileId: 'custom:subjective_working_candidate',
+      name: 'Subjective Working Candidate (Unverified Custom Preset)',
+      source: 'User Subjective Candidate — Not Physical Ground Truth',
+      confidence: 'unverified-custom',
+      isCalibrated: false,
+      lensCorrectionEnabled: true,
+      screenToLensDistance: 0.0426, // 42.6 mm
+      interLensDistance: 0.0550,    // 55.0 mm
+      verticalAlignment: 'BOTTOM',
+      trayToLensDistance: 0.0350,   // 35.0 mm
+      maxFovAngles: { outerDeg: 65.0, innerDeg: 65.0, upperDeg: 65.0, lowerDeg: 65.0 },
+      distortion: { model: 'cardboard-radial-polynomial', k1: 0.145, k2: 0.005 }
+    },
     'custom:calibrated': {
       viewerProfileId: 'custom:calibrated',
       name: 'Custom Viewer Profile (Manual Device Parameter Input)',
@@ -87,7 +101,7 @@ export function createDefaultViewerProfile(profileId = 'cardboard:v2_2015') {
       distortion: { model: 'custom-radial-polynomial', k1: 0.25, k2: 0.15 }
     }
   };
-  return presets[profileId] || presets['unknown:uncalibrated'];
+  return presets[profileId] || presets['cardboard:v2_2015'];
 }
 
 export function distortRadius(r, k1 = 0, k2 = 0) {
@@ -208,6 +222,7 @@ export class ProfileStorage {
 
   loadFromLocalStorage() {
     try {
+      if (typeof localStorage === 'undefined') return;
       const vStr = localStorage.getItem('vreconder_video_profiles');
       if (vStr) this.videoProfiles = JSON.parse(vStr);
       const hStr = localStorage.getItem('vreconder_viewer_profile');
@@ -221,6 +236,7 @@ export class ProfileStorage {
 
   saveToLocalStorage() {
     try {
+      if (typeof localStorage === 'undefined') return;
       localStorage.setItem('vreconder_video_profiles', JSON.stringify(this.videoProfiles));
       localStorage.setItem('vreconder_viewer_profile', JSON.stringify(this.activeViewerProfile));
     } catch (e) {}

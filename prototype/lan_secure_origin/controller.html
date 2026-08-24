@@ -317,6 +317,8 @@
     function applyStageLocks(stage) {
       const isStageC = (stage === 'C');
       const isStageA = (stage === 'A');
+      const shouldLockCoeffs = isStageC || isStageA;
+
       const btnScene = document.getElementById('btnSceneToggle');
       if (btnScene) {
         btnScene.textContent = isStageC ? '▦ 切换画面: 标定网格 (Stage B)' : '🎬 切换画面: 真实视频 (Stage C)';
@@ -324,10 +326,10 @@
 
       ['rngK1', 'rngK2', 'rngFov', 'rngScreenToLens', 'rngInterLens', 'rngTrayToLens'].forEach(id => {
         const el = document.getElementById(id);
-        if (el) el.disabled = isStageA;
+        if (el) el.disabled = shouldLockCoeffs;
       });
 
-      document.getElementById('lockNotice').style.display = 'none';
+      document.getElementById('lockNotice').style.display = isStageC ? 'block' : 'none';
     }
 
     function toggleLensCorrection() {
@@ -339,6 +341,7 @@
     }
 
     function onOpticsChange() {
+      if (currentStage !== 'B') return;
       const k1 = parseFloat(document.getElementById('rngK1').value);
       const k2 = parseFloat(document.getElementById('rngK2').value);
       const fov = parseFloat(document.getElementById('rngFov').value);
@@ -403,7 +406,10 @@
         btn.className = 'action-btn ' + (lensEnabled ? 'btn-lens-on' : 'btn-lens-off');
 
         const statEl = document.getElementById('txtProfileStatus');
-        if (!vp.isCalibrated) {
+        if (vp.confidence === 'unverified-custom') {
+          statEl.textContent = '⚙️ ' + (vp.name || 'Subjective Working Candidate') + ' [Subjective preset — not physical ground truth]';
+          statEl.style.color = '#38bdf8';
+        } else if (!vp.isCalibrated) {
           statEl.textContent = '⚠️ UNCALIBRATED BASELINE (Draft edits not validated)';
           statEl.style.color = '#f87171';
         } else {

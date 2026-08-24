@@ -117,6 +117,7 @@ export class CalibrationUI {
         showFeedbackToast(`Lens: ${this.activeViewerProfile.lensCorrectionEnabled ? 'ON' : 'OFF'}`);
       }
     } else if (act === 'set_viewer_params') {
+      if (state.calibrationStage === 'C') return; // Stage C Viewer Profile is fixed/read-only
       if (!this.activeViewerProfile) return;
       if (!this.activeViewerProfile.distortion) this.activeViewerProfile.distortion = {};
       if (typeof msg.k1 === 'number') this.activeViewerProfile.distortion.k1 = msg.k1;
