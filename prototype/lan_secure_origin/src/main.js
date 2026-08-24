@@ -15,17 +15,33 @@ import { initAudioContext } from './controls/audio-haptics.js';
 import { profileStorage, computeMediaFingerprint } from './core/projection-profile.js';
 import { CalibrationUI } from './controls/calibration-ui.js';
 
-// Global error handlers
+// Global error handlers & Remote Diagnostics
+export function remoteLog(level, message, data = null) {
+  fetch('/api/log', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ level, message, data, url: location.href, time: new Date().toISOString() })
+  }).catch(() => {});
+}
+
 function showError(msg) {
   const banner = document.getElementById('errorBanner');
   if (banner) {
     banner.style.display = 'block';
     banner.textContent = 'Error: ' + msg;
   }
+  remoteLog('ERROR', msg);
   console.error(msg);
 }
-window.onerror = (msg, url, line) => { showError(msg + ' (L' + line + ')'); };
-window.onunhandledrejection = (e) => { showError(e.reason ? (e.reason.message || e.reason) : e); };
+window.onerror = (msg, url, line, col, err) => {
+  showError(`${msg} (${url}:${line}:${col})`);
+  remoteLog('ERROR', `${msg} (${url}:${line}:${col})`, err ? err.stack : null);
+};
+window.onunhandledrejection = (e) => {
+  const reason = e.reason ? (e.reason.message || e.reason.stack || String(e.reason)) : 'Unhandled rejection';
+  showError(reason);
+  remoteLog('UNHANDLED_REJECTION', reason);
+};
 
 // WakeLock API
 let wakeLockSentinel = null;
@@ -267,28 +283,31 @@ function renderLoop(now) {
 
 requestAnimationFrame(renderLoop);
 
-// Periodic Live Telemetry Sync to PC Controller (every 500ms)
+// Periodic Live Telemetry Sync to Server & PC Controller (every 500ms)
 setInterval(() => {
-  if (state.pcConnected) {
-    const payload = {
-      type: 'telemetry_sync',
-      fps: state.fps,
-      isArmed: state.isArmed,
-      inVR: state.inVR,
-      calibrationStage: state.calibrationStage,
-      mediaName: state.videoPath ? state.videoPath.split('/').pop() : '--',
-      mediaStatus: state.firstFrameTimings.statusText || 'Ready',
-      devStatus: state.inVR ? `In VR (Stage ${state.calibrationStage})` : `Diagnostic (Stage ${state.calibrationStage})`,
-      viewerProfile: calibrationUI.activeViewerProfile,
-      videoProfile: activeVideoProfile,
-      timings: state.firstFrameTimings
-    };
-    fetch('/api/calibration/control', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    }).catch(() => {});
-  }
+  const payload = {
+    type: 'telemetry_sync',
+    fps: state.fps,
+    isArmed: state.isArmed,
+    inVR: state.inVR,
+    calibrationStage: state.calibrationStage,
+    mediaName: state.videoPath ? state.videoPath.split('/').pop() : '--',
+    mediaStatus: state.firstFrameTimings.statusText || 'Ready',
+    devStatus: state.inVR ? `In VR (Stage ${state.calibrationStage})` : `Diagnostic (Stage ${state.calibrationStage})`,
+    viewerProfile: calibrationUI.activeViewerProfile,
+    videoProfile: activeVideoProfile,
+    timings: state.firstFrameTimings
+  };
+  fetch('/api/telemetry', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  }).catch(() => {});
+  fetch('/api/calibration/control', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  }).catch(() => {});
 }, 500);
 
 // Initial Video List Load

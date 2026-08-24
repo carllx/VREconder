@@ -252,21 +252,35 @@
     let isArmed = false;
     let hasInitializedFromDevice = false;
 
-    const es = new EventSource('/api/calibration/events');
-    es.onopen = () => {
-      document.getElementById('badgeConnection').className = 'badge badge-green';
-      document.getElementById('badgeConnection').textContent = '🟢 SSE Connected';
-    };
-    es.onerror = () => {
-      document.getElementById('badgeConnection').className = 'badge badge-amber';
-      document.getElementById('badgeConnection').textContent = '🟡 Reconnecting...';
-    };
-    es.onmessage = (e) => {
+    function initEventSource() {
+      const es = new EventSource('/api/calibration/events');
+      es.onopen = () => {
+        document.getElementById('badgeConnection').className = 'badge badge-green';
+        document.getElementById('badgeConnection').textContent = '🟢 SSE Connected';
+      };
+      es.onerror = () => {
+        document.getElementById('badgeConnection').className = 'badge badge-amber';
+        document.getElementById('badgeConnection').textContent = '🟡 Reconnecting...';
+      };
+      es.onmessage = (e) => {
+        try {
+          const msg = JSON.parse(e.data);
+          if (msg.type === 'telemetry_sync') updateTelemetryUI(msg);
+        } catch(err) {}
+      };
+    }
+    initEventSource();
+
+    // Fallback sync polling so PC Controller stays live in all LAN environments
+    setInterval(async () => {
       try {
-        const msg = JSON.parse(e.data);
-        if (msg.type === 'telemetry_sync') updateTelemetryUI(msg);
-      } catch(err) {}
-    };
+        const res = await fetch('/api/telemetry');
+        const data = await res.json();
+        if (data && data.latestTelemetry && data.latestTelemetry.type === 'telemetry_sync') {
+          updateTelemetryUI(data.latestTelemetry);
+        }
+      } catch (e) {}
+    }, 500);
 
     async function sendControl(payload) {
       await fetch('/api/calibration/control', {

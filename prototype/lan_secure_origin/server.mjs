@@ -233,10 +233,12 @@ function handleRequest(req, res, isHttps) {
   if (pathname === '/api/calibration/events') {
     res.writeHead(200, {
       'Content-Type': 'text/event-stream',
-      'Cache-Control': 'no-cache',
+      'Cache-Control': 'no-cache, no-transform',
       'Connection': 'keep-alive',
+      'X-Accel-Buffering': 'no',
       'Access-Control-Allow-Origin': '*'
     });
+    res.write(': ping\n\n');
     res.write('data: {"type":"connected"}\n\n');
     sseClients.add(res);
     req.on('close', () => { sseClients.delete(res); });
@@ -256,6 +258,26 @@ function handleRequest(req, res, isHttps) {
       } catch (err) {
         res.writeHead(400, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ error: err.message }));
+      }
+    });
+    return;
+  }
+
+  // Client Diagnostic Logger (Captures phone & PC browser actions & errors in real-time)
+  if (pathname === '/api/log' && req.method === 'POST') {
+    let body = '';
+    req.on('data', chunk => { body += chunk; });
+    req.on('end', () => {
+      try {
+        const item = JSON.parse(body);
+        const line = `[${new Date().toISOString()}] [${req.socket.remoteAddress}] [${item.level || 'INFO'}] ${item.message} ${item.data ? JSON.stringify(item.data) : ''}\n`;
+        fs.appendFileSync(path.join(__dirname, 'live_client.log'), line);
+        console.log(`[Client Log] ${item.level}: ${item.message}`);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: true }));
+      } catch (e) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: e.message }));
       }
     });
     return;
@@ -424,6 +446,9 @@ function handleRequest(req, res, isHttps) {
       '.svg': 'image/svg+xml'
     };
     if (mimeTypes[ext]) {
+      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+      res.setHeader('Pragma', 'no-cache');
+      res.setHeader('Expires', '0');
       res.writeHead(200, { 'Content-Type': mimeTypes[ext] });
       fs.createReadStream(safePath).pipe(res);
       return;
@@ -520,3 +545,8 @@ httpsServer.listen(HTTPS_PORT, '0.0.0.0', () => {
   console.log(`👉 3. Open Secure Probe:       https://${primaryIp}:${HTTPS_PORT}`);
   console.log(`============================================================\n`);
 });
+
+// Periodic SSE keepalive heartbeat
+setInterval(() => {
+  broadcastCalibrationEvent({ type: 'heartbeat', timestamp: Date.now() });
+}, 3000);
