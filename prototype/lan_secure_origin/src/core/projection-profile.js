@@ -99,31 +99,31 @@ export function distortRadius(r, k1 = 0, k2 = 0) {
 // Cardboard Optical Geometry Derivation
 // Ported faithfully from Google WWGC (googlevr/wwgc: www/js/CardboardView.js)
 // =========================================================================
-export function deriveCardboardEyeGeometry(screen, viewer) {
-  const s = screen || activeScreenProfile;
-  const v = viewer || createDefaultViewerProfile('unknown:uncalibrated');
+export function deriveCardboardEyeGeometry(screenProfile, viewerProfile) {
+  const s = screenProfile || activeScreenProfile;
+  const v = viewerProfile || createDefaultViewerProfile('unknown:uncalibrated');
 
-  const halfScreenW = s.widthMeters * 0.5;
-  const halfIpd = v.interLensDistance * 0.5;
-  const D = v.screenToLensDistance;
+  const halfScreenW = s.widthMeters / 2.0;
+  const halfIpd = (v.interLensDistance || 0.064) / 2.0;
+  const D = v.screenToLensDistance || 0.040;
 
-  // 1. Horizontal Physical Distances from Left Lens Center to Screen Edges
-  const eyeLeftOuterDist = halfScreenW - halfIpd; // Distance to left outer edge
-  const eyeLeftInnerDist = halfIpd;              // Distance to center divider
+  // 1. Distance from lens center to screen edges (Meters)
+  const eyeLeftOuterDist = halfScreenW - halfIpd;
+  const eyeLeftInnerDist = halfIpd;
 
-  // 2. Vertical Position & Distances (Exact WWGC CardboardView.js Formula)
-  let eyeY = 0.0;
+  // 2. Vertical Lens Position Y relative to screen bottom (Meters)
+  let eyeY = s.heightMeters / 2.0;
   if (v.verticalAlignment === 'CENTER') {
-    eyeY = s.heightMeters * 0.5;
+    eyeY = s.heightMeters / 2.0;
   } else if (v.verticalAlignment === 'TOP') {
-    eyeY = s.heightMeters - (v.trayToLensDistance - s.borderSizeMeters);
+    eyeY = s.heightMeters - (v.trayToLensDistance || 0.035) + (s.borderSizeMeters || 0.003);
   } else {
     // Default 'BOTTOM': eye_y = tray_to_lens_distance - screen.border_size_meters
-    eyeY = v.trayToLensDistance - s.borderSizeMeters;
+    eyeY = (v.trayToLensDistance || 0.035) - (s.borderSizeMeters || 0.003);
   }
 
-  const eyeBottomDist = eyeY;
-  const eyeTopDist = s.heightMeters - eyeY;
+  const eyeBottomDist = Math.max(0.001, eyeY);
+  const eyeTopDist = Math.max(0.001, s.heightMeters - eyeY);
 
   // 3. Physical Screen Tangents (Undistorted ray tangents from screen geometry)
   const leftPhysTanLeft = eyeLeftOuterDist / D;
@@ -135,14 +135,17 @@ export function deriveCardboardEyeGeometry(screen, viewer) {
   const rightPhysTanRight = leftPhysTanLeft; // Outer
 
   // 4. Virtual Render FOV Tangents with Distortion Expansion (WWGC getLeftEyeFov())
-  const k1 = (v.distortion && v.isCalibrated) ? (v.distortion.k1 || 0) : 0;
-  const k2 = (v.distortion && v.isCalibrated) ? (v.distortion.k2 || 0) : 0;
+  const isLensOn = (v.lensCorrectionEnabled === true);
+  const dist = v.distortion || { k1: 0, k2: 0 };
+  const k1 = isLensOn ? (dist.k1 || 0) : 0;
+  const k2 = isLensOn ? (dist.k2 || 0) : 0;
 
   const deg2rad = Math.PI / 180;
-  const maxTanOuter = Math.tan((v.maxFovAngles.outerDeg || 50) * deg2rad);
-  const maxTanInner = Math.tan((v.maxFovAngles.innerDeg || 50) * deg2rad);
-  const maxTanUpper = Math.tan((v.maxFovAngles.upperDeg || 50) * deg2rad);
-  const maxTanLower = Math.tan((v.maxFovAngles.lowerDeg || 50) * deg2rad);
+  const maxFov = v.maxFovAngles || { outerDeg: 50, innerDeg: 50, upperDeg: 50, lowerDeg: 50 };
+  const maxTanOuter = Math.tan((maxFov.outerDeg || 50) * deg2rad);
+  const maxTanInner = Math.tan((maxFov.innerDeg || 50) * deg2rad);
+  const maxTanUpper = Math.tan((maxFov.upperDeg || 50) * deg2rad);
+  const maxTanLower = Math.tan((maxFov.lowerDeg || 50) * deg2rad);
 
   const leftVirtTanLeft = Math.min(maxTanOuter, distortRadius(leftPhysTanLeft, k1, k2));
   const leftVirtTanRight = Math.min(maxTanInner, distortRadius(leftPhysTanRight, k1, k2));
