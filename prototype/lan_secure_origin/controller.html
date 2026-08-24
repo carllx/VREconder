@@ -252,17 +252,22 @@
     let isArmed = false;
     let hasInitializedFromDevice = false;
 
+    function setConnectedBadge(text = '🟢 Connected') {
+      const badge = document.getElementById('badgeConnection');
+      badge.className = 'badge badge-green';
+      badge.textContent = text;
+    }
+
     function initEventSource() {
       const es = new EventSource('/api/calibration/events');
       es.onopen = () => {
-        document.getElementById('badgeConnection').className = 'badge badge-green';
-        document.getElementById('badgeConnection').textContent = '🟢 SSE Connected';
+        setConnectedBadge('🟢 SSE Connected');
       };
       es.onerror = () => {
-        document.getElementById('badgeConnection').className = 'badge badge-amber';
-        document.getElementById('badgeConnection').textContent = '🟡 Reconnecting...';
+        // SSE will retry automatically; keep calm unless fetch also fails
       };
       es.onmessage = (e) => {
+        setConnectedBadge('🟢 SSE Connected');
         try {
           const msg = JSON.parse(e.data);
           if (msg.type === 'telemetry_sync') updateTelemetryUI(msg);
@@ -276,10 +281,14 @@
       try {
         const res = await fetch('/api/telemetry');
         const data = await res.json();
+        setConnectedBadge('🟢 Live Connected');
         if (data && data.latestTelemetry && data.latestTelemetry.type === 'telemetry_sync') {
           updateTelemetryUI(data.latestTelemetry);
         }
-      } catch (e) {}
+      } catch (e) {
+        document.getElementById('badgeConnection').className = 'badge badge-amber';
+        document.getElementById('badgeConnection').textContent = '🟡 Reconnecting...';
+      }
     }, 500);
 
     async function sendControl(payload) {
