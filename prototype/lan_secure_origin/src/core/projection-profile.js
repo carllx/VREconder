@@ -319,7 +319,7 @@ export class ProfileStorage {
 
   async saveVideoProfile(profile) {
     if (!profile || !profile.mediaId) return false;
-    if (profile.projection === 'unknown' || profile.stereoMode === 'unknown') {
+    if (profile.projection === 'unknown' || profile.stereoMode === 'unknown' || profile.eyeOrder === 'unknown') {
       console.warn('[ProfileStorage] Cannot save unknown mapping without explicit user selection.');
       return false;
     }

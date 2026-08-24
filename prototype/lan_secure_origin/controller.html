@@ -149,6 +149,7 @@
           <div class="slider-row">
             <span style="width:110px;">Projection:</span>
             <select id="selProjection" onchange="onVideoMappingChange()" style="flex:1; background:#1e293b; color:#fff; border:1px solid #334155; padding:4px 6px; border-radius:4px; font-size:0.75rem;">
+              <option value="unknown">-- Select Projection --</option>
               <option value="equirectangular">Equirectangular (Spherical)</option>
               <option value="flat">Flat / Rectilinear (2D)</option>
             </select>
@@ -156,6 +157,7 @@
           <div class="slider-row">
             <span style="width:110px;">Stereo Mode:</span>
             <select id="selStereo" onchange="onVideoMappingChange()" style="flex:1; background:#1e293b; color:#fff; border:1px solid #334155; padding:4px 6px; border-radius:4px; font-size:0.75rem;">
+              <option value="unknown">-- Select Stereo --</option>
               <option value="left-right">Side-by-Side (SBS 3D)</option>
               <option value="top-bottom">Top-Bottom (Over-Under)</option>
               <option value="mono">Mono (2D)</option>
@@ -166,6 +168,7 @@
           <div class="slider-row">
             <span style="width:120px;">Coverage FOV:</span>
             <select id="selCoverageFov" onchange="onVideoMappingChange()" style="flex:1; background:#1e293b; color:#fff; border:1px solid #334155; padding:4px 6px; border-radius:4px; font-size:0.75rem;">
+              <option value="unknown">-- Unconfirmed --</option>
               <option value="180">180° Half-Dome VR</option>
               <option value="360">360° Full Sphere</option>
             </select>
@@ -173,6 +176,7 @@
           <div class="slider-row">
             <span style="width:120px;">Eye Order:</span>
             <select id="selEyeOrder" onchange="onVideoMappingChange()" style="flex:1; background:#1e293b; color:#fff; border:1px solid #334155; padding:4px 6px; border-radius:4px; font-size:0.75rem;">
+              <option value="unknown">-- Select Eye Order --</option>
               <option value="left-right">Normal (Left-Right)</option>
               <option value="right-left">Swapped (Right-Left)</option>
             </select>

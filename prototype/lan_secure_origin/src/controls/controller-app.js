@@ -183,34 +183,20 @@ export function populateSlidersFromProfile(p) {
 export function onViewerPresetSelect(presetId) {
   if (currentStage !== 'B') return;
   if (presetId === 'viewer:my_profile') {
-    if (latestSavedMyProfile) {
-      populateSlidersFromProfile(latestSavedMyProfile);
-      sendControl({ action: 'set_viewer_preset', presetId: presetId });
-    } else {
+    if (!latestSavedMyProfile) {
       alert('⚠️ My Viewer Profile has not been saved yet.\nPlease tune sliders and click Save My Viewer Profile.');
+      return;
     }
-  } else if (presetId === 'cardboard:reference_50deg') {
-    document.getElementById('rngK1').value = 0.336;
-    document.getElementById('valK1').textContent = '0.336';
-    document.getElementById('rngK2').value = 0.553;
-    document.getElementById('valK2').textContent = '0.553';
-    document.getElementById('rngFov').value = 50.0;
-    document.getElementById('valFov').textContent = '50.0°';
-    document.getElementById('rngScreenToLens').value = 39.3;
-    document.getElementById('valScreenToLens').textContent = '39.3';
-    document.getElementById('rngInterLens').value = 63.9;
-    document.getElementById('valInterLens').textContent = '63.9';
-    document.getElementById('rngTrayToLens').value = 35.0;
-    document.getElementById('valTrayToLens').textContent = '35.0';
-    sendControl({ action: 'set_viewer_preset', presetId: presetId });
   }
+  sendControl({ action: 'set_viewer_preset', presetId: presetId });
 }
 
 export function onVideoMappingChange() {
   const proj = document.getElementById('selProjection').value;
   const stereo = document.getElementById('selStereo').value;
-  const fov = parseFloat(document.getElementById('selCoverageFov').value);
+  const covVal = document.getElementById('selCoverageFov').value;
   const eye = document.getElementById('selEyeOrder').value;
+  const fov = (covVal === 'unknown' || isNaN(parseFloat(covVal))) ? 180 : parseFloat(covVal);
   sendControl({
     action: 'set_video_mapping',
     mapping: {
@@ -224,6 +210,13 @@ export function onVideoMappingChange() {
 }
 
 export function saveVideoMapping() {
+  const proj = document.getElementById('selProjection')?.value;
+  const stereo = document.getElementById('selStereo')?.value;
+  const eye = document.getElementById('selEyeOrder')?.value;
+  if (!proj || proj === 'unknown' || !stereo || stereo === 'unknown' || !eye || eye === 'unknown') {
+    alert('⚠️ Cannot save unconfirmed video mapping.\nPlease select Projection, Stereo Mode, and Eye Order first.');
+    return;
+  }
   sendControl({ action: 'save_video_profile' });
 }
 
@@ -356,30 +349,57 @@ export function updateTelemetryUI(data) {
     const vp = data.videoProfile;
     const vstat = document.getElementById('txtVideoMappingStatus');
     if (vstat) {
-      if (vp.confidence === 'user-confirmed' || vp.confidence === 'user-calibrated') {
-        vstat.textContent = `✓ Confirmed Video Mapping (${vp.projection} / ${vp.stereoMode})`;
+      if ((vp.confidence === 'user-confirmed' || vp.confidence === 'user-calibrated') &&
+          vp.projection !== 'unknown' && vp.stereoMode !== 'unknown' && vp.eyeOrder !== 'unknown') {
+        vstat.textContent = `✓ Confirmed Video Mapping (${vp.projection} / ${vp.stereoMode} / ${vp.eyeOrder})`;
         vstat.style.color = '#34d399';
       } else {
-        vstat.textContent = `⚠️ Unconfirmed Video Mapping (${vp.projection || 'unverified'})`;
+        vstat.textContent = `⚠️ Unconfirmed Video Mapping (${vp.projection || 'unknown'})`;
         vstat.style.color = '#f87171';
       }
     }
     const selProj = document.getElementById('selProjection');
-    if (selProj && vp.projection && vp.projection !== 'unknown') {
-      selProj.value = (vp.projection === 'flat') ? 'flat' : 'equirectangular';
+    if (selProj) {
+      selProj.value = vp.projection || 'unknown';
     }
     const selStereo = document.getElementById('selStereo');
-    if (selStereo && vp.stereoMode && vp.stereoMode !== 'unknown') {
-      selStereo.value = vp.stereoMode;
+    if (selStereo) {
+      selStereo.value = vp.stereoMode || 'unknown';
     }
     const selEye = document.getElementById('selEyeOrder');
-    if (selEye && vp.eyeOrder && vp.eyeOrder !== 'unknown') {
-      selEye.value = (vp.eyeOrder === 'right-left') ? 'right-left' : 'left-right';
+    if (selEye) {
+      selEye.value = vp.eyeOrder || 'unknown';
     }
     const selCov = document.getElementById('selCoverageFov');
     if (selCov) {
-      const hCov = (typeof vp.horizontalCoverageDeg === 'number') ? vp.horizontalCoverageDeg : 180;
-      selCov.value = (hCov > 270) ? '360' : '180';
+      if (!vp.projection || vp.projection === 'unknown') {
+        selCov.value = 'unknown';
+        selCov.disabled = true;
+      } else if (vp.projection === 'flat') {
+        selCov.value = 'unknown';
+        selCov.disabled = true;
+      } else {
+        selCov.disabled = false;
+        const hCov = (typeof vp.horizontalCoverageDeg === 'number') ? vp.horizontalCoverageDeg : 180;
+        selCov.value = (hCov > 270) ? '360' : '180';
+      }
+    }
+    if (vp.pose) {
+      const y = (typeof vp.pose.yawDeg === 'number') ? vp.pose.yawDeg : 0;
+      const p = (typeof vp.pose.pitchDeg === 'number') ? vp.pose.pitchDeg : 0;
+      const r = (typeof vp.pose.rollDeg === 'number') ? vp.pose.rollDeg : 0;
+      const rngY = document.getElementById('rngPoseYaw');
+      const rngP = document.getElementById('rngPosePitch');
+      const rngR = document.getElementById('rngPoseRoll');
+      if (rngY) rngY.value = y;
+      if (rngP) rngP.value = p;
+      if (rngR) rngR.value = r;
+      const valY = document.getElementById('valPoseYaw');
+      const valP = document.getElementById('valPosePitch');
+      const valR = document.getElementById('valPoseRoll');
+      if (valY) valY.textContent = y.toFixed(1) + '°';
+      if (valP) valP.textContent = p.toFixed(1) + '°';
+      if (valR) valR.textContent = r.toFixed(1) + '°';
     }
   }
 
@@ -396,6 +416,17 @@ export function updateTelemetryUI(data) {
       btn.textContent = lensEnabled ? '🛡️ LENS CORRECTION: ON' : '⚪ LENS CORRECTION: OFF';
       btn.className = 'action-btn ' + (lensEnabled ? 'btn-lens-on' : 'btn-lens-off');
     }
+
+    const selPreset = document.getElementById('selViewerPreset');
+    if (selPreset) {
+      if (vp.viewerProfileId === 'viewer:my_profile' || vp.confidence === 'working-user-tuned') {
+        selPreset.value = 'viewer:my_profile';
+      } else {
+        selPreset.value = 'cardboard:reference_50deg';
+      }
+    }
+
+    populateSlidersFromProfile(vp);
 
     const statEl = document.getElementById('txtProfileStatus');
     if (statEl) {

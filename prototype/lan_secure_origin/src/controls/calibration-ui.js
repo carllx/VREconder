@@ -66,11 +66,13 @@ export class CalibrationUI {
       this.diagnosticOverlay[msg.key] = (msg.value === true);
       showFeedbackToast(`Overlay ${msg.key}: ${msg.value ? 'ON' : 'OFF'}`);
     } else if (act === 'set_video_pose' && this.activeVideoProfile) {
-      const p = this.activeVideoProfile.pose || (this.activeVideoProfile.pose = {});
-      if (typeof msg.yawDeg === 'number') p.yawDeg = msg.yawDeg;
-      if (typeof msg.pitchDeg === 'number') p.pitchDeg = msg.pitchDeg;
-      if (typeof msg.rollDeg === 'number') p.rollDeg = msg.rollDeg;
+      const p = this.activeVideoProfile.pose || (this.activeVideoProfile.pose = { yawDeg: 0, pitchDeg: 0, rollDeg: 0 });
+      const poseObj = msg.pose || msg;
+      if (typeof poseObj.yawDeg === 'number') p.yawDeg = poseObj.yawDeg;
+      if (typeof poseObj.pitchDeg === 'number') p.pitchDeg = poseObj.pitchDeg;
+      if (typeof poseObj.rollDeg === 'number') p.rollDeg = poseObj.rollDeg;
       if (this.onProfileChanged) this.onProfileChanged(this.activeVideoProfile, this.activeViewerProfile);
+      logAction('Set Video Pose from PC', p);
     } else if (act === 'set_viewer_visual_mode') {
       state.viewerVisualMode = msg.mode;
       if (state.calibrationStage === 'B' && this.vrRenderer) {
@@ -166,7 +168,7 @@ export class CalibrationUI {
         logAction('Saved My Viewer Profile', this.activeViewerProfile);
       }
     } else if (act === 'save_video_profile' && this.activeVideoProfile) {
-      if (this.activeVideoProfile.projection === 'unknown' || this.activeVideoProfile.stereoMode === 'unknown') {
+      if (this.activeVideoProfile.projection === 'unknown' || this.activeVideoProfile.stereoMode === 'unknown' || this.activeVideoProfile.eyeOrder === 'unknown') {
         showFeedbackToast('⚠️ Select mapping before saving!');
       } else {
         this.storage.saveVideoProfile(this.activeVideoProfile);
