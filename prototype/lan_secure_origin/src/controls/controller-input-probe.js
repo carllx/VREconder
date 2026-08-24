@@ -29,6 +29,7 @@ export class ControllerInputProbe {
       lastPointer: null,
       lastMediaSessionAction: null
     };
+    this.confirmTapTimer = null;
 
     this.initListeners();
     this.initMediaSession();
@@ -167,24 +168,33 @@ export class ControllerInputProbe {
     const info = { action, details, timestamp: Date.now() };
     this.activeInputs.lastMediaSessionAction = info;
     this.recordEvent('MEDIA_SESSION_ACTION', info);
-    showFeedbackToast(`🎵 媒体动作: ${action}`);
 
-    // Minimal SC-B03 MediaSession Adapter (Issue #15 Phase 2)
-    if (!this.commandModel) return;
-
+    // Minimal SC-B03 MediaSession Adapter (Issue #15 Browser comment 5395427307)
     if (action === 'previoustrack') {
-      this.commandModel.previous();
+      // Rocker Up -> Farther: effective Screen-to-Lens - 0.001 m
+      const baseD = 0.0433;
+      state.temporaryScreenToLensOffset = Math.max(-0.005, Math.min(0.005, (state.temporaryScreenToLensOffset || 0) - 0.001));
+      const effMm = (baseD + state.temporaryScreenToLensOffset) * 1000;
+      showFeedbackToast(`↔ Farther ${effMm.toFixed(1)} mm`);
     } else if (action === 'nexttrack') {
-      this.commandModel.next();
-    } else if (action === 'play') {
-      const video = this.commandModel.media ? this.commandModel.media.video : null;
-      if (video && video.paused === true) {
-        this.commandModel.playPause();
-      }
-    } else if (action === 'pause') {
-      const video = this.commandModel.media ? this.commandModel.media.video : null;
-      if (video && video.paused === false) {
-        this.commandModel.playPause();
+      // Rocker Down -> Closer: effective Screen-to-Lens + 0.001 m
+      const baseD = 0.0433;
+      state.temporaryScreenToLensOffset = Math.max(-0.005, Math.min(0.005, (state.temporaryScreenToLensOffset || 0) + 0.001));
+      const effMm = (baseD + state.temporaryScreenToLensOffset) * 1000;
+      showFeedbackToast(`↔ Closer ${effMm.toFixed(1)} mm`);
+    } else if (action === 'play' || action === 'pause') {
+      // Confirm Tap: Single tap -> Open Menu, Double tap (350ms) -> Recenter
+      if (this.confirmTapTimer) {
+        clearTimeout(this.confirmTapTimer);
+        this.confirmTapTimer = null;
+        showFeedbackToast('🎯 Recenter');
+        if (this.commandModel) this.commandModel.recenter();
+      } else {
+        this.confirmTapTimer = setTimeout(() => {
+          this.confirmTapTimer = null;
+          showFeedbackToast('⚡ 打开菜单');
+          if (this.commandModel) this.commandModel.openControls();
+        }, 350);
       }
     }
   }

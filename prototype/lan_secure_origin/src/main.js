@@ -162,10 +162,19 @@ const controllerProbe = new ControllerInputProbe(commandModel);
 // Load server profiles
 profileStorage.loadServerProfiles();
 
-// Calibration UI Setup
-let activeVideoProfile = null;
+export function getEffectiveViewerProfile(baseProfile) {
+  if (!baseProfile) return baseProfile;
+  const baseD = baseProfile.screenToLensDistance || 0.0433;
+  const offset = state.temporaryScreenToLensOffset || 0.0;
+  const effectiveD = Math.max(0.0383, Math.min(0.0483, baseD + offset));
+  return {
+    ...baseProfile,
+    screenToLensDistance: effectiveD
+  };
+}
 
 function onVideoSelected(videoItem) {
+  state.temporaryScreenToLensOffset = 0.0;
   const mediaId = computeMediaFingerprint(videoItem);
   activeVideoProfile = profileStorage.getVideoProfile(mediaId, videoItem ? videoItem.name : '');
   calibrationUI.setVideoProfile(activeVideoProfile);
@@ -353,6 +362,7 @@ function renderLoop(now) {
   }
 
   const isVR = state.inVR || calibrationUI.currentMode === 'vr';
+  const effectiveViewerProfile = getEffectiveViewerProfile(calibrationUI.activeViewerProfile);
 
   if (!isVR) {
     // 1. Diagnostic Mode: Single Rectilinear View
@@ -360,7 +370,7 @@ function renderLoop(now) {
       width,
       height,
       activeVideoProfile,
-      calibrationUI.activeViewerProfile,
+      effectiveViewerProfile,
       calibrationUI.selectedEye,
       null, // Identity camera rotation for pure forward perspective
       calibrationUI.diagnosticFovDeg
@@ -371,7 +381,7 @@ function renderLoop(now) {
       width,
       height,
       activeVideoProfile,
-      calibrationUI.activeViewerProfile,
+      effectiveViewerProfile,
       calibrationUI.selectedEye,
       video.paused,
       video.currentTime,
@@ -385,7 +395,7 @@ function renderLoop(now) {
       width,
       height,
       activeVideoProfile,
-      calibrationUI.activeViewerProfile,
+      effectiveViewerProfile,
       cameraMat3
     );
 

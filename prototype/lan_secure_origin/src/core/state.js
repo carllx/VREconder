@@ -16,6 +16,7 @@ export const state = {
   isArmed: false,
   showReferenceGrid: false, // Verification-only Reference Grid in Stage C / Video+Grid
   viewerVisualMode: 'grid_only', // Stage B sub-mode: 'grid_only' | 'video_grid'
+  temporaryScreenToLensOffset: 0.0, // Session-only runtime viewing distance offset (Issue #15 / #17)
 
   // First-Frame Timing & Black-Screen Instrumentation
   firstFrameTimings: {
