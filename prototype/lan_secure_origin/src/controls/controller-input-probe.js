@@ -102,11 +102,19 @@ export class ControllerInputProbe {
         timestamp: Date.now()
       };
 
-      if (isDown) {
+      if (isDown && !e.repeat) {
         this.activeInputs.lastKeyDown = info;
         this.recordEvent('KEYBOARD_DOWN', info);
-        showFeedbackToast(`⌨️ 键入: ${e.key || e.code}`);
-      } else {
+
+        // Map Rocker HID keys if received via Focus Trap
+        const code = e.code || '';
+        const key = (e.key || '').toLowerCase();
+        if (code === 'KeyS' || key === 's') {
+          this.adjustDistance(-0.001);
+        } else if (code === 'KeyW' || key === 'w') {
+          this.adjustDistance(+0.001);
+        }
+      } else if (!isDown) {
         this.recordEvent('KEYBOARD_UP', info);
       }
     };
@@ -144,6 +152,14 @@ export class ControllerInputProbe {
     }, { passive: true });
   }
 
+  adjustDistance(delta) {
+    const baseD = 0.0433;
+    state.temporaryScreenToLensOffset = Math.max(-0.005, Math.min(0.005, (state.temporaryScreenToLensOffset || 0) + delta));
+    const effMm = (baseD + state.temporaryScreenToLensOffset) * 1000;
+    const label = delta < 0 ? '↔ Farther' : '↔ Closer';
+    showFeedbackToast(`${label} ${effMm.toFixed(1)} mm`);
+  }
+
   initMediaSession() {
     if (typeof navigator === 'undefined' || !('mediaSession' in navigator)) return;
 
@@ -171,17 +187,9 @@ export class ControllerInputProbe {
 
     // Minimal SC-B03 MediaSession Adapter (Issue #15 Browser comment 5395427307)
     if (action === 'previoustrack') {
-      // Rocker Up -> Farther: effective Screen-to-Lens - 0.001 m
-      const baseD = 0.0433;
-      state.temporaryScreenToLensOffset = Math.max(-0.005, Math.min(0.005, (state.temporaryScreenToLensOffset || 0) - 0.001));
-      const effMm = (baseD + state.temporaryScreenToLensOffset) * 1000;
-      showFeedbackToast(`↔ Farther ${effMm.toFixed(1)} mm`);
+      this.adjustDistance(-0.001);
     } else if (action === 'nexttrack') {
-      // Rocker Down -> Closer: effective Screen-to-Lens + 0.001 m
-      const baseD = 0.0433;
-      state.temporaryScreenToLensOffset = Math.max(-0.005, Math.min(0.005, (state.temporaryScreenToLensOffset || 0) + 0.001));
-      const effMm = (baseD + state.temporaryScreenToLensOffset) * 1000;
-      showFeedbackToast(`↔ Closer ${effMm.toFixed(1)} mm`);
+      this.adjustDistance(+0.001);
     } else if (action === 'play' || action === 'pause') {
       // Confirm Tap: Single tap -> Open Menu, Double tap (350ms) -> Recenter
       if (this.confirmTapTimer) {
