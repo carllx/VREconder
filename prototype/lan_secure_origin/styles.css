@@ -63,6 +63,7 @@ html, body {
   transition: opacity 0.25s ease, visibility 0.25s ease;
 }
 #uiOverlay.hidden {
+  display: none !important;
   opacity: 0;
   visibility: hidden;
   pointer-events: none;

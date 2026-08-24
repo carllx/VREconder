@@ -167,21 +167,29 @@ function enterVRMode() {
   state.inVR = true;
   calibrationUI.currentMode = 'vr';
   uiOverlay.classList.add('hidden');
+  uiOverlay.style.display = 'none';
   diagnosticToolbar.style.display = 'none';
   showFeedbackToast(`🛡️ VR Armed: Stage ${state.calibrationStage}`);
+  remoteLog('INFO', 'Entered VR Mode', { stage: state.calibrationStage, isArmed: state.isArmed });
 }
 
 function exitVRMode() {
   state.inVR = false;
   calibrationUI.currentMode = 'diagnostic';
   uiOverlay.classList.remove('hidden');
+  uiOverlay.style.display = 'flex';
   diagnosticToolbar.style.display = 'flex';
   vrFloatingBar.classList.add('fade-out');
   telemetry.syncSummary();
+  remoteLog('INFO', 'Exited VR Mode');
 }
 
 // Event Listeners
 btnEnterVR.addEventListener('click', enterVRMode);
+btnEnterVR.addEventListener('touchend', (e) => {
+  e.preventDefault();
+  enterVRMode();
+});
 
 btnVrReset.addEventListener('click', (e) => {
   e.stopPropagation();

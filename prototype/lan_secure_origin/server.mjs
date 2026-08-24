@@ -191,6 +191,10 @@ function handleRequest(req, res, isHttps) {
   const urlObj = new URL(req.url, `http://${req.headers.host}`);
   const pathname = urlObj.pathname;
 
+  if (pathname !== '/api/calibration/events') {
+    console.log(`[REQ] ${req.method} ${pathname} (${req.socket.remoteAddress})`);
+  }
+
   // CORS headers
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, HEAD, OPTIONS');
