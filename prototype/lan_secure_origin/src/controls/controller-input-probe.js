@@ -64,6 +64,26 @@ export class ControllerInputProbe {
       showFeedbackToast('🎮 Gamepad 已断开');
     });
 
+    // Focus Trap for iOS Safari Bluetooth Keyboard routing
+    const trap = (typeof document !== 'undefined') ? document.getElementById('controllerFocusTrap') : null;
+    const ensureFocus = () => {
+      if (trap && document.activeElement !== trap) {
+        try { trap.focus({ preventScroll: true }); } catch (e) {}
+      }
+    };
+    if (trap) {
+      trap.addEventListener('input', (e) => {
+        const val = trap.value;
+        trap.value = '';
+        this.recordEvent('INPUT_DATA', { data: e.data || val, inputType: e.inputType });
+        showFeedbackToast(`⌨️ 输入: ${e.data || val}`);
+      });
+      trap.addEventListener('beforeinput', (e) => {
+        this.recordEvent('BEFORE_INPUT', { data: e.data, inputType: e.inputType });
+      });
+      ensureFocus();
+    }
+
     // 2. Keyboard Input Events (SHINECON / Mini VR remote keyboard mode)
     const onKey = (e, isDown) => {
       const info = {
@@ -99,6 +119,7 @@ export class ControllerInputProbe {
 
     // 3. Pointer / Mouse / Touch Events (SHINECON mouse/cursor mode)
     const onPointer = (e, action) => {
+      ensureFocus();
       const info = {
         action,
         pointerType: e.pointerType || 'unknown',
