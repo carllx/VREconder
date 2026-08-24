@@ -2,7 +2,7 @@
 // Controller Input Probe & Telemetry Reporter (Issue #15)
 // Detects and logs Gamepad, Keyboard, Pointer, and MediaSession inputs
 // ==========================================
-import { state } from '../core/state.js';
+import { state, showFeedbackToast } from '../core/state.js';
 
 let remoteLogFn = () => {};
 
@@ -38,18 +38,22 @@ export class ControllerInputProbe {
     if (typeof window === 'undefined') return;
 
     // 1. Gamepad API Connection Events
-    window.addEventListener('gamepadconnected', (e) => {
+    const onGpConnected = (e) => {
       const gp = e.gamepad;
       this.gamepadConnected = true;
       this.lastGamepadId = gp.id || 'Generic Gamepad';
-      logEvent('GAMEPAD_CONNECTED', {
+      const info = {
         id: gp.id,
         index: gp.index,
         mapping: gp.mapping,
         buttonsCount: gp.buttons ? gp.buttons.length : 0,
         axesCount: gp.axes ? gp.axes.length : 0
-      });
-    });
+      };
+      logEvent('GAMEPAD_CONNECTED', info);
+      showFeedbackToast(`🎮 Gamepad 连接: ${gp.id || 'SHINECON'}`);
+    };
+
+    window.addEventListener('gamepadconnected', onGpConnected);
 
     window.addEventListener('gamepaddisconnected', (e) => {
       this.gamepadConnected = false;
@@ -57,6 +61,7 @@ export class ControllerInputProbe {
         id: e.gamepad ? e.gamepad.id : '',
         index: e.gamepad ? e.gamepad.index : -1
       });
+      showFeedbackToast('🎮 Gamepad 已断开');
     });
 
     // 2. Keyboard Input Events (SHINECON / Mini VR remote keyboard mode)
@@ -79,6 +84,7 @@ export class ControllerInputProbe {
       if (isDown) {
         this.activeInputs.lastKeyDown = info;
         this.recordEvent('KEYBOARD_DOWN', info);
+        showFeedbackToast(`⌨️ 键入: ${e.key || e.code}`);
       } else {
         this.recordEvent('KEYBOARD_UP', info);
       }
@@ -86,6 +92,10 @@ export class ControllerInputProbe {
 
     window.addEventListener('keydown', (e) => onKey(e, true), { capture: true, passive: false });
     window.addEventListener('keyup', (e) => onKey(e, false), { capture: true, passive: false });
+    if (typeof document !== 'undefined') {
+      document.addEventListener('keydown', (e) => onKey(e, true), { capture: true, passive: false });
+      document.addEventListener('keyup', (e) => onKey(e, false), { capture: true, passive: false });
+    }
 
     // 3. Pointer / Mouse / Touch Events (SHINECON mouse/cursor mode)
     const onPointer = (e, action) => {
@@ -100,6 +110,9 @@ export class ControllerInputProbe {
       };
       this.activeInputs.lastPointer = info;
       this.recordEvent(`POINTER_${action.toUpperCase()}`, info);
+      if (action === 'down') {
+        showFeedbackToast(`🖱️ 指针/点击: btn=${e.button}`);
+      }
     };
 
     window.addEventListener('pointerdown', (e) => onPointer(e, 'down'), { passive: true });
@@ -133,6 +146,7 @@ export class ControllerInputProbe {
     const info = { action, details, timestamp: Date.now() };
     this.activeInputs.lastMediaSessionAction = info;
     this.recordEvent('MEDIA_SESSION_ACTION', info);
+    showFeedbackToast(`🎵 媒体动作: ${action}`);
   }
 
   recordEvent(type, data) {
