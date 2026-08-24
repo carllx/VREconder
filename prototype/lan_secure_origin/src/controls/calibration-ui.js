@@ -28,9 +28,9 @@ export class CalibrationUI {
   }
 
   initDOM() {
-    this.btnModeDiagnostic = document.getElementById('btnModeDiagnostic');
-    this.btnModeVR = document.getElementById('btnModeVR');
-    this.btnToggleScene = document.getElementById('btnToggleScene');
+    this.btnStageA = document.getElementById('btnStageA');
+    this.btnStageB = document.getElementById('btnStageB');
+    this.btnStageC = document.getElementById('btnStageC');
 
     // Diagnostic Toolbar buttons
     this.btnFreeze = document.getElementById('btnDiagFreeze');
@@ -158,6 +158,10 @@ export class CalibrationUI {
 
   switchStage(stage) {
     state.calibrationStage = stage;
+    if (this.btnStageA) this.btnStageA.classList.toggle('active', stage === 'A');
+    if (this.btnStageB) this.btnStageB.classList.toggle('active', stage === 'B');
+    if (this.btnStageC) this.btnStageC.classList.toggle('active', stage === 'C');
+
     if (stage === 'A') {
       // Stage A: Flat Diagnostic View (No Optics, Real Video)
       if (this.onExitVR) this.onExitVR();
@@ -166,20 +170,12 @@ export class CalibrationUI {
       showFeedbackToast('Stage A: Flat Diagnostic');
     } else if (stage === 'B') {
       // Stage B: Viewer Optics (Synthetic Grid Only, Headset Stereo)
-      if (!state.isArmed) {
-        showFeedbackToast('⚠️ Arm Calibration on iPhone first');
-        return;
-      }
       if (this.vrRenderer) this.vrRenderer.sceneType = 1;
       this.currentMode = 'vr';
       if (this.onEnterVR) this.onEnterVR();
       showFeedbackToast('Stage B: Synthetic Grid');
     } else if (stage === 'C') {
       // Stage C: Real Video Verification (Headset Stereo, Fixed Optics)
-      if (!state.isArmed) {
-        showFeedbackToast('⚠️ Arm Calibration on iPhone first');
-        return;
-      }
       if (this.vrRenderer) this.vrRenderer.sceneType = 0;
       this.currentMode = 'vr';
       if (this.onEnterVR) this.onEnterVR();
@@ -255,7 +251,7 @@ export class CalibrationUI {
     if (this.txtDerivedFov) {
       const geom = deriveCardboardEyeGeometry(activeScreenProfile, hp);
       const l = geom.leftEye;
-      const statusStr = hp.isCalibrated ? '<span style="color:#34d399;">✓ [CALIBRATED PROFILE]</span>' : '<span style="color:#f87171;">⚠️ [UNCALIBRATED BASELINE]</span>';
+      const statusStr = hp.isCalibrated ? '<span style="color:#34d399;">✓ [CALIBRATED PROFILE]</span>' : '<span style="color:#f87171;">⚠️ [UNCALIBRATED BASELINE (Draft)]</span>';
       this.txtDerivedFov.innerHTML = `
         ${statusStr}<br>
         <b>Left Eye Virt FOV:</b> L:${l.fovDeg.left.toFixed(1)}° R:${l.fovDeg.right.toFixed(1)}° U:${l.fovDeg.top.toFixed(1)}° D:${l.fovDeg.bottom.toFixed(1)}°<br>
@@ -268,34 +264,17 @@ export class CalibrationUI {
   }
 
   updateLensBtnState() {
-    const isCalibrated = (this.activeViewerProfile && this.activeViewerProfile.isCalibrated === true);
-    const isEnabled = (isCalibrated && this.activeViewerProfile.lensCorrectionEnabled === true);
+    const isEnabled = (this.activeViewerProfile && this.activeViewerProfile.lensCorrectionEnabled === true);
     if (this.btnToggleLens) {
-      if (!isCalibrated) {
-        this.btnToggleLens.textContent = '⚪ LENS CORRECTION: OFF (Uncalibrated Baseline)';
-        this.btnToggleLens.style.background = '#475569';
-      } else {
-        this.btnToggleLens.textContent = isEnabled ? '🛡️ LENS CORRECTION: ON (Cardboard Pre-Warp)' : '⚪ LENS CORRECTION: OFF (Ideal Undistorted)';
-        this.btnToggleLens.style.background = isEnabled ? '#059669' : '#475569';
-      }
+      this.btnToggleLens.textContent = isEnabled ? '🛡️ LENS CORRECTION: ON (Pre-Warp Active)' : '⚪ LENS CORRECTION: OFF (Ideal Undistorted)';
+      this.btnToggleLens.style.background = isEnabled ? '#059669' : '#475569';
     }
   }
 
   bindEvents() {
-    if (this.btnModeDiagnostic) {
-      this.btnModeDiagnostic.addEventListener('click', () => this.switchStage('A'));
-    }
-
-    if (this.btnModeVR) {
-      this.btnModeVR.addEventListener('click', () => this.switchStage('C'));
-    }
-
-    if (this.btnToggleScene) {
-      this.btnToggleScene.addEventListener('click', () => {
-        if (state.calibrationStage === 'B') this.switchStage('C');
-        else this.switchStage('B');
-      });
-    }
+    if (this.btnStageA) this.btnStageA.addEventListener('click', () => this.switchStage('A'));
+    if (this.btnStageB) this.btnStageB.addEventListener('click', () => this.switchStage('B'));
+    if (this.btnStageC) this.btnStageC.addEventListener('click', () => this.switchStage('C'));
 
     if (this.btnFreeze) {
       this.btnFreeze.addEventListener('click', () => {
@@ -433,10 +412,7 @@ export class CalibrationUI {
 
     if (this.btnToggleLens) {
       this.btnToggleLens.addEventListener('click', () => {
-        if (!this.activeViewerProfile || !this.activeViewerProfile.isCalibrated) {
-          showFeedbackToast('⚠️ Select or Import a Calibrated Profile first');
-          return;
-        }
+        if (!this.activeViewerProfile) return;
         this.activeViewerProfile.lensCorrectionEnabled = !this.activeViewerProfile.lensCorrectionEnabled;
         this.updateLensBtnState();
         showFeedbackToast(`Lens: ${this.activeViewerProfile.lensCorrectionEnabled ? 'ON' : 'OFF'}`);

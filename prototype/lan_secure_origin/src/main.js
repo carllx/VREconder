@@ -138,14 +138,21 @@ function enterVRMode() {
     video.play().catch(e2 => console.log('Muted play error:', e2));
   });
 
+  // If entering VR from Stage A, promote to Stage B (Synthetic Grid stereo VR)
+  if (state.calibrationStage === 'A') {
+    state.calibrationStage = 'B';
+    if (vrRenderer) vrRenderer.sceneType = 1;
+  } else if (state.calibrationStage === 'B') {
+    if (vrRenderer) vrRenderer.sceneType = 1;
+  } else if (state.calibrationStage === 'C') {
+    if (vrRenderer) vrRenderer.sceneType = 0;
+  }
+
   state.inVR = true;
   calibrationUI.currentMode = 'vr';
   uiOverlay.classList.add('hidden');
   diagnosticToolbar.style.display = 'none';
-  if (state.calibrationStage !== 'B' && state.calibrationStage !== 'C') {
-    showFloatingBar();
-    startRecenterCalibration(2500, '🥽 戴入眼镜并面朝正前方');
-  }
+  showFeedbackToast(`🛡️ VR Armed: Stage ${state.calibrationStage}`);
 }
 
 function exitVRMode() {
