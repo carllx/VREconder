@@ -15,11 +15,13 @@ export function createDefaultVideoProfile(mediaId, name = '') {
   return {
     mediaId: mediaId,
     name: name,
-    projection: 'unknown',       // 'unknown' | 'equirectangular-180' | 'equirectangular-360' | 'flat'
-    stereoMode: 'unknown',       // 'unknown' | 'left-right' | 'top-bottom' | 'mono'
-    eyeOrder: 'unknown',         // 'unknown' | 'left-right' | 'right-left'
-    fovHorizontalDeg: 180,
-    fovVerticalDeg: 180,
+    projection: 'unknown',            // 'unknown' | 'equirectangular' | 'flat'
+    horizontalCoverageDeg: 180,       // 180 | 360
+    verticalCoverageDeg: 180,         // 180 | 90
+    fovHorizontalDeg: 180,            // alias for backward compatibility
+    fovVerticalDeg: 180,              // alias for backward compatibility
+    stereoMode: 'unknown',            // 'unknown' | 'left-right' | 'top-bottom' | 'mono'
+    eyeOrder: 'unknown',              // 'unknown' | 'left-right' | 'right-left'
     crop: { top: 0, bottom: 0, left: 0, right: 0 },
     pose: { yawDeg: 0, pitchDeg: 0, rollDeg: 0 },
     confidence: 'unverified',

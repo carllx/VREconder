@@ -44,215 +44,67 @@ html, body {
   pointer-events: none;
 }
 
-/* 2D Setup & Control Overlay */
-#uiOverlay {
+/* Minimal Floating Stage Banner (Non-obstructive in Stage A) */
+#stageBanner {
   position: fixed;
-  top: 0;
-  left: 0;
-  width: 100vw;
-  height: 100vh;
-  z-index: 10;
-  background: rgba(9, 13, 22, 0.94);
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
-  padding: 12px;
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  transition: opacity 0.25s ease, visibility 0.25s ease;
-}
-#uiOverlay.hidden {
-  display: none !important;
-  opacity: 0;
-  visibility: hidden;
-  pointer-events: none;
-}
-
-.card {
-  background: var(--card);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 10px 12px;
-}
-h1 { font-size: 1.05rem; font-weight: 700; display: flex; align-items: center; gap: 8px; color: #fff; }
-.subtitle { font-size: 0.74rem; color: var(--muted); margin-top: 2px; }
-
-.status-badge {
-  display: inline-block;
-  padding: 3px 8px;
-  border-radius: 6px;
-  font-size: 0.72rem;
-  font-weight: bold;
-}
-.badge-standalone { background: #065f46; color: #34d399; }
-.badge-browser { background: #78350f; color: #fbbf24; }
-
-.control-row {
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-  margin-top: 6px;
-}
-.label { font-size: 0.72rem; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
-
-select {
-  width: 100%;
-  background: #1e293b;
-  color: #f1f5f9;
-  border: 1px solid #334155;
-  padding: 8px 10px;
-  border-radius: 8px;
-  font-size: 0.82rem;
-  appearance: none;
-  -webkit-appearance: none;
-}
-
-.btn-grid-2 {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 6px;
-  margin-top: 6px;
-}
-.btn-grid-3 {
-  display: grid;
-  grid-template-columns: 1fr 1fr 1fr;
-  gap: 6px;
-  margin-top: 6px;
-}
-.btn-grid-4 {
-  display: grid;
-  grid-template-columns: 1fr 1fr 1fr 1fr;
-  gap: 5px;
-  margin-top: 6px;
-}
-.btn-grid-5 {
-  display: grid;
-  grid-template-columns: repeat(5, 1fr);
-  gap: 4px;
-  margin-top: 6px;
-}
-
-.opt-btn {
-  padding: 8px 6px;
-  background: #1e293b;
-  color: #94a3b8;
-  border: 1px solid #334155;
-  border-radius: 6px;
-  font-size: 0.76rem;
-  font-weight: 600;
-  cursor: pointer;
-  text-align: center;
-  touch-action: manipulation;
-}
-.opt-btn.active {
-  background: var(--blue);
-  color: #fff;
-  border-color: var(--blue);
-}
-
-.btn-main {
-  width: 100%;
-  background: linear-gradient(135deg, #2563eb, #7c3aed);
-  color: #fff;
-  font-size: 0.96rem;
-  font-weight: 700;
-  padding: 10px 14px;
-  border-radius: 8px;
-  border: none;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  margin-top: 6px;
-  touch-action: manipulation;
-}
-.btn-main:active { transform: scale(0.98); }
-
-.btn-save {
-  background: #059669;
-  color: #fff;
-  border: none;
-  border-radius: 6px;
-  padding: 7px 12px;
-  font-size: 0.75rem;
-  font-weight: bold;
-  cursor: pointer;
-}
-
-.slider-group {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  font-size: 0.76rem;
-  margin-top: 4px;
-}
-.slider-group input[type="range"] {
-  flex: 1;
-  accent-color: #38bdf8;
-}
-.slider-val {
-  min-width: 42px;
-  text-align: right;
-  font-family: ui-monospace, monospace;
-  color: #38bdf8;
-  font-weight: bold;
-}
-
-.metrics-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 4px;
-  font-size: 0.74rem;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, monospace;
-  background: rgba(0,0,0,0.35);
-  padding: 6px 8px;
-  border-radius: 6px;
-}
-.m-item { color: var(--muted); }
-.m-val { color: #38bdf8; font-weight: 600; }
-
-#errorBanner {
-  display: none;
-  background: rgba(239, 68, 68, 0.2);
-  border: 1px solid var(--red);
-  color: #fca5a5;
-  padding: 8px;
-  border-radius: 8px;
-  font-size: 0.78rem;
-  word-break: break-all;
-}
-
-/* Floating Diagnostic Bar */
-#diagnosticToolbar {
-  position: fixed;
-  top: 10px;
+  top: 14px;
   left: 50%;
   transform: translateX(-50%);
-  z-index: 25;
+  z-index: 10;
   display: flex;
-  gap: 5px;
-  background: rgba(15, 23, 42, 0.92);
-  border: 1px solid rgba(255, 255, 255, 0.25);
-  padding: 6px 10px;
-  border-radius: 20px;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  background: rgba(15, 23, 42, 0.82);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 16px;
+  padding: 8px 16px;
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+  transition: opacity 0.25s ease, transform 0.25s ease;
 }
-.tool-btn {
-  background: #1e293b;
-  color: #f8fafc;
-  border: 1px solid #334155;
-  border-radius: 14px;
-  padding: 5px 10px;
-  font-size: 0.72rem;
-  font-weight: 600;
+#stageBanner.hidden {
+  opacity: 0;
+  pointer-events: none;
+  transform: translateX(-50%) translateY(-20px);
+}
+
+.arm-btn {
+  background: #10b981;
+  color: #fff;
+  border: none;
+  padding: 10px 18px;
+  border-radius: 10px;
+  font-size: 0.92rem;
+  font-weight: 700;
   cursor: pointer;
+  box-shadow: 0 2px 10px rgba(16, 185, 129, 0.4);
   touch-action: manipulation;
 }
-.tool-btn.active { background: #0284c7; border-color: #38bdf8; }
+.arm-btn:active { opacity: 0.85; }
+
+#stageStatusText {
+  font-size: 0.72rem;
+  color: #94a3b8;
+  font-weight: 500;
+  text-align: center;
+}
+
+#errorBanner {
+  position: fixed;
+  top: 70px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 30;
+  display: none;
+  background: rgba(239, 68, 68, 0.85);
+  border: 1px solid var(--red);
+  color: #fff;
+  padding: 6px 14px;
+  border-radius: 8px;
+  font-size: 0.75rem;
+}
 
 /* In-VR Floating Controls */
 #vrFloatingBar {

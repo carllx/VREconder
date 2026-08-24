@@ -43,264 +43,27 @@
   <!-- Background WebGL Stereo VR / Rectilinear Diagnostic Canvas -->
   <canvas id="glCanvas"></canvas>
 
-  <!-- 2D Stereo Reticle / Diagnostic Grid Overlay -->
+  <!-- 2D Stereo Reticle / Diagnostic Grid Overlay (Unobstructed in Stage A) -->
   <canvas id="uiCanvas"></canvas>
 
   <video id="sourceVideo" playsinline preload="auto" crossorigin="anonymous" muted loop></video>
 
-  <!-- Diagnostic Quick Toolbar (Floating at Top) -->
-  <div id="diagnosticToolbar">
-    <button class="tool-btn" id="btnToggleScene">🎬 Scene: Video</button>
-    <button class="tool-btn" id="btnDiagFreeze">⏸ Freeze</button>
-    <button class="tool-btn" id="btnDiagSeekBack5">⏪ -5s</button>
-    <button class="tool-btn" id="btnDiagSeekBack1">◀ -1s</button>
-    <button class="tool-btn" id="btnDiagSeekFwd1">+1s ▶</button>
-    <button class="tool-btn" id="btnDiagSeekFwd5">+5s ⏩</button>
-    <button class="tool-btn" id="btnDiagToggleEye">👁 Eye: Left</button>
-    <button class="tool-btn active" id="btnDiagToggleGrid">▦ Grid</button>
-    <button class="tool-btn active" id="btnDiagTogglePlumb">⫯ Plumb</button>
-    <button class="tool-btn active" id="btnDiagToggleHorizon">━ Horizon</button>
+  <!-- Minimal Floating Banner in Stage A (Non-obstructive) -->
+  <div id="stageBanner">
+    <button id="btnEnterVR" class="arm-btn">
+      <span>🛡️ 授权传感器并进入 VR (Arm & Enter VR)</span>
+    </button>
+    <div id="stageStatusText">Stage A: Flat Diagnostic (Unobstructed) | Controlled via PC</div>
   </div>
 
-  <!-- In-VR Floating Quick Bar -->
+  <!-- In-VR Floating Emergency Bar -->
   <div id="vrFloatingBar" class="fade-out">
-    <button class="vr-btn vr-btn-pattern" id="btnVrSwitchPattern">🔀 Pattern: B</button>
     <button class="vr-btn vr-btn-reset" id="btnVrReset">🎯 Recenter</button>
-    <button class="vr-btn vr-btn-exit" id="btnVrExit">⚙ Setup</button>
+    <button class="vr-btn vr-btn-exit" id="btnVrExit">⚙ Exit VR</button>
   </div>
 
-  <!-- 2D Configuration, Staged Calibration & Diagnostic Panel -->
-  <div id="uiOverlay">
-    <div id="errorBanner"></div>
+  <div id="errorBanner"></div>
 
-    <!-- Prominent Top Action Button -->
-    <div class="card" style="background:#064e3b; border-color:#059669;">
-      <button class="btn-main" id="btnEnterVRTop" style="background:#10b981; font-size:1.05rem;">
-        <span>🛡️ 立即进入 VR (Arm & Enter VR)</span>
-      </button>
-      <div class="subtitle" style="text-align:center; margin-top:4px; color:#a7f3d0;">
-        已默认加载 180° SBS + Cardboard v2 镜头反畸变，点击直接进入立体头显
-      </div>
-    </div>
-
-    <div class="card">
-      <div style="display:flex; justify-content:space-between; align-items:center;">
-        <h1>📐 Optics & Projection Calibration</h1>
-        <span class="status-badge" id="badgeDisplayMode">Browser Tab</span>
-      </div>
-      <div class="subtitle">Validate Source Mapping vs Headset Lens Optics (Issue #13)</div>
-      <div style="margin-top:6px; font-size:0.72rem; color:#38bdf8; background:rgba(2,132,199,0.15); padding:4px 8px; border-radius:6px; border:1px solid rgba(56,189,248,0.3);">
-        💻 PC Controller: 打开 <code>/controller.html</code> 戴镜实时调参
-      </div>
-    </div>
-
-    <!-- Mode Selector: Diagnostic vs VR View -->
-    <div class="card">
-      <div class="label">Calibration Stage</div>
-      <div class="btn-grid-3" style="margin-top:4px;">
-        <button class="opt-btn active" id="btnStageA">
-          <b>Stage A</b><br>
-          <span style="font-size:0.65rem;opacity:0.85;">Flat Diagnostic</span>
-        </button>
-        <button class="opt-btn" id="btnStageB">
-          <b>Stage B</b><br>
-          <span style="font-size:0.65rem;opacity:0.85;">Synthetic Grid</span>
-        </button>
-        <button class="opt-btn" id="btnStageC">
-          <b>Stage C</b><br>
-          <span style="font-size:0.65rem;opacity:0.85;">Video Verify</span>
-        </button>
-      </div>
-    </div>
-
-    <!-- Media Selector -->
-    <div class="card">
-      <div class="label">Media Source (G:\Media\VR)</div>
-      <select id="videoSelect">
-        <option value="4K/4096_2048_crf18_avc1-Kururugi Aoi - WAVR224.mp4">[6.09 GB] 4K/4096_2048_crf18_avc1-Kururugi Aoi - WAVR224.mp4</option>
-      </select>
-      <div class="metrics-grid" style="margin-top:5px;">
-        <div class="m-item">Res: <span class="m-val" id="valVideoRes">--</span></div>
-        <div class="m-item">Dur: <span class="m-val" id="valVideoDur">--</span></div>
-        <div class="m-item">Time: <span class="m-val" id="valVideoTime">0.00s</span></div>
-        <div class="m-item">Status: <span class="m-val" id="valPlayStatus">Paused</span></div>
-      </div>
-    </div>
-
-    <!-- Stage A: Source Mapping Profile -->
-    <div class="card">
-      <div style="display:flex; justify-content:space-between; align-items:center;">
-        <div>
-          <div class="label">Stage A — Video Mapping (Source Geometry)</div>
-          <div id="txtMappingStatus" style="font-size:0.72rem; font-weight:bold; color:#f87171;">⚠️ Untagged Media</div>
-        </div>
-        <button class="btn-save" id="btnSaveVideoProfile">💾 Save Video Mapping</button>
-      </div>
-
-      <div class="control-row" style="margin-top:6px;">
-        <div style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap:6px;">
-          <div>
-            <div class="label" style="font-size:0.66rem;">Projection Model</div>
-            <select id="selProjType">
-              <option value="unknown">-- Select Projection --</option>
-              <option value="equirectangular-180">Equirectangular 180°</option>
-              <option value="equirectangular-360">Equirectangular 360°</option>
-              <option value="flat">Flat 2D Rectilinear</option>
-            </select>
-          </div>
-          <div>
-            <div class="label" style="font-size:0.66rem;">Stereo Layout</div>
-            <select id="selStereoType">
-              <option value="unknown">-- Select Stereo --</option>
-              <option value="left-right">Side-by-Side (SBS)</option>
-              <option value="top-bottom">Top-Bottom</option>
-              <option value="mono">Mono</option>
-            </select>
-          </div>
-          <div>
-            <div class="label" style="font-size:0.66rem;">Eye Order</div>
-            <select id="selEyeOrder">
-              <option value="left-right">Left-Right (Standard)</option>
-              <option value="right-left">Right-Left (Swapped)</option>
-            </select>
-          </div>
-        </div>
-      </div>
-
-      <div class="control-row" style="margin-top:6px;">
-        <div class="label">Horizontal Angular Scale (°):</div>
-        <div class="slider-group">
-          <input type="range" id="rangeCoverageH" min="160" max="200" step="1" value="180">
-          <span class="slider-val" id="valCoverageH">180°</span>
-        </div>
-      </div>
-
-      <div class="control-row" style="margin-top:6px;">
-        <div style="display:flex; justify-content:space-between; align-items:center;">
-          <div class="label">Capture Camera Pose Level:</div>
-          <button id="btnResetPose" style="background:#334155;color:#cbd5e1;border:none;border-radius:4px;padding:2px 6px;font-size:0.68rem;cursor:pointer;">Reset Pose</button>
-        </div>
-        <div class="slider-group">
-          <span style="width:40px;font-size:0.72rem;color:var(--muted);">Yaw:</span>
-          <input type="range" id="rangePoseYaw" min="-30" max="30" step="0.5" value="0">
-          <span class="slider-val" id="valPoseYaw">0°</span>
-        </div>
-        <div class="slider-group">
-          <span style="width:40px;font-size:0.72rem;color:var(--muted);">Pitch:</span>
-          <input type="range" id="rangePosePitch" min="-30" max="30" step="0.5" value="0">
-          <span class="slider-val" id="valPosePitch">0°</span>
-        </div>
-        <div class="slider-group">
-          <span style="width:40px;font-size:0.72rem;color:var(--muted);">Roll:</span>
-          <input type="range" id="rangePoseRoll" min="-30" max="30" step="0.5" value="0">
-          <span class="slider-val" id="valPoseRoll">0°</span>
-        </div>
-      </div>
-    </div>
-
-    <!-- Stage B: Viewer Optics Profile -->
-    <div class="card">
-      <div style="display:flex; justify-content:space-between; align-items:center;">
-        <div>
-          <div class="label">Stage B — Viewer Optics Calibration</div>
-          <div id="txtViewerSourceInfo" style="font-size:0.70rem; color:var(--muted);">Unknown / Uncalibrated Viewer</div>
-        </div>
-        <button class="btn-save" id="btnSaveViewerProfile">💾 Save My Viewer Profile</button>
-      </div>
-
-      <div class="control-row" style="margin-top:6px;">
-        <div class="label">Viewer Profile:</div>
-        <select id="selViewerPreset">
-          <option value="cardboard:reference_50deg">Cardboard-inspired Reference (50° Guidance)</option>
-          <option value="viewer:my_profile">My Viewer Profile (Working / User-tuned)</option>
-        </select>
-      </div>
-
-      <!-- Custom Profile Inputs & JSON Import Box -->
-      <div id="customViewerInputs" style="display:none; background:rgba(0,0,0,0.25); padding:8px; border-radius:6px; margin-top:6px;">
-        <div style="font-size:0.68rem; font-weight:bold; color:#38bdf8; margin-bottom:4px;">Manual Device Parameters:</div>
-        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:6px;">
-          <div>
-            <div class="label" style="font-size:0.62rem;">Screen-to-Lens (mm)</div>
-            <input type="number" id="inputScreenToLens" value="39.3" step="0.1" style="width:100%; background:#1e293b; color:#fff; border:1px solid #334155; padding:4px 6px; border-radius:4px; font-size:0.75rem;">
-          </div>
-          <div>
-            <div class="label" style="font-size:0.62rem;">Inter-Lens IPD (mm)</div>
-            <input type="number" id="inputInterLens" value="63.9" step="0.1" style="width:100%; background:#1e293b; color:#fff; border:1px solid #334155; padding:4px 6px; border-radius:4px; font-size:0.75rem;">
-          </div>
-          <div>
-            <div class="label" style="font-size:0.62rem;">Vertical Align</div>
-            <select id="selVerticalAlign" style="padding:4px 6px; font-size:0.75rem;">
-              <option value="BOTTOM">BOTTOM</option>
-              <option value="CENTER">CENTER</option>
-              <option value="TOP">TOP</option>
-            </select>
-          </div>
-          <div>
-            <div class="label" style="font-size:0.62rem;">Tray-to-Lens (mm)</div>
-            <input type="number" id="inputTrayToLens" value="35.0" step="0.1" style="width:100%; background:#1e293b; color:#fff; border:1px solid #334155; padding:4px 6px; border-radius:4px; font-size:0.75rem;">
-          </div>
-        </div>
-        <div style="margin-top:6px;">
-          <div class="label" style="font-size:0.62rem;">Max FOV Angle (deg)</div>
-          <input type="number" id="inputMaxFov" value="50.0" step="0.5" style="width:100%; background:#1e293b; color:#fff; border:1px solid #334155; padding:4px 6px; border-radius:4px; font-size:0.75rem;">
-        </div>
-        <div style="margin-top:6px;">
-          <div class="label" style="font-size:0.62rem;">JSON Profile Import:</div>
-          <div style="display:flex; gap:4px; margin-top:2px;">
-            <input type="text" id="inputJsonImport" placeholder='Paste JSON {"screenToLensDistance":0.04,...}' style="flex:1; background:#1e293b; color:#fff; border:1px solid #334155; padding:4px 6px; border-radius:4px; font-size:0.72rem;">
-            <button id="btnImportJson" style="background:#0284c7; color:#fff; border:none; border-radius:4px; padding:4px 8px; font-size:0.72rem; cursor:pointer;">Import</button>
-          </div>
-        </div>
-      </div>
-
-      <!-- Derived FOV & Screen Display -->
-      <div id="txtDerivedFov" style="font-size:0.68rem; background:rgba(0,0,0,0.3); padding:6px 8px; border-radius:6px; margin-top:6px; font-family:ui-monospace, monospace; line-height:1.4;">
-      </div>
-
-      <div class="control-row" style="margin-top:6px;">
-        <button id="btnToggleLens" style="width:100%;padding:10px;border-radius:8px;border:none;font-weight:bold;color:#fff;background:#475569;cursor:pointer;">
-          ⚪ LENS CORRECTION: OFF (Uncalibrated Baseline)
-        </button>
-      </div>
-
-      <div class="control-row" style="margin-top:6px;">
-        <div class="label">Distortion Polynomial ($r' = r(1 + k_1 r^2 + k_2 r^4)$):</div>
-        <div class="slider-group">
-          <span style="width:30px;font-size:0.72rem;color:var(--muted);">k1:</span>
-          <input type="range" id="rangeDistortK1" min="-0.50" max="0.80" step="0.005" value="0.0">
-          <span class="slider-val" id="valDistortK1">0.000</span>
-        </div>
-        <div class="slider-group">
-          <span style="width:30px;font-size:0.72rem;color:var(--muted);">k2:</span>
-          <input type="range" id="rangeDistortK2" min="-0.30" max="0.80" step="0.005" value="0.0">
-          <span class="slider-val" id="valDistortK2">0.000</span>
-        </div>
-      </div>
-    </div>
-
-    <!-- Stage C: Real Video Verification -->
-    <div class="card">
-      <div class="label">Stage C — Real Video Verification (Fixed Optics)</div>
-      <div class="control-row" style="margin-top:6px;">
-        <label style="display:flex; align-items:center; gap:8px; font-size:0.75rem; color:#38bdf8; cursor:pointer;">
-          <input type="checkbox" id="chkStageCReferenceGrid" style="accent-color:#38bdf8; width:16px; height:16px;">
-          <span>▦ Show Reference Grid (Verification Overlay via Stereo Pipeline)</span>
-        </label>
-      </div>
-    </div>
-
-    <!-- Enter VR Button -->
-    <div class="card">
-      <button class="btn-main" id="btnEnterVR">
-        <span>🛡️ Arm Calibration / Enter VR</span>
-      </button>
-      <div class="subtitle" style="text-align:center; margin-top:4px;">
-        点击后请求传感器权限并解锁音视频，之后可戴入眼镜并从 PC Controller 实时切换 Stage B/C 与调参
-      </div>
-    </div>
-  </div>
-
-  <script type="module" src="./src/main.js?v=20260824_v3"></script>
+  <script type="module" src="./src/main.js?v=20260824_v4"></script>
 </body>
 </html>

@@ -331,7 +331,7 @@ function handleRequest(req, res, isHttps) {
   const VIDEO_PROFILES_FILE = path.join(__dirname, 'prototype_video_profiles.json');
   const VIEWER_PROFILE_FILE = path.join(__dirname, 'prototype_viewer_profile.json');
 
-  if (pathname === '/api/profiles' && req.method === 'GET') {
+  if ((pathname === '/api/profiles' || pathname === '/api/profiles/videos') && req.method === 'GET') {
     let videoProfiles = {};
     let viewerProfile = null;
     try {
@@ -349,7 +349,7 @@ function handleRequest(req, res, isHttps) {
     return;
   }
 
-  if (pathname === '/api/profiles/video' && req.method === 'POST') {
+  if ((pathname === '/api/profiles/video' || pathname === '/api/profiles/videos') && req.method === 'POST') {
     let body = '';
     req.on('data', chunk => { body += chunk; });
     req.on('end', () => {
@@ -394,6 +394,16 @@ function handleRequest(req, res, isHttps) {
         res.end(JSON.stringify({ error: err.message }));
       }
     });
+    return;
+  }
+
+  if (pathname === '/api/profiles/viewer' && req.method === 'GET') {
+    let viewerProfile = null;
+    try {
+      if (fs.existsSync(VIEWER_PROFILE_FILE)) viewerProfile = JSON.parse(fs.readFileSync(VIEWER_PROFILE_FILE, 'utf8'));
+    } catch (e) {}
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify(viewerProfile));
     return;
   }
 

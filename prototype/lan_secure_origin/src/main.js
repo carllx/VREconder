@@ -66,20 +66,17 @@ document.addEventListener('visibilitychange', async () => {
 const glCanvas = document.getElementById('glCanvas');
 const uiCanvas = document.getElementById('uiCanvas');
 const uiCtx = uiCanvas.getContext('2d');
-const uiOverlay = document.getElementById('uiOverlay');
+const stageBanner = document.getElementById('stageBanner');
 const vrFloatingBar = document.getElementById('vrFloatingBar');
 const video = document.getElementById('sourceVideo');
-const videoSelect = document.getElementById('videoSelect');
 const btnEnterVR = document.getElementById('btnEnterVR');
 const btnVrReset = document.getElementById('btnVrReset');
 const btnVrExit = document.getElementById('btnVrExit');
-const btnVrSwitchPattern = document.getElementById('btnVrSwitchPattern');
-const diagnosticToolbar = document.getElementById('diagnosticToolbar');
 
 // Instantiate Subsystems
 const vrRenderer = new VRRenderer(glCanvas);
 const diagnosticOverlay = new DiagnosticOverlay(uiCanvas);
-const mediaController = new MediaController(video, videoSelect);
+const mediaController = new MediaController(video, null);
 const commandModel = new CommandModel(mediaController);
 const gazeEngine = new GazeEngine(commandModel, video);
 
@@ -113,7 +110,7 @@ const calibrationUI = new CalibrationUI({
 const originalSelectVideo = mediaController.selectVideo.bind(mediaController);
 mediaController.selectVideo = (relPath) => {
   originalSelectVideo(relPath);
-  const found = state.videoList.find(v => v.relPath === relPath) || { name: relPath, relPath: relPath, sizeBytes: 0 };
+  const found = (state.videoList || []).find(v => v.relPath === relPath) || { name: relPath, relPath: relPath, sizeBytes: 0 };
   onVideoSelected(found);
 };
 
@@ -124,24 +121,18 @@ initOrientationListeners();
 let hideBarTimeout = null;
 function showFloatingBar() {
   if (!state.inVR) return;
-  if (state.calibrationStage === 'B' || state.calibrationStage === 'C') return;
-  vrFloatingBar.classList.remove('fade-out');
+  if (vrFloatingBar) vrFloatingBar.classList.remove('fade-out');
   clearTimeout(hideBarTimeout);
   hideBarTimeout = setTimeout(() => {
-    vrFloatingBar.classList.add('fade-out');
+    if (vrFloatingBar) vrFloatingBar.classList.add('fade-out');
   }, 4000);
 }
 window.addEventListener('touchstart', showFloatingBar, { passive: true });
+
 async function localArmAndEnterVR() {
   if (btnEnterVR) {
     btnEnterVR.style.background = '#10b981';
     const span = btnEnterVR.querySelector('span');
-    if (span) span.textContent = '🚀 Requesting Sensor Permission...';
-  }
-  const topBtn = document.getElementById('btnEnterVRTop');
-  if (topBtn) {
-    topBtn.style.background = '#10b981';
-    const span = topBtn.querySelector('span');
     if (span) span.textContent = '🚀 Requesting Sensor Permission...';
   }
 
@@ -170,11 +161,6 @@ async function localArmAndEnterVR() {
           const span = btnEnterVR.querySelector('span');
           if (span) span.textContent = '❌ Permission Denied';
         }
-        if (topBtn) {
-          topBtn.style.background = '#dc2626';
-          const span = topBtn.querySelector('span');
-          if (span) span.textContent = '❌ Permission Denied';
-        }
       }
     } catch (err) {
       state.isArmed = false;
@@ -199,7 +185,7 @@ async function localArmAndEnterVR() {
 function enterVRMode() {
   if (!state.isArmed) {
     console.warn('[VR] enterVRMode blocked: Device not armed by local user gesture.');
-    showFeedbackToast('⚠️ Tap Arm Calibration on iPhone first');
+    showFeedbackToast('⚠️ Tap Arm & Enter VR on iPhone first');
     return;
   }
 
@@ -215,9 +201,7 @@ function enterVRMode() {
 
   state.inVR = true;
   calibrationUI.currentMode = 'vr';
-  uiOverlay.classList.add('hidden');
-  uiOverlay.style.display = 'none';
-  diagnosticToolbar.style.display = 'none';
+  if (stageBanner) stageBanner.classList.add('hidden');
   showFeedbackToast(`🛡️ VR Armed: Stage ${state.calibrationStage}`);
   remoteLog('INFO', 'Entered VR Mode', { stage: state.calibrationStage, isArmed: state.isArmed });
 }
@@ -225,10 +209,8 @@ function enterVRMode() {
 function exitVRMode() {
   state.inVR = false;
   calibrationUI.currentMode = 'diagnostic';
-  uiOverlay.classList.remove('hidden');
-  uiOverlay.style.display = 'flex';
-  diagnosticToolbar.style.display = 'flex';
-  vrFloatingBar.classList.add('fade-out');
+  if (stageBanner) stageBanner.classList.remove('hidden');
+  if (vrFloatingBar) vrFloatingBar.classList.add('fade-out');
   telemetry.syncSummary();
   remoteLog('INFO', 'Exited VR Mode');
 }
@@ -242,38 +224,18 @@ if (btnEnterVR) {
   });
 }
 
-const btnEnterVRTop = document.getElementById('btnEnterVRTop');
-if (btnEnterVRTop) {
-  btnEnterVRTop.addEventListener('click', localArmAndEnterVR);
-  btnEnterVRTop.addEventListener('touchend', (e) => {
-    e.preventDefault();
-    localArmAndEnterVR();
+if (btnVrReset) {
+  btnVrReset.addEventListener('click', (e) => {
+    e.stopPropagation();
+    commandModel.recenter();
   });
 }
 
-btnVrReset.addEventListener('click', (e) => {
-  e.stopPropagation();
-  commandModel.recenter();
-});
-
-btnVrSwitchPattern.addEventListener('click', (e) => {
-  e.stopPropagation();
-  commandModel.cyclePattern();
-});
-
-btnVrExit.addEventListener('click', (e) => {
-  e.stopPropagation();
-  exitVRMode();
-});
-
-// Display Mode Badge
-const badgeDisplay = document.getElementById('badgeDisplayMode');
-if (isStandalone) {
-  badgeDisplay.className = 'status-badge badge-standalone';
-  badgeDisplay.textContent = 'Standalone WebApp (Fullscreen)';
-} else {
-  badgeDisplay.className = 'status-badge badge-browser';
-  badgeDisplay.textContent = 'Safari Browser Tab';
+if (btnVrExit) {
+  btnVrExit.addEventListener('click', (e) => {
+    e.stopPropagation();
+    exitVRMode();
+  });
 }
 
 // ==========================================
@@ -360,6 +322,7 @@ setInterval(() => {
     inVR: state.inVR,
     calibrationStage: state.calibrationStage,
     mediaName: state.videoPath ? state.videoPath.split('/').pop() : '--',
+    mediaPath: state.videoPath || '',
     mediaStatus: state.firstFrameTimings.statusText || 'Ready',
     devStatus: state.inVR ? `In VR (Stage ${state.calibrationStage})` : `Diagnostic (Stage ${state.calibrationStage})`,
     showReferenceGrid: state.showReferenceGrid === true,
@@ -368,7 +331,17 @@ setInterval(() => {
     savedMyViewerProfile: (calibrationUI.storage && calibrationUI.storage.savedMyViewerProfile) || null,
     viewerProfile: calibrationUI.activeViewerProfile,
     videoProfile: activeVideoProfile,
-    timings: state.firstFrameTimings
+    timings: state.firstFrameTimings,
+    selectedEye: calibrationUI.selectedEye || 0,
+    diagOverlay: {
+      showGrid: !!(calibrationUI.diagnosticOverlay && calibrationUI.diagnosticOverlay.showGrid),
+      showPlumbLines: !!(calibrationUI.diagnosticOverlay && calibrationUI.diagnosticOverlay.showPlumbLines),
+      showHorizon: !!(calibrationUI.diagnosticOverlay && calibrationUI.diagnosticOverlay.showHorizon)
+    },
+    videoPaused: !!video.paused,
+    currentTime: video.currentTime || 0,
+    duration: video.duration || 0,
+    mediaList: (state.videoList || []).map(v => ({ relPath: v.relPath, name: v.name, sizeGB: v.sizeGB }))
   };
   fetch('/api/telemetry', {
     method: 'POST',

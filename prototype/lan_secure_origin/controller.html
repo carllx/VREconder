@@ -20,9 +20,10 @@
     .stage-btn:hover { border-color: #64748b; color: #fff; }
     .stage-btn.active { background: #1e3a8a; color: #fff; border-color: #38bdf8; box-shadow: 0 0 12px rgba(56, 189, 248, 0.35); }
     .btn-row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 6px; }
-    .action-btn { padding: 8px 14px; border-radius: 6px; border: none; font-size: 0.8rem; font-weight: 600; cursor: pointer; color: #fff; background: #334155; display: flex; align-items: center; gap: 4px; }
+    .action-btn { padding: 7px 12px; border-radius: 6px; border: none; font-size: 0.78rem; font-weight: 600; cursor: pointer; color: #fff; background: #334155; display: flex; align-items: center; gap: 4px; }
     .action-btn:hover { opacity: 0.9; }
     .action-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+    .action-btn.active { background: #0284c7; border: 1px solid #38bdf8; }
     .btn-lens-on { background: #059669; }
     .btn-lens-off { background: #475569; }
     .btn-recenter { background: #0284c7; }
@@ -48,7 +49,7 @@
           <span class="badge badge-green" id="badgeConnection">🟢 SSE Connected</span>
         </div>
       </h1>
-      <div class="subtitle">Authoritative Calibration & Verification Gate (Issue #13)</div>
+      <div class="subtitle">Authoritative Calibration & Verification Gate (Issue #13 SSOT Control Surface)</div>
     </div>
 
     <!-- Mutually Exclusive Calibration Stages -->
@@ -70,15 +71,79 @@
       </div>
     </div>
 
-    <!-- Stage A: Video Mapping Panel -->
+    <!-- Media Selector & Playback Controls -->
+    <div class="card">
+      <div style="display:flex; justify-content:space-between; align-items:center;">
+        <div style="font-size:0.8rem; font-weight:700; color:var(--muted); text-transform:uppercase;">2. Media Source & Playback</div>
+        <div id="txtVideoTime" style="font-size:0.75rem; font-family:monospace; color:#38bdf8;">0.00s / --</div>
+      </div>
+      <div style="margin-top:6px;">
+        <select id="selMediaList" onchange="onSelectMedia(this.value)" style="width:100%; padding:6px 10px; background:#1e293b; color:#fff; border:1px solid #334155; border-radius:6px; font-size:0.8rem;">
+          <option value="">Loading videos...</option>
+        </select>
+      </div>
+      <div class="btn-row" style="margin-top:8px;">
+        <button class="action-btn" id="btnPlayPause" onclick="sendAction('playPause')">⏸ Freeze</button>
+        <button class="action-btn" onclick="sendSeek(-5)">⏪ -5s</button>
+        <button class="action-btn" onclick="sendSeek(-1)">◀ -1s</button>
+        <button class="action-btn" onclick="sendSeek(1)">+1s ▶</button>
+        <button class="action-btn" onclick="sendSeek(5)">+5s ⏩</button>
+        <button class="action-btn" onclick="sendAction('previous')">⏮ Prev</button>
+        <button class="action-btn" onclick="sendAction('next')">⏭ Next</button>
+      </div>
+    </div>
+
+    <!-- Stage A: Diagnostic Tools & Video Mapping Panel -->
     <div class="card" id="cardStageA">
       <div style="display:flex; justify-content:space-between; align-items:center;">
         <div>
-          <div style="font-size:0.8rem; font-weight:700; color:var(--muted); text-transform:uppercase;">2. Video Mapping (Stage A)</div>
+          <div style="font-size:0.8rem; font-weight:700; color:var(--muted); text-transform:uppercase;">3. Stage A — Diagnostic Tools & Video Mapping</div>
           <div id="txtVideoMappingStatus" style="font-size:0.72rem; color:#f87171; font-weight:bold;">⚠️ Unconfirmed Video Mapping</div>
         </div>
         <button class="action-btn btn-save" id="btnSaveVideoMapping" onclick="saveVideoMapping()">💾 Save Video Mapping</button>
       </div>
+
+      <!-- Diagnostic Overlays (Stage A only) -->
+      <div style="margin-top:8px; padding:8px 12px; background:rgba(0,0,0,0.25); border-radius:8px;">
+        <div style="font-size:0.72rem; font-weight:700; color:var(--muted); text-transform:uppercase;">Flat Diagnostic Inspection Tools:</div>
+        <div class="btn-row" style="margin-top:4px;">
+          <button class="action-btn" id="btnDiagEye" onclick="toggleDiagnosticEye()">👁 Eye: Left</button>
+          <button class="action-btn active" id="btnDiagGrid" onclick="toggleDiagnosticOverlay('showGrid')">▦ Grid</button>
+          <button class="action-btn active" id="btnDiagPlumb" onclick="toggleDiagnosticOverlay('showPlumbLines')">⫯ Plumb</button>
+          <button class="action-btn active" id="btnDiagHorizon" onclick="toggleDiagnosticOverlay('showHorizon')">━ Horizon</button>
+        </div>
+      </div>
+
+      <!-- Video Pose Adjustment -->
+      <div style="margin-top:8px; padding:8px 12px; background:rgba(0,0,0,0.25); border-radius:8px;">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <div style="font-size:0.72rem; font-weight:700; color:var(--muted); text-transform:uppercase;">Camera Pose Level Correction:</div>
+          <button class="action-btn" onclick="resetPose()" style="padding:2px 8px; font-size:0.7rem;">Reset Pose</button>
+        </div>
+        <div class="control-grid" style="margin-top:4px;">
+          <div>
+            <div class="slider-row">
+              <span style="width:50px;">Yaw:</span>
+              <input type="range" id="rngPoseYaw" min="-30" max="30" step="0.5" value="0" oninput="onPoseChange()">
+              <span class="val" id="valPoseYaw">0°</span>
+            </div>
+            <div class="slider-row">
+              <span style="width:50px;">Pitch:</span>
+              <input type="range" id="rngPosePitch" min="-30" max="30" step="0.5" value="0" oninput="onPoseChange()">
+              <span class="val" id="valPosePitch">0°</span>
+            </div>
+          </div>
+          <div>
+            <div class="slider-row">
+              <span style="width:50px;">Roll:</span>
+              <input type="range" id="rngPoseRoll" min="-30" max="30" step="0.5" value="0" oninput="onPoseChange()">
+              <span class="val" id="valPoseRoll">0°</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Video Geometry Mapping Form -->
       <div class="control-grid" style="margin-top:8px;">
         <div>
           <div class="slider-row">
@@ -108,8 +173,8 @@
           <div class="slider-row">
             <span style="width:120px;">Eye Order:</span>
             <select id="selEyeOrder" onchange="onVideoMappingChange()" style="flex:1; background:#1e293b; color:#fff; border:1px solid #334155; padding:4px 6px; border-radius:4px; font-size:0.75rem;">
-              <option value="left-first">Normal (Left Eye First)</option>
-              <option value="right-first">Swapped (Right Eye First)</option>
+              <option value="left-right">Normal (Left-Right)</option>
+              <option value="right-left">Swapped (Right-Left)</option>
             </select>
           </div>
         </div>
@@ -120,7 +185,7 @@
     <div class="card" id="cardOptics">
       <div style="display:flex; justify-content:space-between; align-items:center;">
         <div>
-          <div style="font-size:0.8rem; font-weight:700; color:var(--muted); text-transform:uppercase;">3. Viewer Optics Calibration (Stage B/C)</div>
+          <div style="font-size:0.8rem; font-weight:700; color:var(--muted); text-transform:uppercase;">4. Viewer Optics Calibration (Stage B/C)</div>
           <div id="txtProfileStatus" style="font-size:0.72rem; color:#f87171; font-weight:bold;">⚠️ Unknown / Uncalibrated Profile</div>
         </div>
         <button class="action-btn btn-save" id="btnSaveViewer" onclick="saveMyViewerProfile()">💾 Save My Viewer Profile</button>
@@ -130,13 +195,14 @@
         <div style="font-size:0.75rem; font-weight:700; color:var(--muted); text-transform:uppercase;">Active Viewer Profile (Stage B Only):</div>
         <select id="selViewerPreset" onchange="onViewerPresetSelect(this.value)" style="width:100%; margin-top:4px; padding:6px 10px; background:#1e293b; color:#fff; border:1px solid #334155; border-radius:6px; font-size:0.8rem; font-weight:600;">
           <option value="cardboard:reference_50deg">Cardboard-inspired Reference (50° Guidance)</option>
+          <option value="subjective:working_candidate">Subjective Working Candidate (Unverified Tuning)</option>
           <option value="viewer:my_profile">My Viewer Profile (Working / User-tuned)</option>
         </select>
       </div>
 
       <!-- Stage B Visual Reference Sub-modes -->
       <div id="stageBVisualRefPanel" style="margin-top:8px;">
-        <div style="font-size:0.74rem; font-weight:700; color:var(--muted); text-transform:uppercase;">Stage B Visual Reference (Both Allow Live Tuning):</div>
+        <div style="font-size:0.74rem; font-weight:700; color:var(--muted); text-transform:uppercase;">Stage B Visual Reference:</div>
         <div class="stage-grid" style="grid-template-columns: 1fr 1fr; margin-top:4px;">
           <button class="stage-btn active" id="btnVisualGridOnly" onclick="setViewerVisualMode('grid_only')">
             ▦ Grid Only<br>
@@ -163,14 +229,11 @@
         <div style="font-size:0.74rem; font-weight:700; color:#60a5fa; text-transform:uppercase;">Stage C Verification Tools</div>
         <label style="display:flex; align-items:center; gap:8px; font-size:0.8rem; font-weight:600; color:#38bdf8; cursor:pointer; margin-top:4px;">
           <input type="checkbox" id="chkReferenceGrid" onchange="toggleReferenceGrid(this.checked)" style="accent-color:#38bdf8; width:16px; height:16px; cursor:pointer;">
-          <span>[ ] Show Reference Grid (Verification Overlay in Stereo Engine)</span>
+          <span>Show Reference Grid (Verification Overlay in Stereo Engine)</span>
         </label>
-        <div style="font-size:0.68rem; color:#94a3b8; margin-top:2px;">
-          Passes through the exact same stereo ideal rendering & lens pre-distortion path as video.
-        </div>
       </div>
 
-      <div class="control-grid" id="opticsControlsGrid">
+      <div class="control-grid" id="opticsControlsGrid" style="margin-top:8px;">
         <div>
           <div class="slider-row">
             <span style="width:110px;">Distortion k1:</span>
@@ -184,7 +247,7 @@
           </div>
           <div class="slider-row">
             <span style="width:110px;">Max FOV (°):</span>
-            <input type="range" id="rngFov" min="40.0" max="65.0" step="0.5" value="50.0" oninput="onOpticsChange()">
+            <input type="range" id="rngFov" min="40.0" max="75.0" step="0.5" value="50.0" oninput="onOpticsChange()">
             <span class="val" id="valFov">--</span>
           </div>
         </div>
@@ -196,7 +259,7 @@
           </div>
           <div class="slider-row">
             <span style="width:130px;">Inter-Lens IPD (mm):</span>
-            <input type="range" id="rngInterLens" min="55.0" max="75.0" step="0.1" value="63.9" oninput="onOpticsChange()">
+            <input type="range" id="rngInterLens" min="50.0" max="75.0" step="0.1" value="63.9" oninput="onOpticsChange()">
             <span class="val" id="valInterLens">--</span>
           </div>
           <div class="slider-row">
@@ -205,18 +268,6 @@
             <span class="val" id="valTrayToLens">--</span>
           </div>
         </div>
-      </div>
-    </div>
-
-    <!-- Session Media Controls (Cleaned) -->
-    <div class="card" id="cardSession">
-      <div style="font-size:0.8rem; font-weight:700; color:var(--muted); text-transform:uppercase;">4. Session Media Controls</div>
-      <div class="btn-row" style="margin-top:6px;">
-        <button class="action-btn" onclick="sendAction('playPause')">⏯ Play / Pause</button>
-        <button class="action-btn" onclick="sendAction('seekBackward')">⏪ -5s</button>
-        <button class="action-btn" onclick="sendAction('seekForward')">+5s ⏩</button>
-        <button class="action-btn" onclick="sendAction('previous')">⏮ Previous Video</button>
-        <button class="action-btn" onclick="sendAction('next')">⏭ Next Video</button>
       </div>
     </div>
 
@@ -236,329 +287,6 @@
     </div>
   </div>
 
-  <script>
-    let currentStage = 'A';
-    let currentVisualMode = 'grid_only';
-    let lensEnabled = false;
-    let isArmed = false;
-    let hasInitializedFromDevice = false;
-
-    function setConnectedBadge(text = '🟢 Connected') {
-      const badge = document.getElementById('badgeConnection');
-      badge.className = 'badge badge-green';
-      badge.textContent = text;
-    }
-
-    function initEventSource() {
-      const es = new EventSource('/api/calibration/events');
-      es.onopen = () => { setConnectedBadge('🟢 SSE Connected'); };
-      es.onerror = () => {};
-      es.onmessage = (e) => {
-        setConnectedBadge('🟢 SSE Connected');
-        try {
-          const msg = JSON.parse(e.data);
-          if (msg.type === 'telemetry_sync') updateTelemetryUI(msg);
-        } catch(err) {}
-      };
-    }
-    initEventSource();
-
-    setInterval(async () => {
-      try {
-        const res = await fetch('/api/telemetry');
-        const data = await res.json();
-        setConnectedBadge('🟢 Live Connected');
-        if (data && data.latestTelemetry && data.latestTelemetry.type === 'telemetry_sync') {
-          updateTelemetryUI(data.latestTelemetry);
-        }
-      } catch (e) {
-        document.getElementById('badgeConnection').className = 'badge badge-amber';
-        document.getElementById('badgeConnection').textContent = '🟡 Reconnecting...';
-      }
-    }, 500);
-
-    async function sendControl(payload) {
-      await fetch('/api/calibration/control', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
-    }
-
-    function setStage(stage) {
-      currentStage = stage;
-      ['A', 'B', 'C'].forEach(s => {
-        document.getElementById('btnStage' + s).classList.toggle('active', s === stage);
-      });
-      applyStageLocks(stage);
-      sendControl({ action: 'set_stage', stage: stage });
-    }
-
-    function setViewerVisualMode(mode) {
-      currentVisualMode = mode;
-      document.getElementById('btnVisualGridOnly').classList.toggle('active', mode === 'grid_only');
-      document.getElementById('btnVisualVideoGrid').classList.toggle('active', mode === 'video_grid');
-      sendControl({ action: 'set_viewer_visual_mode', mode: mode });
-    }
-
-    function applyStageLocks(stage) {
-      const isStageC = (stage === 'C');
-      const isStageA = (stage === 'A');
-      const shouldLockCoeffs = isStageC || isStageA;
-
-      const selPreset = document.getElementById('selViewerPreset');
-      if (selPreset) selPreset.disabled = shouldLockCoeffs;
-
-      ['rngK1', 'rngK2', 'rngFov', 'rngScreenToLens', 'rngInterLens', 'rngTrayToLens'].forEach(id => {
-        const el = document.getElementById(id);
-        if (el) el.disabled = shouldLockCoeffs;
-      });
-
-      const btnSaveViewer = document.getElementById('btnSaveViewer');
-      if (btnSaveViewer) btnSaveViewer.disabled = isStageC;
-
-      document.getElementById('lockNotice').style.display = isStageC ? 'block' : 'none';
-      const stageCPanel = document.getElementById('stageCVerificationPanel');
-      if (stageCPanel) stageCPanel.style.display = isStageC ? 'block' : 'none';
-      const stageBVisual = document.getElementById('stageBVisualRefPanel');
-      if (stageBVisual) stageBVisual.style.display = (stage === 'B') ? 'block' : 'none';
-    }
-
-    let latestSavedMyProfile = null;
-
-    function populateSlidersFromProfile(p) {
-      if (!p) return;
-      if (p.distortion && typeof p.distortion.k1 === 'number') {
-        document.getElementById('rngK1').value = p.distortion.k1;
-        document.getElementById('valK1').textContent = p.distortion.k1.toFixed(3);
-      }
-      if (p.distortion && typeof p.distortion.k2 === 'number') {
-        document.getElementById('rngK2').value = p.distortion.k2;
-        document.getElementById('valK2').textContent = p.distortion.k2.toFixed(3);
-      }
-      if (p.screenToLensDistance) {
-        const mm = p.screenToLensDistance * 1000;
-        document.getElementById('rngScreenToLens').value = mm;
-        document.getElementById('valScreenToLens').textContent = mm.toFixed(1);
-      }
-      if (p.interLensDistance) {
-        const mm = p.interLensDistance * 1000;
-        document.getElementById('rngInterLens').value = mm;
-        document.getElementById('valInterLens').textContent = mm.toFixed(1);
-      }
-      if (p.trayToLensDistance) {
-        const mm = p.trayToLensDistance * 1000;
-        document.getElementById('rngTrayToLens').value = mm;
-        document.getElementById('valTrayToLens').textContent = mm.toFixed(1);
-      }
-      if (p.maxFovAngles && p.maxFovAngles.outerDeg) {
-        document.getElementById('rngFov').value = p.maxFovAngles.outerDeg;
-        document.getElementById('valFov').textContent = p.maxFovAngles.outerDeg.toFixed(1) + '°';
-      }
-    }
-
-    function onViewerPresetSelect(presetId) {
-      if (currentStage !== 'B') return;
-      if (presetId === 'viewer:my_profile') {
-        if (latestSavedMyProfile) {
-          populateSlidersFromProfile(latestSavedMyProfile);
-          const statEl = document.getElementById('txtProfileStatus');
-          if (statEl) {
-            statEl.textContent = '⚙️ My Viewer Profile (working) [Unvalidated / User-tuned — Not Ground Truth]';
-            statEl.style.color = '#38bdf8';
-          }
-          sendControl({ action: 'set_viewer_preset', presetId: presetId });
-        } else {
-          const statEl = document.getElementById('txtProfileStatus');
-          if (statEl) {
-            statEl.textContent = '⚠️ My Viewer Profile: Not saved yet (Tune sliders below & click Save)';
-            statEl.style.color = '#fbbf24';
-          }
-          alert('⚠️ My Viewer Profile has not been saved yet.\nPlease tune the sliders in Stage B and click "Save My Viewer Profile" first.');
-        }
-      } else if (presetId === 'cardboard:reference_50deg' || presetId === 'cardboard:v2_2015') {
-        document.getElementById('rngK1').value = 0.336;
-        document.getElementById('valK1').textContent = '0.336';
-        document.getElementById('rngK2').value = 0.553;
-        document.getElementById('valK2').textContent = '0.553';
-        document.getElementById('rngFov').value = 50.0;
-        document.getElementById('valFov').textContent = '50.0°';
-        document.getElementById('rngScreenToLens').value = 39.3;
-        document.getElementById('valScreenToLens').textContent = '39.3';
-        document.getElementById('rngInterLens').value = 63.9;
-        document.getElementById('valInterLens').textContent = '63.9';
-        document.getElementById('rngTrayToLens').value = 35.0;
-        document.getElementById('valTrayToLens').textContent = '35.0';
-        const statEl = document.getElementById('txtProfileStatus');
-        if (statEl) {
-          statEl.textContent = '✓ Cardboard-inspired Reference (50° Guidance) [Reference Optics — Not Ground Truth]';
-          statEl.style.color = '#34d399';
-        }
-        sendControl({ action: 'set_viewer_preset', presetId: presetId });
-      }
-    }
-
-    function onVideoMappingChange() {
-      const proj = document.getElementById('selProjection').value;
-      const stereo = document.getElementById('selStereo').value;
-      const fov = parseFloat(document.getElementById('selCoverageFov').value);
-      const eye = document.getElementById('selEyeOrder').value;
-      sendControl({
-        action: 'set_video_mapping',
-        mapping: { projection: proj, stereoMode: stereo, fovHorizontalDeg: fov, eyeOrder: eye }
-      });
-    }
-
-    function saveVideoMapping() {
-      const proj = document.getElementById('selProjection').value;
-      const stereo = document.getElementById('selStereo').value;
-      if (proj === 'unknown' || stereo === 'unknown') {
-        alert('Cannot save unknown mapping. Please select Projection and Stereo Mode first.');
-        return;
-      }
-      sendControl({ action: 'save_video_profile' });
-    }
-
-    function saveMyViewerProfile() {
-      sendControl({ action: 'save_viewer_profile' });
-    }
-
-    function toggleReferenceGrid(checked) {
-      sendControl({ action: 'set_reference_grid', enabled: checked });
-    }
-
-    function toggleLensCorrection() {
-      lensEnabled = !lensEnabled;
-      const btn = document.getElementById('btnLensToggle');
-      btn.textContent = lensEnabled ? '🛡️ LENS CORRECTION: ON' : '⚪ LENS CORRECTION: OFF';
-      btn.className = 'action-btn ' + (lensEnabled ? 'btn-lens-on' : 'btn-lens-off');
-      sendControl({ action: 'set_lens_correction', enabled: lensEnabled });
-    }
-
-    function onOpticsChange() {
-      if (currentStage !== 'B') return;
-      const k1 = parseFloat(document.getElementById('rngK1').value);
-      const k2 = parseFloat(document.getElementById('rngK2').value);
-      const fov = parseFloat(document.getElementById('rngFov').value);
-      const s2l = parseFloat(document.getElementById('rngScreenToLens').value);
-      const ipd = parseFloat(document.getElementById('rngInterLens').value);
-      const t2l = parseFloat(document.getElementById('rngTrayToLens').value);
-
-      document.getElementById('valK1').textContent = k1.toFixed(3);
-      document.getElementById('valK2').textContent = k2.toFixed(3);
-      document.getElementById('valFov').textContent = fov.toFixed(1) + '°';
-      document.getElementById('valScreenToLens').textContent = s2l.toFixed(1);
-      document.getElementById('valInterLens').textContent = ipd.toFixed(1);
-      document.getElementById('valTrayToLens').textContent = t2l.toFixed(1);
-
-      sendControl({
-        action: 'set_viewer_params',
-        k1: k1, k2: k2,
-        maxFovDeg: fov,
-        screenToLensMm: s2l,
-        interLensMm: ipd,
-        trayToLensMm: t2l
-      });
-    }
-
-    function sendAction(act) { sendControl({ action: act }); }
-
-    function updateTelemetryUI(data) {
-      if (!data) return;
-      if (typeof data.isArmed === 'boolean') {
-        isArmed = data.isArmed;
-        const b = document.getElementById('badgeArmStatus');
-        if (isArmed) {
-          b.className = 'badge badge-green';
-          b.textContent = '🟢 iPhone Armed (VR Ready)';
-        } else {
-          b.className = 'badge badge-amber';
-          b.textContent = '🟡 Tap "Arm Calibration" on iPhone';
-        }
-      }
-
-      if (typeof data.savedMyViewerProfileExists === 'boolean') {
-        latestSavedMyProfile = data.savedMyViewerProfile || null;
-        const opt = document.querySelector('#selViewerPreset option[value="viewer:my_profile"]');
-        if (opt) {
-          opt.textContent = data.savedMyViewerProfileExists
-            ? 'My Viewer Profile (Saved Working Profile)'
-            : 'My Viewer Profile (Not saved yet)';
-        }
-      }
-
-      if (typeof data.showReferenceGrid === 'boolean') {
-        const chk = document.getElementById('chkReferenceGrid');
-        if (chk) chk.checked = data.showReferenceGrid;
-      }
-
-      if (data.viewerVisualMode && data.viewerVisualMode !== currentVisualMode) {
-        currentVisualMode = data.viewerVisualMode;
-        document.getElementById('btnVisualGridOnly').classList.toggle('active', currentVisualMode === 'grid_only');
-        document.getElementById('btnVisualVideoGrid').classList.toggle('active', currentVisualMode === 'video_grid');
-      }
-
-      if (data.calibrationStage && data.calibrationStage !== currentStage) {
-        currentStage = data.calibrationStage;
-        ['A', 'B', 'C'].forEach(s => {
-          document.getElementById('btnStage' + s).classList.toggle('active', s === currentStage);
-        });
-        applyStageLocks(currentStage);
-      }
-
-      if (data.videoProfile) {
-        const vstat = document.getElementById('txtVideoMappingStatus');
-        if (data.videoProfile.confidence === 'user-confirmed') {
-          vstat.textContent = '✓ Confirmed Video Mapping';
-          vstat.style.color = '#34d399';
-        } else {
-          vstat.textContent = '⚠️ Unconfirmed Video Mapping (' + (data.videoProfile.confidence || 'unverified') + ')';
-          vstat.style.color = '#f87171';
-        }
-      }
-
-      if (data.fps) document.getElementById('valFps').textContent = data.fps + ' FPS';
-      if (data.mediaName) document.getElementById('valMediaName').textContent = data.mediaName;
-      if (data.mediaStatus) document.getElementById('valMediaStatus').textContent = data.mediaStatus;
-      if (data.devStatus) document.getElementById('valDevStatus').textContent = data.devStatus;
-
-      const vp = data.viewerProfile;
-      if (vp) {
-        lensEnabled = vp.lensCorrectionEnabled === true;
-        const btn = document.getElementById('btnLensToggle');
-        btn.textContent = lensEnabled ? '🛡️ LENS CORRECTION: ON' : '⚪ LENS CORRECTION: OFF';
-        btn.className = 'action-btn ' + (lensEnabled ? 'btn-lens-on' : 'btn-lens-off');
-
-        const statEl = document.getElementById('txtProfileStatus');
-        if (vp.confidence === 'working-user-tuned' || vp.viewerProfileId === 'viewer:my_profile') {
-          statEl.textContent = '⚙️ ' + (vp.name || 'My Viewer Profile') + ' [Unvalidated / User-tuned — Not Ground Truth]';
-          statEl.style.color = '#38bdf8';
-        } else if (vp.confidence === 'historical-reference' || vp.viewerProfileId === 'cardboard:reference_50deg') {
-          statEl.textContent = '✓ ' + (vp.name || 'Cardboard Reference') + ' [Reference Optics — Not Ground Truth]';
-          statEl.style.color = '#34d399';
-        } else {
-          statEl.textContent = '⚠️ UNCALIBRATED BASELINE (Draft edits not validated)';
-          statEl.style.color = '#f87171';
-        }
-
-        if (!hasInitializedFromDevice) {
-          hasInitializedFromDevice = true;
-          populateSlidersFromProfile(vp);
-        }
-      }
-
-      const t = data.timings;
-      if (t && t.selectedAt) {
-        document.getElementById('valMetaAt').textContent = t.metadataAt ? (t.metadataAt - t.selectedAt).toFixed(1) + ' ms' : '--';
-        document.getElementById('valCanplayAt').textContent = t.canplayAt ? (t.canplayAt - t.selectedAt).toFixed(1) + ' ms' : '--';
-        document.getElementById('valDecodeAt').textContent = t.firstFrameDecodedAt ? (t.firstFrameDecodedAt - t.selectedAt).toFixed(1) + ' ms' : '--';
-        document.getElementById('valUploadAt').textContent = t.firstTextureUploadAt ? (t.firstTextureUploadAt - t.selectedAt).toFixed(1) + ' ms' : '--';
-        document.getElementById('valRenderAt').textContent = t.firstRenderAt ? (t.firstRenderAt - t.selectedAt).toFixed(1) + ' ms' : '--';
-        document.getElementById('valTotalLat').textContent = t.firstRenderAt ? (t.firstRenderAt - t.selectedAt).toFixed(1) + ' ms' : (t.statusText || '--');
-      }
-    }
-
-    applyStageLocks('A');
-  </script>
+  <script type="module" src="./src/controls/controller-app.js?v=20260824_v1"></script>
 </body>
 </html>

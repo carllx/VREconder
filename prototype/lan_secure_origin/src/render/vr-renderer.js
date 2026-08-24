@@ -184,16 +184,18 @@ export class VRRenderer {
     gl.uniform1i(locs.uVideoTexture, 0);
 
     const vp = videoProfile || {};
+    const hDeg = (typeof vp.horizontalCoverageDeg === 'number') ? vp.horizontalCoverageDeg : (vp.fovHorizontalDeg || 180);
+    const vDeg = (typeof vp.verticalCoverageDeg === 'number') ? vp.verticalCoverageDeg : (vp.fovVerticalDeg || 180);
+
     let projMode = 0;
-    if (vp.projection === 'unknown') projMode = 3;
-    else if (vp.projection === 'equirectangular-360') projMode = 1;
-    else if (vp.projection === 'flat') projMode = 2;
-    else projMode = 0;
+    if (vp.projection === 'flat') projMode = 2;
+    else if (vp.projection === 'unknown') projMode = 3;
+    else projMode = (hDeg > 270 || vp.projection === 'equirectangular-360') ? 1 : 0;
 
     const stereoLayout = vp.stereoMode === 'top-bottom' ? 1 : (vp.stereoMode === 'mono' ? 2 : 0);
-    const eyeSwap = vp.eyeOrder === 'right-left' ? 1 : 0;
-    const covH = ((vp.fovHorizontalDeg || 180) * Math.PI) / 180;
-    const covV = ((vp.fovVerticalDeg || 180) * Math.PI) / 180;
+    const eyeSwap = (vp.eyeOrder === 'right-left' || vp.eyeOrder === 'right-first') ? 1 : 0;
+    const covH = (hDeg * Math.PI) / 180;
+    const covV = (vDeg * Math.PI) / 180;
     const crop = vp.crop || { left: 0, right: 0, top: 0, bottom: 0 };
     const poseMat = this.computePoseMatrix(vp.pose);
 
@@ -256,27 +258,29 @@ export class VRRenderer {
     gl.bindTexture(gl.TEXTURE_2D, this.videoTex);
     gl.uniform1i(sLocs.uVideoTexture, 0);
 
-    const vp = videoProfile || {};
-    let projMode = 0;
-    if (vp.projection === 'equirectangular-360') projMode = 1;
-    else if (vp.projection === 'flat') projMode = 2;
-    else projMode = 0; // Default candidate preview mapping: Equirectangular 180°
+    const vhDeg = (typeof vp.horizontalCoverageDeg === 'number') ? vp.horizontalCoverageDeg : (vp.fovHorizontalDeg || 180);
+    const vvDeg = (typeof vp.verticalCoverageDeg === 'number') ? vp.verticalCoverageDeg : (vp.fovVerticalDeg || 180);
 
-    const stereoLayout = vp.stereoMode === 'top-bottom' ? 1 : (vp.stereoMode === 'mono' ? 2 : 0);
-    const eyeSwap = vp.eyeOrder === 'right-left' ? 1 : 0;
-    const covH = ((vp.fovHorizontalDeg || 180) * Math.PI) / 180;
-    const covV = ((vp.fovVerticalDeg || 180) * Math.PI) / 180;
-    const crop = vp.crop || { left: 0, right: 0, top: 0, bottom: 0 };
-    const poseMat = this.computePoseMatrix(vp.pose);
+    let stereoProjMode = 0;
+    if (vp.projection === 'flat') stereoProjMode = 2;
+    else if (vp.projection === 'unknown') stereoProjMode = 3;
+    else stereoProjMode = (vhDeg > 270 || vp.projection === 'equirectangular-360') ? 1 : 0;
+
+    const sLayout = vp.stereoMode === 'top-bottom' ? 1 : (vp.stereoMode === 'mono' ? 2 : 0);
+    const sEyeSwap = (vp.eyeOrder === 'right-left' || vp.eyeOrder === 'right-first') ? 1 : 0;
+    const sCovH = (vhDeg * Math.PI) / 180;
+    const sCovV = (vvDeg * Math.PI) / 180;
+    const sCrop = vp.crop || { left: 0, right: 0, top: 0, bottom: 0 };
+    const sPoseMat = this.computePoseMatrix(vp.pose);
 
     gl.uniform1i(sLocs.uSceneType, this.sceneType);
     gl.uniform1i(sLocs.uShowReferenceGrid, (this.sceneType === 0 && this.showReferenceGrid) ? 1 : 0);
-    gl.uniform1i(sLocs.uProjectionMode, projMode);
-    gl.uniform1i(sLocs.uStereoLayout, stereoLayout);
-    gl.uniform1i(sLocs.uEyeSwap, eyeSwap);
-    gl.uniform2f(sLocs.uCoverageRad, covH, covV);
-    gl.uniform4f(sLocs.uCrop, crop.left || 0, crop.right || 0, crop.top || 0, crop.bottom || 0);
-    gl.uniformMatrix3fv(sLocs.uPoseRot, false, poseMat);
+    gl.uniform1i(sLocs.uProjectionMode, stereoProjMode);
+    gl.uniform1i(sLocs.uStereoLayout, sLayout);
+    gl.uniform1i(sLocs.uEyeSwap, sEyeSwap);
+    gl.uniform2f(sLocs.uCoverageRad, sCovH, sCovV);
+    gl.uniform4f(sLocs.uCrop, sCrop.left || 0, sCrop.right || 0, sCrop.top || 0, sCrop.bottom || 0);
+    gl.uniformMatrix3fv(sLocs.uPoseRot, false, sPoseMat);
     gl.uniformMatrix3fv(sLocs.uCamRot, false, headCamRotMat3 || this.identityMat3);
 
     gl.enable(gl.SCISSOR_TEST);
