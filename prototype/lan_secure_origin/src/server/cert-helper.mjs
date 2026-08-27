@@ -169,6 +169,7 @@ export function renderHevcDiagnosticPage(res) {
   <div class="card">
     <div style="font-size:0.75rem; font-weight:bold; color:#94a3b8; text-transform:uppercase;">Select Sample Candidate:</div>
     <div class="btn-row">
+      <button id="btnMeiHev1" onclick="pickPreset('tnb/Mei Matsumoto-TD- Vr Japanese, Mei Matsumoto, Mei Matsumoto Vr Porn - SpankBang-HEVC.mp4')">0. Mei Matsumoto (HEVC hev1)</button>
       <button id="btnAmatsukiHev1" class="active" onclick="pickPreset('4096_2048_crf21_avc1-Amatsuki Azu(Hoshi Nako) - VRKM1502.mp4 - (HEVC_23.0).mp4')">1. Amatsuki (HEVC hev1)</button>
       <button id="btnAmatsukiHvc1" onclick="pickPreset('4096_2048_crf21_avc1-Amatsuki Azu(Hoshi Nako) - VRKM1502.mp4 - (HEVC_23.0)_HVC1.mp4')">2. Amatsuki (HEVC hvc1 Sibling)</button>
       <button id="btnHarunaHev1" onclick="pickPreset('4096_2048_crf21_avc1-Haruna Noa - KIWVR739.mp4 - (HEVC_23.0).mp4')">3. Haruna (HEVC hev1)</button>

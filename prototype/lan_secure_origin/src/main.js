@@ -159,9 +159,6 @@ const commandModel = new CommandModel(mediaController);
 const gazeEngine = new GazeEngine(commandModel, video);
 const controllerProbe = new ControllerInputProbe(commandModel);
 
-// Load server profiles
-profileStorage.loadServerProfiles();
-
 // Calibration UI Setup
 let activeVideoProfile = null;
 
@@ -201,9 +198,28 @@ const calibrationUI = new CalibrationUI({
 const originalSelectVideo = mediaController.selectVideo.bind(mediaController);
 mediaController.selectVideo = (relPath) => {
   originalSelectVideo(relPath);
-  const found = (state.videoList || []).find(v => v.relPath === relPath) || { name: relPath, relPath: relPath, sizeBytes: 0 };
+  let found = (state.videoList || []).find(v => v.relPath === relPath);
+  if (!found) {
+    console.warn(`[ProfileStorage] Video item not found in state.videoList for: ${relPath}. Using unverified fallback.`);
+    found = { name: relPath.split('/').pop(), relPath: relPath, sizeBytes: 0 };
+  }
   onVideoSelected(found);
 };
+
+// Bootstrap hydration sequence: hydrate server profiles first, then bind initial media
+async function bootstrapApp() {
+  await profileStorage.loadServerProfiles();
+  if (calibrationUI.storage && calibrationUI.storage.activeViewerProfile) {
+    calibrationUI.activeViewerProfile = calibrationUI.storage.activeViewerProfile;
+  }
+  await mediaController.loadVideoList();
+  // Re-bind current active video profile after full hydration
+  if (state.videoPath) {
+    const found = (state.videoList || []).find(v => v.relPath === state.videoPath);
+    if (found) onVideoSelected(found);
+  }
+}
+bootstrapApp();
 
 // Initialize Orientation Listeners
 initOrientationListeners();
@@ -453,6 +469,3 @@ setInterval(() => {
     body: JSON.stringify(payload)
   }).catch(() => {});
 }, 500);
-
-// Initial Video List Load
-mediaController.loadVideoList();

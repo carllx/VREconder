@@ -113,6 +113,31 @@ export class MediaController {
     }
   }
 
+  async refreshVideoList() {
+    try {
+      const res = await fetch('/api/videos');
+      const data = await res.json();
+      if (data.videos && Array.isArray(data.videos)) {
+        state.videoList = data.videos;
+        if (this.videoSelect) {
+          const prevVal = this.videoSelect.value;
+          this.videoSelect.innerHTML = '';
+          data.videos.forEach((v) => {
+            const opt = document.createElement('option');
+            opt.value = v.relPath;
+            opt.textContent = '[' + v.sizeGB + '] ' + v.name;
+            this.videoSelect.appendChild(opt);
+          });
+          if (prevVal && data.videos.some(v => v.relPath === prevVal)) {
+            this.videoSelect.value = prevVal;
+          }
+        }
+      }
+    } catch (err) {
+      console.warn('Failed to refresh video list', err);
+    }
+  }
+
   async loadVideoList() {
     try {
       const res = await fetch('/api/videos');

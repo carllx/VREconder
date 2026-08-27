@@ -51,7 +51,17 @@ export class CalibrationUI {
   }
 
   handleRemoteControlAction(msg) {
-    if (!msg || !msg.action) return;
+    if (!msg) return;
+
+    // Handle system broadcasts (e.g. Media Root switched on PC)
+    if (msg.type === 'media_root_updated') {
+      if (this.mediaController && typeof this.mediaController.refreshVideoList === 'function') {
+        this.mediaController.refreshVideoList();
+      }
+      return;
+    }
+
+    if (!msg.action) return;
     const act = msg.action;
 
     if (act === 'set_stage') {
