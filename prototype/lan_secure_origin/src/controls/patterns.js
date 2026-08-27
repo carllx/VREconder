@@ -14,16 +14,13 @@ export function sphericalToDir(yawDeg, pitchDeg) {
   ];
 }
 
-// Shared Coarse Seek Nodes for Timeline MVP (Pitch: -12.0°, Non-overlapping with all menu nodes)
-export const COARSE_SEEK_FRACTIONS = [
-  { frac: 0.0, label: '0%', yaw: -21 },
-  { frac: 0.167, label: '17%', yaw: -14 },
-  { frac: 0.333, label: '33%', yaw: -7 },
-  { frac: 0.50, label: '50%', yaw: 0 },
-  { frac: 0.667, label: '67%', yaw: 7 },
-  { frac: 0.833, label: '83%', yaw: 14 },
-  { frac: 1.0, label: '100%', yaw: 21 }
-];
+// Shared Continuous VR Timeline Geometry (Pitch: -12.0°, Yaw: [-21.0°, +21.0°], Radius: 2.2°)
+export const TIMELINE_GEOMETRY = {
+  pitchDeg: -12.0,
+  minYawDeg: -21.0,
+  maxYawDeg: 21.0,
+  hitRadiusDeg: 2.4
+};
 
 export function getActiveInteractiveItems(commandModel, videoElement) {
   const items = [];
@@ -125,25 +122,6 @@ export function getActiveInteractiveItems(commandModel, videoElement) {
         });
       });
     }
-  }
-
-  // Shared Timeline Coarse Seek Nodes (Visible & active whenever any pattern menu is OPEN)
-  if (isMenuOpen) {
-    const timelinePitch = -12.0;
-    COARSE_SEEK_FRACTIONS.forEach(cs => {
-      items.push({
-        id: `seek_frac_${Math.round(cs.frac * 100)}`,
-        icon: '•',
-        fraction: cs.frac,
-        label: cs.label,
-        isTimelineNode: true,
-        yaw: cs.yaw,
-        pitch: timelinePitch,
-        radiusDeg: 1.8,
-        cmd: () => commandModel.seekToFraction(cs.frac),
-        dirWorld: sphericalToDir(cs.yaw, timelinePitch)
-      });
-    });
   }
 
   return items;

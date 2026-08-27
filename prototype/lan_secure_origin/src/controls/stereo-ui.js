@@ -184,7 +184,7 @@ export function renderStereoUI(uiCtx, gazeEngine, commandModel, videoElement, no
       continue;
     }
 
-    // 3. Draw Timeline Progress Bar and Time Readout (When Menu is Open)
+    // 3. Draw Continuous Timeline Progress Bar, Playhead, Preview, and Time Readout (When Menu is Open)
     const isMenuOpen = (state.activePattern === 'A' && state.patternA_open) ||
                        (state.activePattern === 'B' && state.patternB_open) ||
                        (state.activePattern === 'C' && state.patternC_open);
@@ -223,14 +223,56 @@ export function renderStereoUI(uiCtx, gazeEngine, commandModel, videoElement, no
 
         // Current Playhead Dot
         uiCtx.beginPath();
-        uiCtx.arc(progX, progY, 7, 0, Math.PI * 2);
+        uiCtx.arc(progX, progY, 6.5, 0, Math.PI * 2);
         uiCtx.fillStyle = '#ffffff';
         uiCtx.fill();
         uiCtx.strokeStyle = '#38bdf8';
-        uiCtx.lineWidth = 2.5;
+        uiCtx.lineWidth = 2.2;
         uiCtx.stroke();
 
-        // Time Text Badge above Timeline (01:42 / 08:36)
+        // Continuous Gaze Hover Preview Indicator on Timeline
+        if (gazeEngine.timelineHover && gazeEngine.timelineHover.active) {
+          const hFrac = gazeEngine.timelineHover.fraction;
+          const hx = pStart.x + (pEnd.x - pStart.x) * hFrac;
+          const hy = pStart.y + (pEnd.y - pStart.y) * hFrac;
+
+          // Preview candidate dot
+          uiCtx.beginPath();
+          uiCtx.arc(hx, hy, 8, 0, Math.PI * 2);
+          uiCtx.fillStyle = 'rgba(56, 189, 248, 0.9)';
+          uiCtx.fill();
+          uiCtx.strokeStyle = '#ffffff';
+          uiCtx.lineWidth = 2.0;
+          uiCtx.stroke();
+
+          // Dwell progress ring around preview candidate dot
+          if (gazeEngine.dwellProgress > 0) {
+            uiCtx.beginPath();
+            const startAngle = -Math.PI / 2;
+            const endAngle = startAngle + (Math.PI * 2 * gazeEngine.dwellProgress);
+            uiCtx.arc(hx, hy, 12, startAngle, endAngle);
+            uiCtx.strokeStyle = '#34d399';
+            uiCtx.lineWidth = 3.0;
+            uiCtx.stroke();
+          }
+
+          // Preview Time Text Badge directly above hover position (e.g. "⏱ 23:47")
+          const prevTimeStr = formatTime(gazeEngine.timelineHover.previewTime);
+          const badgeW = 60, badgeH = 22;
+          const badgeY = hy - 18;
+          uiCtx.fillStyle = 'rgba(15, 23, 42, 0.92)';
+          uiCtx.strokeStyle = '#38bdf8';
+          uiCtx.lineWidth = 1.2;
+          roundRect(uiCtx, hx - badgeW/2, badgeY - badgeH/2, badgeW, badgeH, 6, true, true);
+
+          uiCtx.font = 'bold 11px -apple-system, monospace';
+          uiCtx.fillStyle = '#38bdf8';
+          uiCtx.textAlign = 'center';
+          uiCtx.textBaseline = 'middle';
+          uiCtx.fillText(prevTimeStr, hx, badgeY);
+        }
+
+        // Time Text Badge above Timeline Center (01:42 / 08:36)
         const pMid = projectWorldDirToEye(sphericalToDir(0, timelinePitch + 4.0), eye, eyeGeom, halfW, height, virtualDepth);
         if (pMid) {
           const timeStr = `${formatTime(curSec)} / ${formatTime(durSec)}`;
@@ -257,52 +299,11 @@ export function renderStereoUI(uiCtx, gazeEngine, commandModel, videoElement, no
       const isHovered = (gazeEngine.currentHoveredItem && gazeEngine.currentHoveredItem.id === item.id);
       const isActivated = (gazeEngine.activatedItemId === item.id && (now - gazeEngine.activationFlashTime < 300));
       const radRad = (item.radiusDeg || 4.2) * (Math.PI / 180);
-      const btnR = Math.max(item.isTimelineNode ? 8 : 16, (Math.tan(radRad) / p.tanSpanX) * halfW);
+      const btnR = Math.max(16, (Math.tan(radRad) / p.tanSpanX) * halfW);
 
       uiCtx.save();
       uiCtx.beginPath();
       uiCtx.arc(p.x, p.y, btnR, 0, Math.PI * 2);
-
-      if (item.isTimelineNode) {
-        if (isActivated) {
-          uiCtx.fillStyle = '#34d399';
-          uiCtx.strokeStyle = '#ffffff';
-          uiCtx.lineWidth = 2.5;
-        } else if (isHovered) {
-          uiCtx.fillStyle = '#38bdf8';
-          uiCtx.strokeStyle = '#ffffff';
-          uiCtx.lineWidth = 2.5;
-          uiCtx.shadowColor = '#38bdf8';
-          uiCtx.shadowBlur = 8;
-        } else {
-          uiCtx.fillStyle = 'rgba(15, 23, 42, 0.75)';
-          uiCtx.strokeStyle = 'rgba(255, 255, 255, 0.6)';
-          uiCtx.lineWidth = 1.2;
-        }
-        uiCtx.fill();
-        uiCtx.stroke();
-
-        if (isHovered && gazeEngine.dwellProgress > 0) {
-          uiCtx.beginPath();
-          const startAngle = -Math.PI / 2;
-          const endAngle = startAngle + (Math.PI * 2 * gazeEngine.dwellProgress);
-          uiCtx.arc(p.x, p.y, btnR + 3, startAngle, endAngle);
-          uiCtx.strokeStyle = '#34d399';
-          uiCtx.lineWidth = 2.5;
-          uiCtx.stroke();
-        }
-
-        uiCtx.shadowBlur = 0;
-        if (isHovered) {
-          uiCtx.font = 'bold 11px -apple-system, sans-serif';
-          uiCtx.fillStyle = '#38bdf8';
-          uiCtx.textAlign = 'center';
-          uiCtx.textBaseline = 'bottom';
-          uiCtx.fillText(item.label, p.x, p.y - btnR - 4);
-        }
-        uiCtx.restore();
-        return;
-      }
 
       if (isActivated) {
         uiCtx.fillStyle = 'rgba(16, 185, 129, 0.95)';

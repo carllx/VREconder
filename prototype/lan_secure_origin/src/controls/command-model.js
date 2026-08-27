@@ -61,12 +61,26 @@ export class CommandModel {
     if (typeof dur !== 'number' || isNaN(dur) || !isFinite(dur) || dur <= 0) {
       return;
     }
+    const maxSeek = Math.max(0, dur - 5);
     const clampedFrac = Math.max(0, Math.min(1, fraction));
-    const targetTime = clampedFrac * dur;
+    const targetTime = Math.min(maxSeek, clampedFrac * dur);
     video.currentTime = targetTime;
     const pct = Math.round(clampedFrac * 100);
     showFeedbackToast(`⏱ 跳转至 ${pct}% (${formatTime(targetTime)})`);
     telemetry.recordCommand(`seekToFraction_${pct}%`, video);
+  }
+
+  seekToTime(targetSeconds) {
+    const video = this.media.video;
+    const dur = video.duration;
+    if (typeof dur !== 'number' || isNaN(dur) || !isFinite(dur) || dur <= 0) {
+      return;
+    }
+    const maxSeek = Math.max(0, dur - 5);
+    const targetTime = Math.max(0, Math.min(maxSeek, targetSeconds));
+    video.currentTime = targetTime;
+    showFeedbackToast(`⏱ 跳转至 ${formatTime(targetTime)}`);
+    telemetry.recordCommand(`seekToTime_${Math.round(targetTime)}s`, video);
   }
 
   recenter(immediate = false) {
