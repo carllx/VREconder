@@ -14,12 +14,13 @@ export function sphericalToDir(yawDeg, pitchDeg) {
   ];
 }
 
-// Shared Continuous VR Timeline Geometry (Pitch: -12.0°, Yaw: [-21.0°, +21.0°], Radius: 2.2°)
+// Shared Continuous VR Timeline Geometry (Pitch: -12.0°, Yaw: [-21.0°, +21.0°], Radius: 2.4°)
 export const TIMELINE_GEOMETRY = {
   pitchDeg: -12.0,
   minYawDeg: -21.0,
   maxYawDeg: 21.0,
-  hitRadiusDeg: 2.4
+  hitRadiusDeg: 2.4,
+  dwellResetAngleDeg: 0.85 // Angular movement threshold along timeline before resetting dwell accumulation
 };
 
 export function getActiveInteractiveItems(commandModel, videoElement) {

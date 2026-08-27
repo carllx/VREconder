@@ -22,7 +22,9 @@ export class GazeEngine {
       active: false,
       fraction: 0,
       previewTime: 0,
-      dirWorld: null
+      dirWorld: null,
+      dwellAnchorDirWorld: null,
+      dwellAnchorFraction: 0
     };
   }
 
@@ -41,6 +43,7 @@ export class GazeEngine {
     if (state.recenterCountdown.active) {
       this.currentHoveredItem = null;
       this.timelineHover.active = false;
+      this.timelineHover.dwellAnchorDirWorld = null;
       this.dwellProgress = 0;
       const elapsed = now - state.recenterCountdown.startTime;
       const remainingSec = Math.max(1, Math.ceil((state.recenterCountdown.durationMs - elapsed) / 1000));
@@ -65,6 +68,7 @@ export class GazeEngine {
     if (now < this.actionCooldownUntil) {
       this.dwellProgress = 0;
       this.timelineHover.active = false;
+      this.timelineHover.dwellAnchorDirWorld = null;
       return;
     }
 
@@ -126,19 +130,50 @@ export class GazeEngine {
         this.timelineHover.fraction = timelineCandidate.fraction;
         this.timelineHover.previewTime = timelineCandidate.previewTime;
         this.timelineHover.dirWorld = timelineCandidate.dirWorld;
+
+        // Timeline Dwell Anchor Stability Gate:
+        // If no anchor exists, or gaze candidate moves beyond dwellResetAngleDeg along timeline,
+        // cancel/reset accumulated dwell and establish new anchor.
+        const tg = TIMELINE_GEOMETRY;
+        const resetThresholdDeg = tg.dwellResetAngleDeg || 0.85;
+
+        if (!this.timelineHover.dwellAnchorDirWorld) {
+          this.timelineHover.dwellAnchorDirWorld = timelineCandidate.dirWorld;
+          this.timelineHover.dwellAnchorFraction = timelineCandidate.fraction;
+          this.hoverStartTime = now;
+          telemetry.recordTargetEnter(state.activePattern, 'timeline_continuous');
+        } else {
+          const anchorDot = this.timelineHover.dwellAnchorDirWorld[0] * timelineCandidate.dirWorld[0] +
+                            this.timelineHover.dwellAnchorDirWorld[1] * timelineCandidate.dirWorld[1] +
+                            this.timelineHover.dwellAnchorDirWorld[2] * timelineCandidate.dirWorld[2];
+          const distFromAnchorDeg = Math.acos(Math.max(-1, Math.min(1, anchorDot))) * (180 / Math.PI);
+
+          if (distFromAnchorDeg > resetThresholdDeg) {
+            // Gaze moved materially along timeline: reset dwell and set new anchor
+            telemetry.recordDwellCancel(state.activePattern, 'timeline_continuous', (now - this.hoverStartTime));
+            this.timelineHover.dwellAnchorDirWorld = timelineCandidate.dirWorld;
+            this.timelineHover.dwellAnchorFraction = timelineCandidate.fraction;
+            this.hoverStartTime = now;
+            telemetry.recordTargetEnter(state.activePattern, 'timeline_continuous');
+          }
+        }
       } else {
         this.timelineHover.active = false;
+        this.timelineHover.dwellAnchorDirWorld = null;
       }
 
       if (!this.currentHoveredItem || this.currentHoveredItem.id !== bestItem.id) {
         if (this.currentHoveredItem) {
-          telemetry.recordDwellCancel(state.activePattern, this.currentHoveredItem.id, (now - telemetry.hoverStartTime));
+          telemetry.recordDwellCancel(state.activePattern, this.currentHoveredItem.id, (now - this.hoverStartTime));
         }
         this.currentHoveredItem = bestItem;
-        telemetry.recordTargetEnter(state.activePattern, bestItem.id);
+        this.hoverStartTime = now;
+        if (!timelineHit) {
+          telemetry.recordTargetEnter(state.activePattern, bestItem.id);
+        }
       }
 
-      const elapsed = now - telemetry.hoverStartTime;
+      const elapsed = now - this.hoverStartTime;
       const threshold = (bestItem.id.startsWith('open_')) ? 400 : state.dwellThresholdMs;
       this.dwellProgress = Math.min(1.0, elapsed / threshold);
 
@@ -151,13 +186,15 @@ export class GazeEngine {
         this.dwellProgress = 0;
         this.currentHoveredItem = null;
         this.timelineHover.active = false;
+        this.timelineHover.dwellAnchorDirWorld = null;
       }
     } else {
       if (this.currentHoveredItem) {
-        telemetry.recordDwellCancel(state.activePattern, this.currentHoveredItem.id, (now - telemetry.hoverStartTime));
+        telemetry.recordDwellCancel(state.activePattern, this.currentHoveredItem.id, (now - this.hoverStartTime));
         this.currentHoveredItem = null;
       }
       this.timelineHover.active = false;
+      this.timelineHover.dwellAnchorDirWorld = null;
       this.dwellProgress = 0;
     }
   }
