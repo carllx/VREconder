@@ -399,6 +399,10 @@ function handleRequest(req, res, isHttps) {
   // Static assets (.html, .js, .mjs, .css, .json, .png, .svg)
   let safePath = path.normalize(path.join(__dirname, pathname));
   if (pathname === '/controller') safePath = path.join(__dirname, 'controller.html');
+  if (pathname === '/hevc-diag' || pathname === '/hevc-diag.html') {
+    renderHevcDiagnosticPage(res);
+    return;
+  }
   if (safePath.startsWith(__dirname) && fs.existsSync(safePath) && fs.statSync(safePath).isFile()) {
     const ext = path.extname(safePath).toLowerCase();
     const mimeTypes = {
