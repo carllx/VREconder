@@ -3,17 +3,35 @@
 // ==========================================
 import { loadVideoList } from './controller-app.js';
 
+export async function parseJsonResponse(res) {
+  const text = await res.text();
+  const contentType = res.headers.get('content-type') || '';
+  if (!contentType.includes('application/json') && !text.trim().startsWith('{')) {
+    throw new Error('Server is outdated or not restarted. Please restart VREconder Server.');
+  }
+  try {
+    return JSON.parse(text);
+  } catch (err) {
+    throw new Error('Server returned invalid response: ' + text.slice(0, 100));
+  }
+}
+
 export async function fetchCurrentMediaRoot() {
   try {
     const res = await fetch('/api/media-root');
-    const data = await res.json();
+    if (res.status === 404) {
+      showMediaRootStatus('Server is outdated or not restarted. Restart VREconder Server.', true);
+      return;
+    }
+    const data = await parseJsonResponse(res);
     updateMediaRootUI(data);
   } catch (err) {
-    showMediaRootStatus('Failed to load media root: ' + err.message, true);
+    showMediaRootStatus(err.message || 'Failed to load media root', true);
   }
 }
 
 export function updateMediaRootUI(data) {
+  if (!data) return;
   const inp = document.getElementById('inpMediaRoot');
   const txtCur = document.getElementById('txtCurrentMediaRoot');
   const txtCount = document.getElementById('txtMediaRootCount');
@@ -24,9 +42,10 @@ export function updateMediaRootUI(data) {
   }
   if (txtCur) {
     txtCur.textContent = data.root || '--';
+    txtCur.title = data.root || '';
   }
   if (txtCount) {
-    txtCount.textContent = (typeof data.videoCount === 'number') ? (data.videoCount + ' videos') : '--';
+    txtCount.textContent = (typeof data.videoCount === 'number') ? ('(' + data.videoCount + ' videos)') : '--';
   }
   if (statusEl && !statusEl.dataset.customError) {
     statusEl.textContent = 'Active';
@@ -43,7 +62,24 @@ export function showMediaRootStatus(msg, isError = false) {
   if (!isError) {
     setTimeout(() => {
       delete statusEl.dataset.customError;
+      if (statusEl.textContent.startsWith('✓')) {
+        statusEl.textContent = 'Active';
+        statusEl.style.color = '#34d399';
+      }
     }, 4000);
+  }
+}
+
+export function toggleMediaRootEditor(forceState) {
+  const panel = document.getElementById('mediaRootEditorPanel');
+  const btn = document.getElementById('btnToggleMediaRootEditor');
+  if (!panel) return;
+  const isVisible = (typeof forceState === 'boolean') ? forceState : (panel.style.display !== 'none');
+  panel.style.display = isVisible ? 'none' : 'block';
+  if (btn) btn.textContent = isVisible ? 'Change' : 'Close';
+  if (!isVisible) {
+    const inp = document.getElementById('inpMediaRoot');
+    if (inp) { inp.focus(); inp.select(); }
   }
 }
 
@@ -68,17 +104,22 @@ export async function applyMediaRoot() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ root: newPath })
     });
-    const data = await res.json();
+    if (res.status === 404) {
+      showMediaRootStatus('Server is outdated or not restarted. Restart VREconder Server.', true);
+      return;
+    }
+    const data = await parseJsonResponse(res);
     if (!res.ok || data.error) {
       showMediaRootStatus(data.error || 'Failed to switch media root', true);
     } else {
       showMediaRootStatus('✓ Updated (' + data.videoCount + ' videos found)', false);
       inp.dataset.userEditing = '';
       updateMediaRootUI(data);
+      toggleMediaRootEditor(true);
       await loadVideoList();
     }
   } catch (err) {
-    showMediaRootStatus('Network error: ' + err.message, true);
+    showMediaRootStatus(err.message || 'Network error', true);
   } finally {
     if (btn) {
       btn.disabled = false;
@@ -102,4 +143,7 @@ export function initMediaRootController() {
   fetchCurrentMediaRoot();
 }
 
-window.applyMediaRoot = applyMediaRoot;
+if (typeof window !== 'undefined') {
+  window.applyMediaRoot = applyMediaRoot;
+  window.toggleMediaRootEditor = toggleMediaRootEditor;
+}
