@@ -14,10 +14,27 @@ export function sphericalToDir(yawDeg, pitchDeg) {
   ];
 }
 
+// Shared Coarse Seek Nodes for Timeline MVP
+export const COARSE_SEEK_FRACTIONS = [
+  { frac: 0.0, label: '0%', yaw: -20 },
+  { frac: 0.125, label: '12.5%', yaw: -15 },
+  { frac: 0.25, label: '25%', yaw: -10 },
+  { frac: 0.375, label: '37.5%', yaw: -5 },
+  { frac: 0.50, label: '50%', yaw: 0 },
+  { frac: 0.625, label: '62.5%', yaw: 5 },
+  { frac: 0.75, label: '75%', yaw: 10 },
+  { frac: 0.875, label: '87.5%', yaw: 15 },
+  { frac: 1.0, label: '100%', yaw: 20 }
+];
+
 export function getActiveInteractiveItems(commandModel, videoElement) {
   const items = [];
   const isPlay = !videoElement.paused;
   const floorAnchorPitch = -34;
+
+  const isMenuOpen = (state.activePattern === 'A' && state.patternA_open) ||
+                     (state.activePattern === 'B' && state.patternB_open) ||
+                     (state.activePattern === 'C' && state.patternC_open);
 
   if (state.activePattern === 'A') {
     // Pattern A: Floor Arc (Only return items when menu is OPEN)
@@ -110,6 +127,25 @@ export function getActiveInteractiveItems(commandModel, videoElement) {
         });
       });
     }
+  }
+
+  // Shared Timeline Coarse Seek Nodes (Visible & active whenever any pattern menu is OPEN)
+  if (isMenuOpen) {
+    const timelinePitch = (state.activePattern === 'B') ? (floorAnchorPitch - 18) : (floorAnchorPitch - 8);
+    COARSE_SEEK_FRACTIONS.forEach(cs => {
+      items.push({
+        id: `seek_frac_${Math.round(cs.frac * 100)}`,
+        icon: '•',
+        fraction: cs.frac,
+        label: cs.label,
+        isTimelineNode: true,
+        yaw: cs.yaw,
+        pitch: timelinePitch,
+        radiusDeg: 2.8,
+        cmd: () => commandModel.seekToFraction(cs.frac),
+        dirWorld: sphericalToDir(cs.yaw, timelinePitch)
+      });
+    });
   }
 
   return items;

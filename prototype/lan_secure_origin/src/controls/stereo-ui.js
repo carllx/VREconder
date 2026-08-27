@@ -2,9 +2,9 @@
 // 2D Stereo UI Overlay & Reticle Rendering
 // (Suppressed during Optics Calibration Stage B & C to prevent visual contamination)
 // ==========================================
-import { state } from '../core/state.js';
+import { state, formatTime } from '../core/state.js';
 import { qCameraInv } from '../core/orientation.js';
-import { getActiveInteractiveItems } from './patterns.js';
+import { getActiveInteractiveItems, sphericalToDir } from './patterns.js';
 import { deriveCardboardEyeGeometry } from '../core/projection-profile.js';
 import { activeScreenProfile } from '../core/screen-profile.js';
 
@@ -184,7 +184,71 @@ export function renderStereoUI(uiCtx, gazeEngine, commandModel, videoElement, no
       continue;
     }
 
-    // 3. Draw Interactive Circular Icon Nodes (Derived from 3D world geometry)
+    // 3. Draw Timeline Progress Bar and Time Readout (When Menu is Open)
+    const isMenuOpen = (state.activePattern === 'A' && state.patternA_open) ||
+                       (state.activePattern === 'B' && state.patternB_open) ||
+                       (state.activePattern === 'C' && state.patternC_open);
+
+    if (isMenuOpen && videoElement) {
+      const floorAnchorPitch = -34;
+      const timelinePitch = (state.activePattern === 'B') ? (floorAnchorPitch - 18) : (floorAnchorPitch - 8);
+
+      const pStart = projectWorldDirToEye(sphericalToDir(-20, timelinePitch), eye, eyeGeom, halfW, height, virtualDepth);
+      const pEnd = projectWorldDirToEye(sphericalToDir(20, timelinePitch), eye, eyeGeom, halfW, height, virtualDepth);
+
+      if (pStart && pEnd) {
+        const curSec = videoElement.currentTime || 0;
+        const durSec = (videoElement.duration && isFinite(videoElement.duration) && videoElement.duration > 0) ? videoElement.duration : 0;
+        const frac = durSec > 0 ? Math.max(0, Math.min(1, curSec / durSec)) : 0;
+
+        // Background Track
+        uiCtx.save();
+        uiCtx.beginPath();
+        uiCtx.moveTo(pStart.x, pStart.y);
+        uiCtx.lineTo(pEnd.x, pEnd.y);
+        uiCtx.strokeStyle = 'rgba(255, 255, 255, 0.25)';
+        uiCtx.lineWidth = 6;
+        uiCtx.lineCap = 'round';
+        uiCtx.stroke();
+
+        // Played Progress Track
+        const progX = pStart.x + (pEnd.x - pStart.x) * frac;
+        const progY = pStart.y + (pEnd.y - pStart.y) * frac;
+        uiCtx.beginPath();
+        uiCtx.moveTo(pStart.x, pStart.y);
+        uiCtx.lineTo(progX, progY);
+        uiCtx.strokeStyle = '#38bdf8';
+        uiCtx.lineWidth = 6;
+        uiCtx.lineCap = 'round';
+        uiCtx.stroke();
+
+        // Current Playhead Dot
+        uiCtx.beginPath();
+        uiCtx.arc(progX, progY, 7, 0, Math.PI * 2);
+        uiCtx.fillStyle = '#ffffff';
+        uiCtx.fill();
+        uiCtx.strokeStyle = '#38bdf8';
+        uiCtx.lineWidth = 2.5;
+        uiCtx.stroke();
+
+        // Time Text Badge above Timeline (01:42 / 08:36)
+        const pMid = projectWorldDirToEye(sphericalToDir(0, timelinePitch + 4.0), eye, eyeGeom, halfW, height, virtualDepth);
+        if (pMid) {
+          const timeStr = `${formatTime(curSec)} / ${formatTime(durSec)}`;
+          uiCtx.font = 'bold 13px -apple-system, monospace';
+          uiCtx.fillStyle = '#ffffff';
+          uiCtx.textAlign = 'center';
+          uiCtx.textBaseline = 'middle';
+          uiCtx.shadowColor = 'rgba(0, 0, 0, 0.8)';
+          uiCtx.shadowBlur = 4;
+          uiCtx.fillText(timeStr, pMid.x, pMid.y);
+          uiCtx.shadowBlur = 0;
+        }
+        uiCtx.restore();
+      }
+    }
+
+    // 4. Draw Interactive Circular Icon Nodes (Derived from 3D world geometry)
     const items = getActiveInteractiveItems(commandModel, videoElement);
     items.forEach(item => {
       if (!item.dirWorld) return;
@@ -194,11 +258,52 @@ export function renderStereoUI(uiCtx, gazeEngine, commandModel, videoElement, no
       const isHovered = (gazeEngine.currentHoveredItem && gazeEngine.currentHoveredItem.id === item.id);
       const isActivated = (gazeEngine.activatedItemId === item.id && (now - gazeEngine.activationFlashTime < 300));
       const radRad = (item.radiusDeg || 4.2) * (Math.PI / 180);
-      const btnR = Math.max(16, (Math.tan(radRad) / p.tanSpanX) * halfW);
+      const btnR = Math.max(item.isTimelineNode ? 8 : 16, (Math.tan(radRad) / p.tanSpanX) * halfW);
 
       uiCtx.save();
       uiCtx.beginPath();
       uiCtx.arc(p.x, p.y, btnR, 0, Math.PI * 2);
+
+      if (item.isTimelineNode) {
+        if (isActivated) {
+          uiCtx.fillStyle = '#34d399';
+          uiCtx.strokeStyle = '#ffffff';
+          uiCtx.lineWidth = 2.5;
+        } else if (isHovered) {
+          uiCtx.fillStyle = '#38bdf8';
+          uiCtx.strokeStyle = '#ffffff';
+          uiCtx.lineWidth = 2.5;
+          uiCtx.shadowColor = '#38bdf8';
+          uiCtx.shadowBlur = 8;
+        } else {
+          uiCtx.fillStyle = 'rgba(15, 23, 42, 0.75)';
+          uiCtx.strokeStyle = 'rgba(255, 255, 255, 0.6)';
+          uiCtx.lineWidth = 1.2;
+        }
+        uiCtx.fill();
+        uiCtx.stroke();
+
+        if (isHovered && gazeEngine.dwellProgress > 0) {
+          uiCtx.beginPath();
+          const startAngle = -Math.PI / 2;
+          const endAngle = startAngle + (Math.PI * 2 * gazeEngine.dwellProgress);
+          uiCtx.arc(p.x, p.y, btnR + 3, startAngle, endAngle);
+          uiCtx.strokeStyle = '#34d399';
+          uiCtx.lineWidth = 2.5;
+          uiCtx.stroke();
+        }
+
+        uiCtx.shadowBlur = 0;
+        if (isHovered) {
+          uiCtx.font = 'bold 11px -apple-system, sans-serif';
+          uiCtx.fillStyle = '#38bdf8';
+          uiCtx.textAlign = 'center';
+          uiCtx.textBaseline = 'bottom';
+          uiCtx.fillText(item.label, p.x, p.y - btnR - 4);
+        }
+        uiCtx.restore();
+        return;
+      }
 
       if (isActivated) {
         uiCtx.fillStyle = 'rgba(16, 185, 129, 0.95)';

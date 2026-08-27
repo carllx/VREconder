@@ -55,6 +55,20 @@ export class CommandModel {
     telemetry.recordCommand('seekForward_' + sec + 's', video);
   }
 
+  seekToFraction(fraction) {
+    const video = this.media.video;
+    const dur = video.duration;
+    if (typeof dur !== 'number' || isNaN(dur) || !isFinite(dur) || dur <= 0) {
+      return;
+    }
+    const clampedFrac = Math.max(0, Math.min(1, fraction));
+    const targetTime = clampedFrac * dur;
+    video.currentTime = targetTime;
+    const pct = Math.round(clampedFrac * 100);
+    showFeedbackToast(`⏱ 跳转至 ${pct}% (${formatTime(targetTime)})`);
+    telemetry.recordCommand(`seekToFraction_${pct}%`, video);
+  }
+
   recenter(immediate = false) {
     if (immediate) {
       state.recenterCountdown.active = false;
