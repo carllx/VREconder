@@ -14,17 +14,15 @@ export function sphericalToDir(yawDeg, pitchDeg) {
   ];
 }
 
-// Shared Coarse Seek Nodes for Timeline MVP
+// Shared Coarse Seek Nodes for Timeline MVP (Pitch: -12.0°, Non-overlapping with all menu nodes)
 export const COARSE_SEEK_FRACTIONS = [
-  { frac: 0.0, label: '0%', yaw: -20 },
-  { frac: 0.125, label: '12.5%', yaw: -15 },
-  { frac: 0.25, label: '25%', yaw: -10 },
-  { frac: 0.375, label: '37.5%', yaw: -5 },
+  { frac: 0.0, label: '0%', yaw: -21 },
+  { frac: 0.167, label: '17%', yaw: -14 },
+  { frac: 0.333, label: '33%', yaw: -7 },
   { frac: 0.50, label: '50%', yaw: 0 },
-  { frac: 0.625, label: '62.5%', yaw: 5 },
-  { frac: 0.75, label: '75%', yaw: 10 },
-  { frac: 0.875, label: '87.5%', yaw: 15 },
-  { frac: 1.0, label: '100%', yaw: 20 }
+  { frac: 0.667, label: '67%', yaw: 7 },
+  { frac: 0.833, label: '83%', yaw: 14 },
+  { frac: 1.0, label: '100%', yaw: 21 }
 ];
 
 export function getActiveInteractiveItems(commandModel, videoElement) {
@@ -40,13 +38,13 @@ export function getActiveInteractiveItems(commandModel, videoElement) {
     // Pattern A: Floor Arc (Only return items when menu is OPEN)
     if (state.patternA_open) {
       const arcNodes = [
-        { id: 'prev', icon: '⏮', yaw: -20, pitch: floorAnchorPitch, radiusDeg: 4.2, cmd: () => commandModel.previous() },
-        { id: 'seek_back', icon: '⏪', yaw: -10, pitch: floorAnchorPitch, radiusDeg: 4.2, cmd: () => commandModel.seekBackward(10) },
-        { id: 'play_pause', icon: isPlay ? '⏸' : '▶', yaw: 0, pitch: floorAnchorPitch, radiusDeg: 5.0, cmd: () => commandModel.playPause(), color: '#2563eb' },
-        { id: 'seek_fwd', icon: '⏩', yaw: 10, pitch: floorAnchorPitch, radiusDeg: 4.2, cmd: () => commandModel.seekForward(10) },
-        { id: 'next', icon: '⏭', yaw: 20, pitch: floorAnchorPitch, radiusDeg: 4.2, cmd: () => commandModel.next() },
-        { id: 'recenter', icon: '🎯', yaw: 0, pitch: floorAnchorPitch + 10, radiusDeg: 4.5, cmd: () => commandModel.recenter(), color: '#059669' },
-        { id: 'close_arc', icon: '✕', yaw: 0, pitch: floorAnchorPitch - 10, radiusDeg: 4.0, cmd: () => commandModel.closeControls(), color: '#ef4444' }
+        { id: 'prev', icon: '⏮', yaw: -20, pitch: floorAnchorPitch, radiusDeg: 3.6, cmd: () => commandModel.previous() },
+        { id: 'seek_back', icon: '⏪', yaw: -10, pitch: floorAnchorPitch, radiusDeg: 3.6, cmd: () => commandModel.seekBackward(10) },
+        { id: 'play_pause', icon: isPlay ? '⏸' : '▶', yaw: 0, pitch: floorAnchorPitch, radiusDeg: 4.0, cmd: () => commandModel.playPause(), color: '#2563eb' },
+        { id: 'seek_fwd', icon: '⏩', yaw: 10, pitch: floorAnchorPitch, radiusDeg: 3.6, cmd: () => commandModel.seekForward(10) },
+        { id: 'next', icon: '⏭', yaw: 20, pitch: floorAnchorPitch, radiusDeg: 3.6, cmd: () => commandModel.next() },
+        { id: 'recenter', icon: '🎯', yaw: 0, pitch: floorAnchorPitch + 10, radiusDeg: 3.8, cmd: () => commandModel.recenter(), color: '#059669' },
+        { id: 'close_arc', icon: '✕', yaw: 0, pitch: floorAnchorPitch - 10, radiusDeg: 3.6, cmd: () => commandModel.closeControls(), color: '#ef4444' }
       ];
       arcNodes.forEach(b => {
         items.push({ ...b, pattern: 'A', dirWorld: sphericalToDir(b.yaw, b.pitch) });
@@ -64,7 +62,7 @@ export function getActiveInteractiveItems(commandModel, videoElement) {
         pattern: 'B',
         yaw: 0,
         pitch: floorAnchorPitch,
-        radiusDeg: 4.5,
+        radiusDeg: 4.0,
         color: '#ef4444',
         cmd: () => commandModel.closeControls(),
         dirWorld: sphericalToDir(0, floorAnchorPitch)
@@ -72,12 +70,12 @@ export function getActiveInteractiveItems(commandModel, videoElement) {
 
       // 6 Radial Nodes
       const radialNodes = [
-        { id: 'recenter', icon: '🎯', angleDeg: 90, cmd: () => commandModel.recenter(), color: '#059669' },
-        { id: 'seek_fwd', icon: '⏩', angleDeg: 30, cmd: () => commandModel.seekForward(10) },
-        { id: 'next', icon: '⏭', angleDeg: -30, cmd: () => commandModel.next() },
-        { id: 'play_pause', icon: isPlay ? '⏸' : '▶', angleDeg: -90, cmd: () => commandModel.playPause(), color: '#2563eb' },
-        { id: 'prev', icon: '⏮', angleDeg: -150, cmd: () => commandModel.previous() },
-        { id: 'seek_back', icon: '⏪', angleDeg: 150, cmd: () => commandModel.seekBackward(10) }
+        { id: 'recenter', icon: '🎯', angleDeg: 90, cmd: () => commandModel.recenter(), color: '#059669', radiusDeg: 3.8 },
+        { id: 'seek_fwd', icon: '⏩', angleDeg: 30, cmd: () => commandModel.seekForward(10), radiusDeg: 3.8 },
+        { id: 'next', icon: '⏭', angleDeg: -30, cmd: () => commandModel.next(), radiusDeg: 3.8 },
+        { id: 'play_pause', icon: isPlay ? '⏸' : '▶', angleDeg: -90, cmd: () => commandModel.playPause(), color: '#2563eb', radiusDeg: 4.0 },
+        { id: 'prev', icon: '⏮', angleDeg: -150, cmd: () => commandModel.previous(), radiusDeg: 3.8 },
+        { id: 'seek_back', icon: '⏪', angleDeg: 150, cmd: () => commandModel.seekBackward(10), radiusDeg: 3.8 }
       ];
 
       radialNodes.forEach(rn => {
@@ -90,7 +88,7 @@ export function getActiveInteractiveItems(commandModel, videoElement) {
           pattern: 'B',
           yaw: yaw,
           pitch: pitch,
-          radiusDeg: 4.4,
+          radiusDeg: rn.radiusDeg,
           color: rn.color,
           cmd: rn.cmd,
           dirWorld: sphericalToDir(yaw, pitch)
@@ -101,16 +99,16 @@ export function getActiveInteractiveItems(commandModel, videoElement) {
     // Pattern C: Floor HUD (Only return items when menu is OPEN)
     if (state.patternC_open) {
       const hudNodes = [
-        { id: 'seek_b60', icon: '⏮ 60s', yaw: -18, pitch: floorAnchorPitch + 5, radiusDeg: 3.8, cmd: () => commandModel.seekBackward(60) },
-        { id: 'seek_b10', icon: '⏪ 10s', yaw: -7, pitch: floorAnchorPitch + 5, radiusDeg: 3.8, cmd: () => commandModel.seekBackward(10) },
-        { id: 'seek_f10', icon: '10s ⏩', yaw: 7, pitch: floorAnchorPitch + 5, radiusDeg: 3.8, cmd: () => commandModel.seekForward(10) },
-        { id: 'seek_f60', icon: '60s ⏭', yaw: 18, pitch: floorAnchorPitch + 5, radiusDeg: 3.8, cmd: () => commandModel.seekForward(60) },
+        { id: 'seek_b60', icon: '⏮ 60s', yaw: -18, pitch: floorAnchorPitch + 5, radiusDeg: 3.4, cmd: () => commandModel.seekBackward(60) },
+        { id: 'seek_b10', icon: '⏪ 10s', yaw: -6, pitch: floorAnchorPitch + 5, radiusDeg: 3.4, cmd: () => commandModel.seekBackward(10) },
+        { id: 'seek_f10', icon: '10s ⏩', yaw: 6, pitch: floorAnchorPitch + 5, radiusDeg: 3.4, cmd: () => commandModel.seekForward(10) },
+        { id: 'seek_f60', icon: '60s ⏭', yaw: 18, pitch: floorAnchorPitch + 5, radiusDeg: 3.4, cmd: () => commandModel.seekForward(60) },
 
-        { id: 'prev', icon: '⏮', yaw: -18, pitch: floorAnchorPitch - 6, radiusDeg: 4.2, cmd: () => commandModel.previous() },
-        { id: 'play_pause', icon: isPlay ? '⏸' : '▶', yaw: -6, pitch: floorAnchorPitch - 6, radiusDeg: 4.8, cmd: () => commandModel.playPause(), color: '#2563eb' },
-        { id: 'next', icon: '⏭', yaw: 6, pitch: floorAnchorPitch - 6, radiusDeg: 4.2, cmd: () => commandModel.next() },
-        { id: 'recenter', icon: '🎯', yaw: 18, pitch: floorAnchorPitch - 6, radiusDeg: 4.2, cmd: () => commandModel.recenter(), color: '#059669' },
-        { id: 'close_hud', icon: '✕', yaw: 0, pitch: floorAnchorPitch - 15, radiusDeg: 3.8, color: '#ef4444', cmd: () => commandModel.closeControls() }
+        { id: 'prev', icon: '⏮', yaw: -18, pitch: floorAnchorPitch - 6, radiusDeg: 3.6, cmd: () => commandModel.previous() },
+        { id: 'play_pause', icon: isPlay ? '⏸' : '▶', yaw: -6, pitch: floorAnchorPitch - 6, radiusDeg: 4.0, cmd: () => commandModel.playPause(), color: '#2563eb' },
+        { id: 'next', icon: '⏭', yaw: 6, pitch: floorAnchorPitch - 6, radiusDeg: 3.6, cmd: () => commandModel.next() },
+        { id: 'recenter', icon: '🎯', yaw: 18, pitch: floorAnchorPitch - 6, radiusDeg: 3.6, cmd: () => commandModel.recenter(), color: '#059669' },
+        { id: 'close_hud', icon: '✕', yaw: 0, pitch: floorAnchorPitch - 15, radiusDeg: 3.5, color: '#ef4444', cmd: () => commandModel.closeControls() }
       ];
 
       hudNodes.forEach(hn => {
@@ -131,7 +129,7 @@ export function getActiveInteractiveItems(commandModel, videoElement) {
 
   // Shared Timeline Coarse Seek Nodes (Visible & active whenever any pattern menu is OPEN)
   if (isMenuOpen) {
-    const timelinePitch = (state.activePattern === 'B') ? (floorAnchorPitch - 18) : (floorAnchorPitch - 8);
+    const timelinePitch = -12.0;
     COARSE_SEEK_FRACTIONS.forEach(cs => {
       items.push({
         id: `seek_frac_${Math.round(cs.frac * 100)}`,
@@ -141,7 +139,7 @@ export function getActiveInteractiveItems(commandModel, videoElement) {
         isTimelineNode: true,
         yaw: cs.yaw,
         pitch: timelinePitch,
-        radiusDeg: 2.8,
+        radiusDeg: 1.8,
         cmd: () => commandModel.seekToFraction(cs.frac),
         dirWorld: sphericalToDir(cs.yaw, timelinePitch)
       });

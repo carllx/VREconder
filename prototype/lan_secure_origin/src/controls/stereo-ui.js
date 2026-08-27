@@ -190,11 +190,10 @@ export function renderStereoUI(uiCtx, gazeEngine, commandModel, videoElement, no
                        (state.activePattern === 'C' && state.patternC_open);
 
     if (isMenuOpen && videoElement) {
-      const floorAnchorPitch = -34;
-      const timelinePitch = (state.activePattern === 'B') ? (floorAnchorPitch - 18) : (floorAnchorPitch - 8);
+      const timelinePitch = -12.0;
 
-      const pStart = projectWorldDirToEye(sphericalToDir(-20, timelinePitch), eye, eyeGeom, halfW, height, virtualDepth);
-      const pEnd = projectWorldDirToEye(sphericalToDir(20, timelinePitch), eye, eyeGeom, halfW, height, virtualDepth);
+      const pStart = projectWorldDirToEye(sphericalToDir(-21, timelinePitch), eye, eyeGeom, halfW, height, virtualDepth);
+      const pEnd = projectWorldDirToEye(sphericalToDir(21, timelinePitch), eye, eyeGeom, halfW, height, virtualDepth);
 
       if (pStart && pEnd) {
         const curSec = videoElement.currentTime || 0;
