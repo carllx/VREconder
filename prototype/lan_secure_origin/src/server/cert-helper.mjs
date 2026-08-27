@@ -63,6 +63,75 @@ ${sanList.join('\n')}
   return { caCrt, serverCrt, serverKey };
 }
 
+// Media Root & Scanner SSOT State
+let activeMediaRoot = path.normalize('G:\\Media\\VR\\VR_Video_Processing\\01_Download_Completed');
+let cachedVideos = [];
+
+export function isLoopbackIp(remoteAddress) {
+  if (!remoteAddress) return false;
+  const cleaned = remoteAddress.replace(/^::ffff:/, '');
+  return cleaned === '127.0.0.1' || cleaned === '::1' || cleaned === 'localhost';
+}
+
+export function getActiveMediaRoot() {
+  return activeMediaRoot;
+}
+
+export function getCachedVideos() {
+  return cachedVideos;
+}
+
+export function scanRealVRVideos(customRoot = null) {
+  const root = customRoot || activeMediaRoot;
+  const results = [];
+  function scan(dir, relDir = '') {
+    if (!fs.existsSync(dir)) return;
+    const entries = fs.readdirSync(dir, { withFileTypes: true });
+    for (const ent of entries) {
+      const fullPath = path.join(dir, ent.name);
+      const relPath = path.join(relDir, ent.name);
+      if (ent.isDirectory()) {
+        scan(fullPath, relPath);
+      } else if (ent.isFile() && /\.(mp4|mov|m4v)$/i.test(ent.name)) {
+        try {
+          const stat = fs.statSync(fullPath);
+          results.push({
+            name: ent.name,
+            relPath: relPath.replace(/\\/g, '/'),
+            fullPath: fullPath,
+            sizeBytes: stat.size,
+            sizeGB: (stat.size / (1024 * 1024 * 1024)).toFixed(2) + ' GB'
+          });
+        } catch (e) {}
+      }
+    }
+  }
+  scan(root);
+  cachedVideos = results;
+  console.log(`[Media] Scanned and cached ${cachedVideos.length} VR videos from ${root}`);
+  return results;
+}
+
+export function setActiveMediaRoot(newRoot) {
+  if (!newRoot || typeof newRoot !== 'string') {
+    throw new Error('Media root path must be a non-empty string');
+  }
+  const normalized = path.normalize(newRoot.trim());
+  if (!path.isAbsolute(normalized)) {
+    throw new Error('Media root path must be an absolute path');
+  }
+  if (!fs.existsSync(normalized)) {
+    throw new Error('Media root path does not exist');
+  }
+  const stat = fs.statSync(normalized);
+  if (!stat.isDirectory()) {
+    throw new Error('Media root path must be a directory');
+  }
+  activeMediaRoot = normalized;
+  scanRealVRVideos(normalized);
+  return { ok: true, root: activeMediaRoot, videoCount: cachedVideos.length };
+}
+
 export function renderHevcDiagnosticPage(res) {
   res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
   res.end(`<!DOCTYPE html>

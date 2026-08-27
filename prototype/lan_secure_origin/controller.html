@@ -76,6 +76,22 @@
       <div class="subtitle">Authoritative Calibration & Verification Gate (Issue #13 SSOT Control Surface)</div>
     </div>
 
+    <!-- Media Source / Media Root Card (Issue #19 SSOT Root Selector) -->
+    <div class="card">
+      <div style="display:flex; justify-content:space-between; align-items:center;">
+        <div style="font-size:0.8rem; font-weight:700; color:var(--muted); text-transform:uppercase;">Media Source (Media Root)</div>
+        <div id="txtMediaRootStatus" style="font-size:0.72rem; color:#34d399; font-weight:bold;">Active</div>
+      </div>
+      <div style="display:flex; gap:8px; margin-top:8px; align-items:center;">
+        <input type="text" id="inpMediaRoot" placeholder="Enter absolute directory (e.g. G:\Media\VR\Test)" style="flex:1; background:#0f172a; color:#f8fafc; border:1px solid #334155; padding:7px 10px; border-radius:6px; font-size:0.8rem; font-family:monospace;">
+        <button class="action-btn btn-save" id="btnApplyMediaRoot" onclick="applyMediaRoot()" style="white-space:nowrap; padding:7px 14px;">Apply &amp; Rescan</button>
+      </div>
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-top:6px; font-size:0.72rem; color:var(--muted);">
+        <div>Current: <code id="txtCurrentMediaRoot" style="color:#38bdf8; background:#1e293b; padding:1px 5px; border-radius:4px;">--</code></div>
+        <div>Found: <span id="txtMediaRootCount" style="color:#34d399; font-weight:bold;">--</span></div>
+      </div>
+    </div>
+
     <!-- Mutually Exclusive Calibration Stages -->
     <div class="card">
       <div style="font-size:0.8rem; font-weight:700; color:var(--muted); text-transform:uppercase;">1. Active Calibration Stage</div>

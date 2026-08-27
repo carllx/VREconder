@@ -82,11 +82,15 @@ export function renderVideoSelect() {
 }
 
 export async function sendControl(payload) {
-  await fetch('/api/calibration/control', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload)
-  }).catch(() => {});
+  try {
+    await fetch('/api/calibration/control', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+  } catch (e) {
+    console.error('Failed to send control command', e);
+  }
 }
 
 export function formatTime(sec) {
@@ -565,10 +569,13 @@ window.onOpticsChange = onOpticsChange;
 window.sendAction = sendAction;
 window.sendSeekTo = sendSeekTo;
 
+import { initMediaRootController } from './media-root-controller.js';
+
 // Start background polling, SSE, and UI initializers
 initEventSource();
 loadVideoList();
 initTimelineScrubber();
+initMediaRootController();
 applyStageLocks('A');
 
 setInterval(async () => {

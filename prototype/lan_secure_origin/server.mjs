@@ -4,7 +4,16 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { fileURLToPath } from 'node:url';
-import { getLocalIPs, ensureCertificates } from './src/server/cert-helper.mjs';
+import {
+  getLocalIPs,
+  ensureCertificates,
+  renderHevcDiagnosticPage,
+  isLoopbackIp,
+  getActiveMediaRoot,
+  setActiveMediaRoot,
+  scanRealVRVideos,
+  getCachedVideos
+} from './src/server/cert-helper.mjs';
 import { streamVideo } from './src/media/video-streamer.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -13,7 +22,6 @@ const __dirname = path.dirname(__filename);
 const HTTP_PORT = 8080;
 const HTTPS_PORT = 8443;
 const CERTS_DIR = path.join(__dirname, 'certs');
-const MEDIA_ROOT = 'G:\\Media\\VR\\VR_Video_Processing\\01_Download_Completed';
 
 // Calibration SSE live event streaming to connected devices (PC <-> iPhone)
 const sseClients = new Set();
@@ -26,38 +34,6 @@ function broadcastCalibrationEvent(payload) {
       sseClients.delete(client);
     }
   }
-}
-
-// Scan actual VR videos from G drive and cache in memory
-let cachedVideos = [];
-function scanRealVRVideos() {
-  const results = [];
-  function scan(dir, relDir = '') {
-    if (!fs.existsSync(dir)) return;
-    const entries = fs.readdirSync(dir, { withFileTypes: true });
-    for (const ent of entries) {
-      const fullPath = path.join(dir, ent.name);
-      const relPath = path.join(relDir, ent.name);
-      if (ent.isDirectory()) {
-        scan(fullPath, relPath);
-      } else if (ent.isFile() && /\.(mp4|mov|m4v)$/i.test(ent.name)) {
-        try {
-          const stat = fs.statSync(fullPath);
-          results.push({
-            name: ent.name,
-            relPath: relPath.replace(/\\/g, '/'),
-            fullPath: fullPath,
-            sizeBytes: stat.size,
-            sizeGB: (stat.size / (1024 * 1024 * 1024)).toFixed(2) + ' GB'
-          });
-        } catch (e) {}
-      }
-    }
-  }
-  scan(MEDIA_ROOT);
-  cachedVideos = results;
-  console.log(`[Media] Scanned and cached ${cachedVideos.length} VR videos from ${MEDIA_ROOT}`);
-  return results;
 }
 
 let latestTelemetry = null;
@@ -347,26 +323,79 @@ function handleRequest(req, res, isHttps) {
     return;
   }
 
+  // Media Root endpoints (Issue #19 SSOT Media Root Selector)
+  if (pathname === '/api/media-root' && req.method === 'GET') {
+    const currentRoot = getActiveMediaRoot();
+    const videos = getCachedVideos();
+    res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+    res.end(JSON.stringify({
+      root: currentRoot,
+      videoCount: videos.length
+    }));
+    return;
+  }
+
+  if (pathname === '/api/media-root' && req.method === 'POST') {
+    if (!isLoopbackIp(req.socket.remoteAddress)) {
+      console.warn(`[Security] Rejected /api/media-root mutation from non-loopback IP: ${req.socket.remoteAddress}`);
+      res.writeHead(403, { 'Content-Type': 'application/json; charset=utf-8' });
+      res.end(JSON.stringify({ error: 'Media root mutation is only allowed from loopback PC interface (127.0.0.1)' }));
+      return;
+    }
+
+    let body = '';
+    req.on('data', chunk => { body += chunk; });
+    req.on('end', () => {
+      try {
+        const payload = JSON.parse(body);
+        const newRoot = payload.root;
+        const result = setActiveMediaRoot(newRoot);
+        console.log(`[Media] Media root successfully switched to: ${result.root} (${result.videoCount} videos found)`);
+        broadcastCalibrationEvent({ type: 'media_root_updated', root: result.root, videoCount: result.videoCount });
+        res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+        res.end(JSON.stringify(result));
+      } catch (err) {
+        res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' });
+        res.end(JSON.stringify({ error: err.message }));
+      }
+    });
+    return;
+  }
+
   // Video list from real media folder (instant cached)
   if (pathname === '/api/videos') {
-    if (cachedVideos.length === 0) {
-      scanRealVRVideos();
+    const activeRoot = getActiveMediaRoot();
+    let videos = getCachedVideos();
+    if (videos.length === 0) {
+      videos = scanRealVRVideos();
     }
     res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
-    res.end(JSON.stringify({ mediaRoot: MEDIA_ROOT, count: cachedVideos.length, videos: cachedVideos }));
+    res.end(JSON.stringify({ mediaRoot: activeRoot, count: videos.length, videos: videos }));
     return;
   }
 
   // Video streaming endpoint (supports ?path=... or default /sample.mp4)
   if (pathname === '/video' || pathname === '/sample.mp4') {
+    const activeRoot = getActiveMediaRoot();
     const relParam = urlObj.searchParams.get('path');
     let targetPath = '';
+
     if (relParam) {
-      targetPath = path.join(MEDIA_ROOT, relParam);
+      const resolved = path.resolve(activeRoot, relParam);
+      // Hard security check: ensure targetPath is within activeRoot to prevent directory traversal
+      const relToRoot = path.relative(activeRoot, resolved);
+      if (relToRoot.startsWith('..') || path.isAbsolute(relToRoot)) {
+        console.warn(`[Security] Path traversal attempt blocked: ${relParam} (resolved: ${resolved})`);
+        res.writeHead(403, { 'Content-Type': 'text/plain; charset=utf-8' });
+        res.end('Access denied: path outside media root');
+        return;
+      }
+      targetPath = resolved;
     } else {
-      if (cachedVideos.length === 0) scanRealVRVideos();
-      if (cachedVideos.length > 0) {
-        targetPath = cachedVideos[0].fullPath;
+      let videos = getCachedVideos();
+      if (videos.length === 0) videos = scanRealVRVideos();
+      if (videos.length > 0) {
+        targetPath = videos[0].fullPath;
       }
     }
 
@@ -374,7 +403,7 @@ function handleRequest(req, res, isHttps) {
       streamVideo(req, res, targetPath);
     } else {
       res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
-      res.end(`Video not found in ${MEDIA_ROOT}`);
+      res.end(`Video not found in ${activeRoot}`);
     }
     return;
   }
@@ -500,7 +529,7 @@ const httpsOptions = {
 const httpsServer = https.createServer(httpsOptions, (req, res) => handleRequest(req, res, true));
 httpsServer.listen(HTTPS_PORT, '0.0.0.0', () => {
   console.log(`[HTTPS Server] Running on https://${primaryIp}:${HTTPS_PORT} (Secure VR Player)`);
-  console.log(`[Media Root]   Directly streaming real VR videos from: ${MEDIA_ROOT}`);
+  console.log(`[Media Root]   Directly streaming real VR videos from: ${getActiveMediaRoot()}`);
   console.log(`\n============================================================`);
   console.log(`💻 [PC Controller / 电脑控制台]:`);
   console.log(`   👉 https://127.0.0.1:${HTTPS_PORT}/controller.html`);
