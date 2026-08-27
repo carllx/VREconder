@@ -78,9 +78,22 @@ export class MediaController {
     });
 
     this.video.addEventListener('error', () => {
-      const err = this.video.error ? (this.video.error.code + ': ' + this.video.error.message) : 'unknown error';
-      console.error('Video decode error: ' + err);
-      state.firstFrameTimings.statusText = 'Decode Error: ' + err;
+      let codeName = 'MEDIA_ERR_UNKNOWN';
+      let codeNum = 0;
+      let msg = '';
+      if (this.video.error) {
+        codeNum = this.video.error.code;
+        msg = this.video.error.message || '';
+        switch (codeNum) {
+          case 1: codeName = 'MEDIA_ERR_ABORTED'; break;
+          case 2: codeName = 'MEDIA_ERR_NETWORK'; break;
+          case 3: codeName = 'MEDIA_ERR_DECODE'; break;
+          case 4: codeName = 'MEDIA_ERR_SRC_NOT_SUPPORTED'; break;
+        }
+      }
+      const errText = `${codeName} (code ${codeNum}${msg ? ': ' + msg : ''})`;
+      console.error('Video error: ' + errText);
+      state.firstFrameTimings.statusText = errText;
     });
 
     if (this.videoSelect) {

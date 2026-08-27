@@ -366,9 +366,8 @@ export class VRRenderer {
     gl.bindTexture(gl.TEXTURE_2D, this.eyeTex);
     gl.uniform1i(dLocs.uEyeTexture, 0);
 
-    const isCalibrated = (viewerProfile && viewerProfile.isCalibrated === true);
-    const isLensOn = (isCalibrated && viewerProfile.lensCorrectionEnabled === true) ? 1 : 0;
-    const distK = isCalibrated && viewerProfile.distortion ? [viewerProfile.distortion.k1 || 0, viewerProfile.distortion.k2 || 0] : [0, 0];
+    const isLensOn = (viewerProfile && viewerProfile.lensCorrectionEnabled === true) ? 1 : 0;
+    const distK = (viewerProfile && viewerProfile.distortion) ? [viewerProfile.distortion.k1 || 0, viewerProfile.distortion.k2 || 0] : [0, 0];
 
     gl.uniform1i(dLocs.uLensCorrection, isLensOn);
     gl.uniform2f(dLocs.uDistortionK, distK[0], distK[1]);

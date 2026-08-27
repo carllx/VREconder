@@ -164,9 +164,10 @@ let activeVideoProfile = null;
 
 export function getEffectiveViewerProfile(baseProfile) {
   if (!baseProfile) return baseProfile;
-  const baseD = baseProfile.screenToLensDistance || 0.0433;
+  const baseD = (typeof baseProfile.screenToLensDistance === 'number') ? baseProfile.screenToLensDistance : 0.0393;
   const offset = state.temporaryScreenToLensOffset || 0.0;
-  const effectiveD = Math.max(0.0383, Math.min(0.0483, baseD + offset));
+  // Exact requested Screen-to-Lens without hidden narrow saturation
+  const effectiveD = Math.max(0.020, Math.min(0.070, baseD + offset));
   return {
     ...baseProfile,
     screenToLensDistance: effectiveD
@@ -444,6 +445,12 @@ setInterval(() => {
     savedMyViewerProfileExists: !!(calibrationUI.storage && calibrationUI.storage.savedMyViewerProfile),
     savedMyViewerProfile: (calibrationUI.storage && calibrationUI.storage.savedMyViewerProfile) || null,
     viewerProfile: calibrationUI.activeViewerProfile,
+    opticsRuntime: {
+      lensCorrectionRequested: !!(calibrationUI.activeViewerProfile && calibrationUI.activeViewerProfile.lensCorrectionEnabled),
+      lensCorrectionApplied: !!(calibrationUI.activeViewerProfile && calibrationUI.activeViewerProfile.lensCorrectionEnabled),
+      requestedScreenToLensMm: calibrationUI.activeViewerProfile && calibrationUI.activeViewerProfile.screenToLensDistance ? Number((calibrationUI.activeViewerProfile.screenToLensDistance * 1000).toFixed(1)) : 39.3,
+      effectiveScreenToLensMm: Number((getEffectiveViewerProfile(calibrationUI.activeViewerProfile).screenToLensDistance * 1000).toFixed(1))
+    },
     videoProfile: activeVideoProfile,
     timings: state.firstFrameTimings,
     selectedEye: calibrationUI.selectedEye || 0,
