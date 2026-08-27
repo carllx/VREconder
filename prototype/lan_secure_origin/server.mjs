@@ -498,9 +498,13 @@ httpsServer.listen(HTTPS_PORT, '0.0.0.0', () => {
   console.log(`[HTTPS Server] Running on https://${primaryIp}:${HTTPS_PORT} (Secure VR Player)`);
   console.log(`[Media Root]   Directly streaming real VR videos from: ${MEDIA_ROOT}`);
   console.log(`\n============================================================`);
-  console.log(`👉 1. On iPhone Safari, open:  http://${primaryIp}:${HTTP_PORT}`);
-  console.log(`👉 2. Install CA and enable Full Trust in Settings`);
-  console.log(`👉 3. Open Secure Probe:       https://${primaryIp}:${HTTPS_PORT}`);
+  console.log(`💻 [PC Controller / 电脑控制台]:`);
+  console.log(`   👉 https://127.0.0.1:${HTTPS_PORT}/controller.html`);
+  console.log(`   👉 https://${primaryIp}:${HTTPS_PORT}/controller.html`);
+  console.log(`\n📱 [iPhone VR Headset / 手机VR头显]:`);
+  console.log(`   👉 https://${primaryIp}:${HTTPS_PORT}/`);
+  console.log(`\n📥 [CA Certificate Onboarding / 首次证书安装]:`);
+  console.log(`   👉 http://${primaryIp}:${HTTP_PORT}/`);
   console.log(`============================================================\n`);
 });
 
