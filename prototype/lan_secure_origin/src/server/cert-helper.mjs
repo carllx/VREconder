@@ -264,6 +264,7 @@ export function renderHevcDiagnosticPage(res) {
       maxTexSize = gl.getParameter(gl.MAX_TEXTURE_SIZE) || 0;
       maxRenderBuf = gl.getParameter(gl.MAX_RENDERBUFFER_SIZE) || 0;
     }
+    // Preset diagnostic capability probe (evaluates representative candidate codec profiles)
     function probeCodecSupport(relPath) {
       let is8k = relPath.includes('8K') || relPath.includes('8192');
       let is10bit = relPath.includes('10-bit') || relPath.includes('Oguri');
