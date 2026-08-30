@@ -3,7 +3,7 @@
 // ==========================================
 import { Quat } from './quaternion.js';
 import { state } from './state.js';
-import { telemetry } from '../telemetry/telemetry.js';
+import { telemetry, perfTelemetry } from '../telemetry/telemetry.js';
 
 export const qCameraCorrect = new Quat(-Math.SQRT1_2, 0, 0, Math.SQRT1_2);
 export const qScreenZ = new Quat();
@@ -54,6 +54,7 @@ export function initOrientationListeners(onOrientationUpdateCallback) {
 
   window.addEventListener('deviceorientation', (e) => {
     if (e.alpha === null) return;
+    perfTelemetry.recordOrientation();
     state.motionEventCount++;
     state.rawOrientation.alpha = e.alpha;
     state.rawOrientation.beta = e.beta || 0;

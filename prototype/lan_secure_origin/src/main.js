@@ -10,7 +10,7 @@ import { MediaController } from './media/playback.js';
 import { CommandModel } from './controls/command-model.js';
 import { GazeEngine } from './controls/gaze-engine.js';
 import { renderStereoUI } from './controls/stereo-ui.js';
-import { telemetry } from './telemetry/telemetry.js';
+import { telemetry, perfTelemetry } from './telemetry/telemetry.js';
 import { initAudioContext } from './controls/audio-haptics.js';
 import { profileStorage, computeMediaFingerprint } from './core/projection-profile.js';
 import { CalibrationUI } from './controls/calibration-ui.js';
@@ -351,9 +351,15 @@ if (btnVrExit) {
 // ==========================================
 let lastFpsTime = performance.now();
 let frameCounter = 0;
+let lastFrameTime = performance.now();
 
 function renderLoop(now) {
   requestAnimationFrame(renderLoop);
+
+  perfTelemetry.recordRaf();
+  const dt = now - lastFrameTime;
+  lastFrameTime = now;
+  if (dt > 0 && dt < 500) perfTelemetry.recordFrameTime(dt);
 
   frameCounter++;
   if (now - lastFpsTime >= 1000) {
@@ -363,8 +369,9 @@ function renderLoop(now) {
   }
 
   const dpr = window.devicePixelRatio || 1;
-  const width = window.innerWidth * dpr;
-  const height = window.innerHeight * dpr;
+  const scale = (typeof state.renderScale === 'number' && state.renderScale > 0) ? state.renderScale : 1.0;
+  const width = Math.max(320, Math.floor(window.innerWidth * dpr * scale));
+  const height = Math.max(240, Math.floor(window.innerHeight * dpr * scale));
 
   if (glCanvas.width !== width || glCanvas.height !== height) {
     glCanvas.width = width;
@@ -411,7 +418,10 @@ function renderLoop(now) {
     // 2. Stereo VR Mode: Dual Viewports with Optional Lens Pre-Distortion
     gazeEngine.update(now);
 
-    renderStereoUI(uiCtx, gazeEngine, commandModel, video, now, width, height, effectiveViewerProfile);
+    const uiRendered = renderStereoUI(uiCtx, gazeEngine, commandModel, video, now, width, height, effectiveViewerProfile);
+
+    // If performanceMode is 'strict-rvfc-dirty-ui', only upload UI texture if UI actually rendered/changed
+    const shouldUploadUI = (state.performanceMode === 'strict-rvfc-dirty-ui') ? uiRendered : true;
 
     vrRenderer.renderStereoVR(
       width,
@@ -419,10 +429,9 @@ function renderLoop(now) {
       activeVideoProfile,
       effectiveViewerProfile,
       cameraMat3,
-      uiCanvas
+      uiCanvas,
+      shouldUploadUI
     );
-
-    uiCtx.clearRect(0, 0, width, height);
   }
 }
 
@@ -430,11 +439,15 @@ requestAnimationFrame(renderLoop);
 
 // Periodic Live Telemetry Sync to Server & PC Controller (every 500ms)
 setInterval(() => {
+  const perfSnapshot = perfTelemetry.updateWindow(performance.now(), video, glCanvas, vrRenderer);
+
   const payload = {
     type: 'telemetry_sync',
     fps: state.fps,
     isArmed: state.isArmed,
     inVR: state.inVR,
+    performanceMode: state.performanceMode || 'baseline',
+    renderScale: state.renderScale || 1.0,
     calibrationStage: state.calibrationStage,
     mediaName: state.videoPath ? state.videoPath.split('/').pop() : '--',
     mediaPath: state.videoPath || '',
@@ -453,6 +466,7 @@ setInterval(() => {
     },
     videoProfile: activeVideoProfile,
     timings: state.firstFrameTimings,
+    perf: perfSnapshot,
     selectedEye: calibrationUI.selectedEye || 0,
     diagOverlay: {
       showGrid: !!(calibrationUI.diagnosticOverlay && calibrationUI.diagnosticOverlay.showGrid),
@@ -476,3 +490,4 @@ setInterval(() => {
     body: JSON.stringify(payload)
   }).catch(() => {});
 }, 500);
+

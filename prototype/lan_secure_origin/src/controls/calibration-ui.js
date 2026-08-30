@@ -66,6 +66,16 @@ export class CalibrationUI {
 
     if (act === 'set_stage') {
       this.switchStage(msg.stage);
+    } else if (act === 'set_performance_mode' && msg.mode) {
+      state.performanceMode = msg.mode;
+      state.uiIsDirty = true;
+      showFeedbackToast(`Mode: ${msg.mode}`);
+      logAction('Set Performance Mode: ' + msg.mode);
+    } else if (act === 'set_render_scale' && typeof msg.scale === 'number') {
+      state.renderScale = msg.scale;
+      state.uiIsDirty = true;
+      showFeedbackToast(`Render Scale: ${msg.scale.toFixed(2)}x`);
+      logAction('Set Render Scale: ' + msg.scale);
     } else if (act === 'select_media' && msg.relPath && this.mediaController) {
       this.mediaController.selectVideo(msg.relPath);
       logAction('Selected media from PC: ' + msg.relPath);

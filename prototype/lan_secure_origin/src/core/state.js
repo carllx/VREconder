@@ -7,8 +7,12 @@ export const state = {
   standalone: isStandalone,
   stereoMode: 1, // 1: 3D SBS Stereoscopic (True 3D VR)
   activePattern: 'B', // Default to Pattern B (Radial)
-  dwellThresholdMs: 1000,
-  
+  // Performance Harness & A/B Diagnostics (Issue #14)
+  // performanceMode: 'baseline' | 'strict-rvfc' | 'strict-rvfc-dirty-ui'
+  performanceMode: 'baseline',
+  renderScale: 1.0, // 1.00 | 0.85 | 0.70
+  uiIsDirty: true,
+
   // Staged Calibration Workflow: 'A' (Source Geometry), 'B' (Viewer Optics), 'C' (Real Video Verification)
   calibrationStage: 'A',
   pcConnected: false,

@@ -8,6 +8,7 @@ import { Quat } from '../core/quaternion.js';
 import { activeScreenProfile } from '../core/screen-profile.js';
 import { deriveCardboardEyeGeometry } from '../core/projection-profile.js';
 import { state } from '../core/state.js';
+import { perfTelemetry } from '../telemetry/telemetry.js';
 
 export class VRRenderer {
   constructor(canvas) {
@@ -232,7 +233,7 @@ export class VRRenderer {
   }
 
   // Stereo VR 2-Pass Mode: Renders Ideal Left/Right Scene -> Cardboard Screen-Space Barrel Distortion Pass
-  renderStereoVR(width, height, videoProfile, viewerProfile, headCamRotMat3, uiCanvas = null) {
+  renderStereoVR(width, height, videoProfile, viewerProfile, headCamRotMat3, uiCanvas = null, shouldUploadUI = true) {
     const gl = this.gl;
     if (!gl || !this.programScene || !this.programDistort) return;
 
@@ -316,12 +317,13 @@ export class VRRenderer {
     gl.drawArrays(gl.TRIANGLES, 0, 6);
 
     // Composite Ideal Dual-Eye UI Canvas into eyeFbo (Pass 1 UI Overlay)
-    if (uiCanvas && this.programUI) {
+    if (uiCanvas && this.programUI && shouldUploadUI !== false) {
       gl.viewport(0, 0, width, height);
       gl.scissor(0, 0, width, height);
       gl.bindTexture(gl.TEXTURE_2D, this.uiTex);
       gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
       gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, uiCanvas);
+      perfTelemetry.recordUiUpload();
 
       gl.useProgram(this.programUI);
       const uiPosLoc = gl.getAttribLocation(this.programUI, 'aPosition');
@@ -340,6 +342,7 @@ export class VRRenderer {
       gl.drawArrays(gl.TRIANGLES, 0, 6);
       gl.disable(gl.BLEND);
     }
+
 
     // ==========================================
     // Pass 2: Screen-Space Distortion Pass to Display Screen

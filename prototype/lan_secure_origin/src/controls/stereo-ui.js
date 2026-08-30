@@ -64,11 +64,46 @@ export function roundRect(ctx, x, y, width, height, radius, fill, stroke) {
   if (stroke) ctx.stroke();
 }
 
-export function renderStereoUI(uiCtx, gazeEngine, commandModel, videoElement, now, width, height, viewerProfile = null) {
-  if (!uiCtx) return;
-  uiCtx.clearRect(0, 0, width, height);
-  if (!state.inVR) return;
+export function isStereoUIVisible(now) {
+  if (!state.inVR) return false;
+  if (state.recenterCountdown.active) return true;
+  if (state.calibrationStage === 'C' && !state.firstFrameTimings.ready) return true;
+  if (state.toastText && (now - state.toastTime < 2000)) return true;
 
+  const isMenuOpen = (state.activePattern === 'A' && state.patternA_open) ||
+                     (state.activePattern === 'B' && state.patternB_open) ||
+                     (state.activePattern === 'C' && state.patternC_open);
+  if (isMenuOpen) return true;
+
+  // In Stage B/C without open menu, reticle is suppressed
+  const isOpticsMode = (state.calibrationStage === 'B' || state.calibrationStage === 'C');
+  if (isOpticsMode) return false;
+
+  // Otherwise, default Reticle is visible
+  return true;
+}
+
+export function renderStereoUI(uiCtx, gazeEngine, commandModel, videoElement, now, width, height, viewerProfile = null) {
+  if (!uiCtx) return false;
+
+  const isDirtyUIMode = (state.performanceMode === 'strict-rvfc-dirty-ui');
+  const visible = isStereoUIVisible(now);
+
+  if (isDirtyUIMode) {
+    if (!visible) {
+      if (state.uiIsDirty) {
+        uiCtx.clearRect(0, 0, width, height);
+        state.uiIsDirty = false;
+        return true; // Rendered empty once to clear
+      }
+      return false; // UI is hidden & clean -> skip render & texture upload
+    }
+  }
+
+  uiCtx.clearRect(0, 0, width, height);
+  if (!state.inVR) return false;
+
+  state.uiIsDirty = true;
   const eyeGeom = deriveCardboardEyeGeometry(activeScreenProfile, viewerProfile);
   const halfW = Math.floor(width / 2);
   const virtualDepth = state.menuVirtualDepth || 2.0;

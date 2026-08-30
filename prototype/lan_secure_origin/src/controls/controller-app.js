@@ -93,15 +93,7 @@ export async function sendControl(payload) {
   }
 }
 
-export function formatTime(sec) {
-  if (typeof sec !== 'number' || isNaN(sec) || sec < 0) return '0:00';
-  const m = Math.floor(sec / 60);
-  const s = Math.floor(sec % 60);
-  return `${m}:${s < 10 ? '0' : ''}${s}`;
-}
-
-export let isScrubbing = false;
-let scrubResumeTimeout = null;
+import { initMediaRootController, initTimelineScrubber, isScrubbing, formatTime } from './media-root-controller.js';
 
 export function onSelectMedia(relPath) {
   if (!relPath) return;
@@ -115,44 +107,6 @@ export function sendSeek(sec) {
 
 export function sendSeekTo(sec) {
   sendControl({ action: 'seek_to', seconds: Math.max(0, sec) });
-}
-
-export function initTimelineScrubber() {
-  const scrubber = document.getElementById('timelineScrubber');
-  if (!scrubber) return;
-
-  const onScrubStart = () => {
-    isScrubbing = true;
-    if (scrubResumeTimeout) clearTimeout(scrubResumeTimeout);
-  };
-
-  const onScrubInput = (e) => {
-    isScrubbing = true;
-    const targetSec = parseFloat(e.target.value);
-    const maxDur = parseFloat(scrubber.max) || 0;
-    const elTime = document.getElementById('transportVideoTime');
-    if (elTime) {
-      elTime.textContent = `${formatTime(targetSec)} / ${maxDur > 0 ? formatTime(maxDur) : '--'}`;
-    }
-  };
-
-  const onScrubCommit = (e) => {
-    const targetSec = parseFloat(e.target.value);
-    if (!isNaN(targetSec)) {
-      sendSeekTo(targetSec);
-    }
-    if (scrubResumeTimeout) clearTimeout(scrubResumeTimeout);
-    scrubResumeTimeout = setTimeout(() => {
-      isScrubbing = false;
-    }, 600);
-  };
-
-  scrubber.addEventListener('mousedown', onScrubStart);
-  scrubber.addEventListener('touchstart', onScrubStart, { passive: true });
-  scrubber.addEventListener('input', onScrubInput);
-  scrubber.addEventListener('change', onScrubCommit);
-  scrubber.addEventListener('mouseup', onScrubCommit);
-  scrubber.addEventListener('touchend', onScrubCommit);
 }
 
 export function toggleDiagnosticEye() {
@@ -529,6 +483,29 @@ export function updateTelemetryUI(data) {
     document.getElementById('valTotalLat').textContent = t.firstRenderAt ? (t.firstRenderAt - t.selectedAt).toFixed(1) + ' ms' : (t.statusText || '--');
   }
 
+  if (data.perf) {
+    const { cadence: cad = {}, frameTimeMs: ft = {}, playback: pb = {}, display: disp = {}, webgl: wg = {} } = data.perf;
+    const q = pb.quality || {};
+
+    const setT = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
+    setT('valPerfCadence', `rAF: ${cad.rafPerSec || 0}/s | rVFC: ${cad.rvfcPerSec || 0}/s`);
+    setT('valUploadCadence', `VidUp: ${cad.videoUploadsPerSec || 0}/s | UIUp: ${cad.uiUploadsPerSec || 0}/s`);
+    setT('valFrameTimeAvg', `avg: ${ft.avg || 0}ms | p95: ${ft.p95 || 0}ms`);
+    setT('valFrameTimeMax', `max: ${ft.max || 0}ms (${ft.samples || 0} frames)`);
+    setT('valVideoQuality', `total: ${q.totalVideoFrames} | drop: ${q.droppedVideoFrames}`);
+    setT('valVideoDropRate', (typeof q.dropRate === 'number') ? `${q.dropRate}% dropped` : String(q.dropRate));
+    setT('valDisplayViewport', `VP: ${disp.cssViewport || '--'} (DPR: ${disp.dpr || '--'})`);
+    setT('valDrawingBuffer', `DrawBuf: ${disp.drawingBuffer || '--'} | FBO: ${disp.eyeFbo || '--'}`);
+    setT('valPlaybackStates', `ready: ${pb.readyState} | net: ${pb.networkState} | ${pb.paused ? '⏸' : '▶'}`);
+    setT('valBufferDetails', `ahead: ${pb.bufferAheadSec}s`);
+    setT('valGlError', wg.glError || 'NO_ERROR');
+    setT('valGlContextLoss', `Loss/Rest: ${wg.contextLostCount || 0}/${wg.contextRestoredCount || 0}`);
+    setT('valActivePerfMode', data.perf.performanceMode || 'baseline');
+    setT('valActiveRenderScale', (data.perf.renderScale || 1.0).toFixed(2) + 'x');
+    setT('valEyeFboSize', disp.eyeFbo || '--');
+    setT('valBufferAhead', `${pb.bufferAheadSec}s`);
+  }
+
   if (data.controllerInput) {
     const ci = data.controllerInput;
     const statEl = document.getElementById('valControllerStatus');
@@ -550,31 +527,22 @@ export function updateTelemetryUI(data) {
   }
 }
 
-// Window Globals for inline HTML event handlers
-window.setStage = setStage;
-window.setViewerVisualMode = setViewerVisualMode;
-window.onSelectMedia = onSelectMedia;
-window.sendSeek = sendSeek;
-window.toggleDiagnosticEye = toggleDiagnosticEye;
-window.toggleDiagnosticOverlay = toggleDiagnosticOverlay;
-window.onPoseChange = onPoseChange;
-window.resetPose = resetPose;
-window.onViewerPresetSelect = onViewerPresetSelect;
-window.onVideoMappingChange = onVideoMappingChange;
-window.saveVideoMapping = saveVideoMapping;
-window.saveMyViewerProfile = saveMyViewerProfile;
-window.toggleReferenceGrid = toggleReferenceGrid;
-window.toggleLensCorrection = toggleLensCorrection;
-window.onOpticsChange = onOpticsChange;
-window.sendAction = sendAction;
-window.sendSeekTo = sendSeekTo;
+export function onPerformanceModeChange(mode) { sendControl({ action: 'set_performance_mode', mode }); }
+export function onRenderScaleChange(scaleVal) { sendControl({ action: 'set_render_scale', scale: parseFloat(scaleVal) || 1.0 }); }
 
-import { initMediaRootController } from './media-root-controller.js';
+// Window Globals for inline HTML event handlers
+Object.assign(window, {
+  setStage, setViewerVisualMode, onPerformanceModeChange, onRenderScaleChange,
+  onSelectMedia, sendSeek, toggleDiagnosticEye, toggleDiagnosticOverlay,
+  onPoseChange, resetPose, onViewerPresetSelect, onVideoMappingChange,
+  saveVideoMapping, saveMyViewerProfile, toggleReferenceGrid, toggleLensCorrection,
+  onOpticsChange, sendAction, sendSeekTo
+});
 
 // Start background polling, SSE, and UI initializers
 initEventSource();
 loadVideoList();
-initTimelineScrubber();
+initTimelineScrubber(sendControl);
 initMediaRootController();
 applyStageLocks('A');
 

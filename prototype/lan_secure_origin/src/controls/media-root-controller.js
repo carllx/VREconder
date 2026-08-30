@@ -128,6 +128,55 @@ export async function applyMediaRoot() {
   }
 }
 
+// Playback Timeline Scrubber Subsystem (Issue #19 / #14)
+export let isScrubbing = false;
+let scrubResumeTimeout = null;
+
+export function formatTime(sec) {
+  if (typeof sec !== 'number' || isNaN(sec) || sec < 0) return '0:00';
+  const m = Math.floor(sec / 60);
+  const s = Math.floor(sec % 60);
+  return `${m}:${s < 10 ? '0' : ''}${s}`;
+}
+
+export function initTimelineScrubber(sendControlFn) {
+  const scrubber = document.getElementById('timelineScrubber');
+  if (!scrubber) return;
+
+  const onScrubStart = () => {
+    isScrubbing = true;
+    if (scrubResumeTimeout) clearTimeout(scrubResumeTimeout);
+  };
+
+  const onScrubInput = (e) => {
+    isScrubbing = true;
+    const targetSec = parseFloat(e.target.value);
+    const maxDur = parseFloat(scrubber.max) || 0;
+    const elTime = document.getElementById('transportVideoTime');
+    if (elTime) {
+      elTime.textContent = `${formatTime(targetSec)} / ${maxDur > 0 ? formatTime(maxDur) : '--'}`;
+    }
+  };
+
+  const onScrubCommit = (e) => {
+    const targetSec = parseFloat(e.target.value);
+    if (!isNaN(targetSec) && typeof sendControlFn === 'function') {
+      sendControlFn({ action: 'seek_to', seconds: Math.max(0, targetSec) });
+    }
+    if (scrubResumeTimeout) clearTimeout(scrubResumeTimeout);
+    scrubResumeTimeout = setTimeout(() => {
+      isScrubbing = false;
+    }, 600);
+  };
+
+  scrubber.addEventListener('mousedown', onScrubStart);
+  scrubber.addEventListener('touchstart', onScrubStart, { passive: true });
+  scrubber.addEventListener('input', onScrubInput);
+  scrubber.addEventListener('change', onScrubCommit);
+  scrubber.addEventListener('mouseup', onScrubCommit);
+  scrubber.addEventListener('touchend', onScrubCommit);
+}
+
 export function initMediaRootController() {
   const inp = document.getElementById('inpMediaRoot');
   if (inp) {

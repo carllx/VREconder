@@ -2,6 +2,7 @@
 // Media Playback, Hardware Frame Callback & First-Frame Instrumentation
 // ==========================================
 import { state } from '../core/state.js';
+import { perfTelemetry } from '../telemetry/telemetry.js';
 
 export class MediaController {
   constructor(videoElement, videoSelectElement) {
@@ -16,6 +17,7 @@ export class MediaController {
   initListeners() {
     const onFrame = () => {
       this.videoFrameNeedsUpload = true;
+      perfTelemetry.recordRvfc();
       if (!state.firstFrameTimings.firstFrameDecodedAt && state.firstFrameTimings.selectedAt) {
         state.firstFrameTimings.firstFrameDecodedAt = performance.now();
         state.firstFrameTimings.statusText = 'Decoded Frame Arrived';
@@ -175,11 +177,31 @@ export class MediaController {
   }
 
   shouldUploadTexture() {
-    if (this.video.readyState >= 2 && (this.videoFrameNeedsUpload || (this.video.currentTime !== this.lastUploadedVideoTime && !this.video.paused))) {
+    if (this.video.readyState < 2) return false;
+
+    // Performance Modes:
+    // 'baseline': upload if videoFrameNeedsUpload OR currentTime changed while playing
+    // 'strict-rvfc' / 'strict-rvfc-dirty-ui': upload ONLY when videoFrameNeedsUpload (true new decoded hardware frame)
+    const isStrict = (state.performanceMode === 'strict-rvfc' || state.performanceMode === 'strict-rvfc-dirty-ui');
+
+    if (isStrict) {
+      if (this.videoFrameNeedsUpload) {
+        this.videoFrameNeedsUpload = false;
+        this.lastUploadedVideoTime = this.video.currentTime;
+        perfTelemetry.recordVideoUpload();
+        return true;
+      }
+      return false;
+    }
+
+    // Baseline legacy behavior
+    if (this.videoFrameNeedsUpload || (this.video.currentTime !== this.lastUploadedVideoTime && !this.video.paused)) {
       this.videoFrameNeedsUpload = false;
       this.lastUploadedVideoTime = this.video.currentTime;
+      perfTelemetry.recordVideoUpload();
       return true;
     }
     return false;
   }
 }
+

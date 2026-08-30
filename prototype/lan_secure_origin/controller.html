@@ -276,22 +276,53 @@
       </div>
     </div>
 
+    <!-- Performance Diagnostics & A/B Mode Selector (Issue #14) -->
+    <div class="card" id="cardPerformance">
+      <div style="font-size:0.8rem; font-weight:700; color:var(--muted); text-transform:uppercase;">4. Performance Harness &amp; A/B Matrix (Issue #14)</div>
+      <div class="control-grid" style="margin-top:8px;">
+        <div>
+          <div class="slider-row">
+            <span style="width:130px; font-weight:bold;">Upload Mode:</span>
+            <select id="selPerfMode" onchange="onPerformanceModeChange(this.value)" style="flex:1; background:#1e293b; color:#fff; border:1px solid #334155; padding:4px 6px; border-radius:4px; font-size:0.75rem;">
+              <option value="baseline">0. Baseline (Unconstrained Uploads)</option>
+              <option value="strict-rvfc">1. Strict rVFC (Hardware Decoded Only)</option>
+              <option value="strict-rvfc-dirty-ui">2. Strict rVFC + Dirty UI Bypass</option>
+            </select>
+          </div>
+        </div>
+        <div>
+          <div class="slider-row">
+            <span style="width:130px; font-weight:bold;">Render Scale:</span>
+            <select id="selRenderScale" onchange="onRenderScaleChange(this.value)" style="flex:1; background:#1e293b; color:#fff; border:1px solid #334155; padding:4px 6px; border-radius:4px; font-size:0.75rem;">
+              <option value="1.0">1.00 (Native 100% DPR)</option>
+              <option value="0.85">0.85 (Balanced -28% Pixels)</option>
+              <option value="0.70">0.70 (Performance -51% Pixels)</option>
+            </select>
+          </div>
+        </div>
+      </div>
+      <div id="txtPerfSummary" style="margin-top:6px; font-size:0.72rem; color:#38bdf8; background:rgba(2,132,199,0.15); padding:4px 8px; border-radius:4px; border:1px solid rgba(56,189,248,0.3);">
+        Mode: <b id="valActivePerfMode">baseline</b> | Scale: <b id="valActiveRenderScale">1.00x</b> | FBO: <span id="valEyeFboSize">--</span> | Buffer Ahead: <span id="valBufferAhead">--</span>
+      </div>
+    </div>
+
     <!-- iPhone Telemetry & Measured Timings -->
     <div class="card">
-      <div style="font-size:0.8rem; font-weight:700; color:var(--muted); text-transform:uppercase;">4. iPhone Telemetry & Measured Timings</div>
+      <div style="font-size:0.8rem; font-weight:700; color:var(--muted); text-transform:uppercase;">5. iPhone Telemetry &amp; Measured Performance</div>
       <table class="timing-table">
-        <tr><th>Metric</th><th>Live Value</th><th>Measured Latency</th></tr>
-        <tr><td>Device / Headset State</td><td id="valDevStatus">Standby</td><td id="valFps">-- FPS</td></tr>
-        <tr><td>Active Media File</td><td id="valMediaName">--</td><td id="valMediaStatus">--</td></tr>
-        <tr><td>Metadata Load Event</td><td id="valMetaAt">--</td><td id="valMetaLat">--</td></tr>
-        <tr><td>Decoder CanPlay Event</td><td id="valCanplayAt">--</td><td id="valCanplayLat">--</td></tr>
-        <tr><td>First Decoded Frame</td><td id="valDecodeAt">--</td><td id="valDecodeLat">--</td></tr>
-        <tr><td>First GPU Texture Upload</td><td id="valUploadAt">--</td><td id="valUploadLat">--</td></tr>
-        <tr><td>First Rendered Frame</td><td id="valRenderAt">--</td><td id="valTotalLat" style="color:#34d399;font-weight:bold;">--</td></tr>
-        <tr><td>SHINECON / BT Controller</td><td id="valControllerStatus" style="color:#38bdf8;font-weight:bold;">Standby (No Input)</td><td id="valControllerEvent">--</td></tr>
+        <tr><th>Metric Group</th><th>Cadence / Rates</th><th>Details / Quality</th></tr>
+        <tr><td>Cadence (per sec)</td><td id="valPerfCadence">rAF: -- | rVFC: --</td><td id="valUploadCadence">VideoUp: -- | UIUp: --</td></tr>
+        <tr><td>Frame Time (ms)</td><td id="valFrameTimeAvg">avg: -- | p95: --</td><td id="valFrameTimeMax">max: --</td></tr>
+        <tr><td>Video Quality</td><td id="valVideoQuality">total: -- | drop: --</td><td id="valVideoDropRate">--</td></tr>
+        <tr><td>Display &amp; Viewport</td><td id="valDisplayViewport">Viewport: -- (DPR: --)</td><td id="valDrawingBuffer">DrawBuf: --</td></tr>
+        <tr><td>Playback &amp; Buffer</td><td id="valPlaybackStates">readyState: -- | net: --</td><td id="valBufferDetails">bufAhead: --</td></tr>
+        <tr><td>WebGL State</td><td id="valGlError">NO_ERROR</td><td id="valGlContextLoss">Loss/Restore: 0/0</td></tr>
+        <tr><td>First-Frame Latency</td><td id="valMetaAt">--</td><td id="valTotalLat" style="color:#34d399;font-weight:bold;">--</td></tr>
+        <tr><td>SHINECON Controller</td><td id="valControllerStatus" style="color:#38bdf8;font-weight:bold;">Standby</td><td id="valControllerEvent">--</td></tr>
       </table>
     </div>
   </div>
+
 
   <!-- Fixed Bottom Playback Transport Bar (Issue #19 SSOT Surface) -->
   <div class="bottom-transport-bar" id="bottomTransportBar">

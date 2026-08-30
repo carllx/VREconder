@@ -161,4 +161,150 @@ export class TelemetryEngine {
   }
 }
 
+export class PerformanceTelemetry {
+  constructor() {
+    this.windowStart = performance.now();
+    this.rafCount = 0;
+    this.rvfcCount = 0;
+    this.videoUploadCount = 0;
+    this.uiUploadCount = 0;
+    this.orientationCount = 0;
+    this.frameTimes = [];
+    this.glContextLostCount = 0;
+    this.glContextRestoredCount = 0;
+    this.recentEvents = [];
+    this.latestSnapshot = null;
+  }
+
+  recordEvent(name) {
+    this.recentEvents.push({ event: name, time: Number(performance.now().toFixed(1)) });
+    if (this.recentEvents.length > 20) this.recentEvents.shift();
+  }
+
+  recordRaf() { this.rafCount++; }
+  recordRvfc() { this.rvfcCount++; }
+  recordVideoUpload() { this.videoUploadCount++; }
+  recordUiUpload() { this.uiUploadCount++; }
+  recordOrientation() { this.orientationCount++; }
+  recordFrameTime(dtMs) { this.frameTimes.push(dtMs); }
+
+  updateWindow(now, video, canvas, renderer) {
+    const elapsed = now - this.windowStart;
+    if (elapsed < 1000) return this.latestSnapshot;
+
+    const scale = 1000 / elapsed;
+    const rafRate = Number((this.rafCount * scale).toFixed(1));
+    const rvfcRate = Number((this.rvfcCount * scale).toFixed(1));
+    const videoUploadRate = Number((this.videoUploadCount * scale).toFixed(1));
+    const uiUploadRate = Number((this.uiUploadCount * scale).toFixed(1));
+    const orientationRate = Number((this.orientationCount * scale).toFixed(1));
+
+    let avgFrameTimeMs = 0;
+    let p95FrameTimeMs = 0;
+    let maxFrameTimeMs = 0;
+    if (this.frameTimes.length > 0) {
+      const sorted = [...this.frameTimes].sort((a, b) => a - b);
+      const sum = sorted.reduce((acc, v) => acc + v, 0);
+      avgFrameTimeMs = Number((sum / sorted.length).toFixed(2));
+      const p95Idx = Math.min(sorted.length - 1, Math.floor(sorted.length * 0.95));
+      p95FrameTimeMs = Number(sorted[p95Idx].toFixed(2));
+      maxFrameTimeMs = Number(sorted[sorted.length - 1].toFixed(2));
+    }
+
+    let quality = { totalVideoFrames: 'unavailable', droppedVideoFrames: 'unavailable', dropRate: 'unavailable' };
+    if (video && typeof video.getVideoPlaybackQuality === 'function') {
+      try {
+        const q = video.getVideoPlaybackQuality();
+        if (q && typeof q.totalVideoFrames === 'number') {
+          const tot = q.totalVideoFrames;
+          const drop = q.droppedVideoFrames || 0;
+          const rate = tot > 0 ? Number(((drop / tot) * 100).toFixed(2)) : 0;
+          quality = { totalVideoFrames: tot, droppedVideoFrames: drop, dropRate: rate };
+        }
+      } catch (e) {}
+    }
+
+    let bufferAhead = 0;
+    const curTime = (video && typeof video.currentTime === 'number') ? video.currentTime : 0;
+    if (video && video.buffered && video.buffered.length > 0) {
+      for (let i = 0; i < video.buffered.length; i++) {
+        const start = video.buffered.start(i);
+        const end = video.buffered.end(i);
+        if (curTime >= start && curTime <= end) {
+          bufferAhead = Number((end - curTime).toFixed(2));
+          break;
+        }
+      }
+    }
+
+    let glErrStr = 'NO_ERROR';
+    if (renderer && renderer.gl) {
+      const err = renderer.gl.getError();
+      if (err !== renderer.gl.NO_ERROR) glErrStr = 'GL_ERR_' + err;
+    }
+
+    const dpr = (typeof window !== 'undefined' && window.devicePixelRatio) ? window.devicePixelRatio : 1;
+    const cssW = (typeof window !== 'undefined') ? window.innerWidth : 0;
+    const cssH = (typeof window !== 'undefined') ? window.innerHeight : 0;
+    const drawW = canvas ? canvas.width : 0;
+    const drawH = canvas ? canvas.height : 0;
+    const fboW = renderer ? renderer.fboWidth : 0;
+    const fboH = renderer ? renderer.fboHeight : 0;
+
+    this.latestSnapshot = {
+      timestamp: new Date().toISOString(),
+      performanceMode: state.performanceMode || 'baseline',
+      renderScale: state.renderScale || 1.0,
+      cadence: {
+        rafPerSec: rafRate,
+        rvfcPerSec: rvfcRate,
+        videoUploadsPerSec: videoUploadRate,
+        uiUploadsPerSec: uiUploadRate,
+        orientationPerSec: orientationRate
+      },
+      frameTimeMs: {
+        avg: avgFrameTimeMs,
+        p95: p95FrameTimeMs,
+        max: maxFrameTimeMs,
+        samples: this.frameTimes.length
+      },
+      playback: {
+        currentTime: Number(curTime.toFixed(2)),
+        duration: (video && isFinite(video.duration)) ? Number(video.duration.toFixed(2)) : 0,
+        paused: video ? !!video.paused : false,
+        readyState: video ? video.readyState : 0,
+        networkState: video ? video.networkState : 0,
+        bufferAheadSec: bufferAhead,
+        quality: quality,
+        recentEvents: [...this.recentEvents]
+      },
+      display: {
+        cssViewport: `${cssW}x${cssH}`,
+        dpr: Number(dpr.toFixed(2)),
+        renderScale: state.renderScale || 1.0,
+        drawingBuffer: `${drawW}x${drawH}`,
+        eyeFbo: `${fboW}x${fboH}`
+      },
+      webgl: {
+        glError: glErrStr,
+        contextLostCount: this.glContextLostCount,
+        contextRestoredCount: this.glContextRestoredCount
+      }
+    };
+
+    this.windowStart = now;
+    this.rafCount = 0;
+    this.rvfcCount = 0;
+    this.videoUploadCount = 0;
+    this.uiUploadCount = 0;
+    this.orientationCount = 0;
+    this.frameTimes = [];
+    this.recentEvents = [];
+
+    return this.latestSnapshot;
+  }
+}
+
 export const telemetry = new TelemetryEngine();
+export const perfTelemetry = new PerformanceTelemetry();
+
