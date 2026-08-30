@@ -174,7 +174,11 @@ export class GazeEngine {
       }
 
       const elapsed = now - this.hoverStartTime;
-      const threshold = (bestItem.id.startsWith('open_')) ? 400 : state.dwellThresholdMs;
+      const baseThreshold = Number.isFinite(state.dwellThresholdMs) && state.dwellThresholdMs > 0 ? state.dwellThresholdMs : 1000;
+      if (!Number.isFinite(state.dwellThresholdMs)) {
+        console.error('[GazeEngine] Invalid non-finite state.dwellThresholdMs detected:', state.dwellThresholdMs);
+      }
+      const threshold = (bestItem.id.startsWith('open_')) ? 400 : baseThreshold;
       this.dwellProgress = Math.min(1.0, elapsed / threshold);
 
       if (this.dwellProgress >= 1.0) {

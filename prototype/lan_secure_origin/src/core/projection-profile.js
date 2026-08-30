@@ -4,6 +4,26 @@
 // ==========================================
 import { activeScreenProfile } from './screen-profile.js';
 
+export function getEffectiveViewerProfile(baseProfile, tempOffset = 0.0) {
+  if (!baseProfile) return baseProfile;
+  const baseD = (typeof baseProfile.screenToLensDistance === 'number') ? baseProfile.screenToLensDistance : 0.0393;
+  const offset = (typeof tempOffset === 'number') ? tempOffset : (state.temporaryScreenToLensOffset || 0.0);
+  // Exact requested Screen-to-Lens without hidden narrow saturation
+  const effectiveD = Math.max(0.020, Math.min(0.070, baseD + offset));
+
+  // Fail-honest Viewer/Lens policy: unvalidated profiles (isCalibrated !== true) default to Lens Correction OFF during playback
+  const isCalibrated = baseProfile.isCalibrated === true;
+  const requestedLensOn = baseProfile.lensCorrectionEnabled === true;
+  const effectiveLensOn = isCalibrated ? requestedLensOn : false;
+
+  return {
+    ...baseProfile,
+    screenToLensDistance: effectiveD,
+    lensCorrectionEnabled: effectiveLensOn,
+    _lensCorrectionSuppressedReason: (!isCalibrated && requestedLensOn) ? 'unvalidated_viewer_profile' : null
+  };
+}
+
 export function computeMediaFingerprint(videoItem) {
   if (!videoItem) return 'unknown_media';
   const name = videoItem.name || videoItem.relPath || 'unknown';

@@ -12,7 +12,7 @@ import { GazeEngine } from './controls/gaze-engine.js';
 import { renderStereoUI, isStereoUIVisible } from './controls/stereo-ui.js';
 import { telemetry, perfTelemetry } from './telemetry/telemetry.js';
 import { initAudioContext } from './controls/audio-haptics.js';
-import { profileStorage, computeMediaFingerprint } from './core/projection-profile.js';
+import { profileStorage, computeMediaFingerprint, getEffectiveViewerProfile } from './core/projection-profile.js';
 import { CalibrationUI } from './controls/calibration-ui.js';
 import { ControllerInputProbe, setRemoteLogFunction } from './controls/controller-input-probe.js';
 
@@ -161,18 +161,6 @@ const controllerProbe = new ControllerInputProbe(commandModel);
 
 // Calibration UI Setup
 let activeVideoProfile = null;
-
-export function getEffectiveViewerProfile(baseProfile) {
-  if (!baseProfile) return baseProfile;
-  const baseD = (typeof baseProfile.screenToLensDistance === 'number') ? baseProfile.screenToLensDistance : 0.0393;
-  const offset = state.temporaryScreenToLensOffset || 0.0;
-  // Exact requested Screen-to-Lens without hidden narrow saturation
-  const effectiveD = Math.max(0.020, Math.min(0.070, baseD + offset));
-  return {
-    ...baseProfile,
-    screenToLensDistance: effectiveD
-  };
-}
 
 function onVideoSelected(videoItem) {
   state.temporaryScreenToLensOffset = 0.0;
@@ -469,7 +457,8 @@ setInterval(() => {
     viewerProfile: calibrationUI.activeViewerProfile,
     opticsRuntime: {
       lensCorrectionRequested: !!(calibrationUI.activeViewerProfile && calibrationUI.activeViewerProfile.lensCorrectionEnabled),
-      lensCorrectionApplied: !!(calibrationUI.activeViewerProfile && calibrationUI.activeViewerProfile.lensCorrectionEnabled),
+      lensCorrectionApplied: !!(getEffectiveViewerProfile(calibrationUI.activeViewerProfile).lensCorrectionEnabled),
+      lensCorrectionSuppressedReason: getEffectiveViewerProfile(calibrationUI.activeViewerProfile)._lensCorrectionSuppressedReason || null,
       requestedScreenToLensMm: calibrationUI.activeViewerProfile && calibrationUI.activeViewerProfile.screenToLensDistance ? Number((calibrationUI.activeViewerProfile.screenToLensDistance * 1000).toFixed(1)) : 39.3,
       effectiveScreenToLensMm: Number((getEffectiveViewerProfile(calibrationUI.activeViewerProfile).screenToLensDistance * 1000).toFixed(1))
     },

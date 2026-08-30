@@ -7,6 +7,7 @@ export const state = {
   standalone: isStandalone,
   stereoMode: 1, // 1: 3D SBS Stereoscopic (True 3D VR)
   activePattern: 'B', // Default to Pattern B (Radial)
+  dwellThresholdMs: 1000, // Established baseline dwell duration for normal VR controls (Issue #9)
   // Performance Harness & A/B Diagnostics (Issue #14)
   // performanceMode: 'baseline' | 'strict-rvfc' | 'strict-rvfc-dirty-ui'
   performanceMode: 'strict-rvfc-dirty-ui',

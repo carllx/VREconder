@@ -108,6 +108,7 @@ export class TelemetryEngine {
   }
 
   updateTable() {
+    if (typeof document === 'undefined') return;
     ['A', 'B', 'C'].forEach(p => {
       const m = this.metrics[p];
       const row = document.getElementById('row-' + p);
