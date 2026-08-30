@@ -140,6 +140,12 @@ function handleRequest(req, res, isHttps) {
   }
 
   // Telemetry endpoint
+  if (pathname === '/api/telemetry' && req.method === 'GET') {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ latestTelemetry: latestTelemetry || null }));
+    return;
+  }
+
   if (pathname === '/api/telemetry' && req.method === 'POST') {
     let body = '';
     req.on('data', chunk => { body += chunk; });
