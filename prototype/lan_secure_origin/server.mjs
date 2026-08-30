@@ -221,6 +221,28 @@ function handleRequest(req, res, isHttps) {
     return;
   }
 
+  // Diagnostic session structured telemetry persistence
+  if (req.method === 'POST' && pathname === '/api/diagnostic-session') {
+    let body = '';
+    req.on('data', chunk => { body += chunk; });
+    req.on('end', () => {
+      try {
+        const payload = JSON.parse(body);
+        payload.serverTimestamp = new Date().toISOString();
+        payload.clientIp = req.socket.remoteAddress;
+        const logFile = path.join(__dirname, 'diagnostic_sessions.log');
+        fs.appendFileSync(logFile, JSON.stringify(payload) + '\n', 'utf8');
+        console.log(`[Diagnostic Session] ${payload.stage || 'STAGE'} | id:${payload.sessionId} | event:${payload.event} | media:${payload.mediaName || '--'} | mode:${payload.uploadMode || '--'}`);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ status: 'ok' }));
+      } catch (err) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: err.message }));
+      }
+    });
+    return;
+  }
+
   // Profiles storage endpoints
   const VIDEO_PROFILES_FILE = path.join(__dirname, 'prototype_video_profiles.json');
   const VIEWER_PROFILE_FILE = path.join(__dirname, 'prototype_viewer_profile.json');
@@ -473,21 +495,9 @@ function handleRequest(req, res, isHttps) {
   if (pathname === '/controller') safePath = path.join(__dirname, 'controller.html');
   if (pathname === '/native-diag' || pathname === '/native-diag.html') safePath = path.join(__dirname, 'native-video-diag.html');
   if (pathname === '/upload-diag' || pathname === '/upload-diag.html') safePath = path.join(__dirname, 'webgl-upload-diag.html');
-  if (pathname === '/hevc-diag' || pathname === '/hevc-diag.html') {
-    renderHevcDiagnosticPage(res);
-    return;
-  }
   if (safePath.startsWith(__dirname) && fs.existsSync(safePath) && fs.statSync(safePath).isFile()) {
     const ext = path.extname(safePath).toLowerCase();
-    const mimeTypes = {
-      '.html': 'text/html; charset=utf-8',
-      '.js': 'text/javascript; charset=utf-8',
-      '.mjs': 'text/javascript; charset=utf-8',
-      '.css': 'text/css; charset=utf-8',
-      '.json': 'application/json; charset=utf-8',
-      '.png': 'image/png',
-      '.svg': 'image/svg+xml'
-    };
+    const mimeTypes = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.mjs': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.json': 'application/json; charset=utf-8', '.png': 'image/png', '.svg': 'image/svg+xml' };
     if (mimeTypes[ext]) {
       res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
       res.setHeader('Pragma', 'no-cache');
@@ -502,50 +512,7 @@ function renderOnboardingPage(res) {
   res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
   const localIps = getLocalIPs();
   const primaryIp = localIps.find(ip => ip.startsWith('192.168.')) || localIps[0] || '127.0.0.1';
-  res.end(`<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>VREconder CA Onboarding</title>
-  <style>
-    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; padding: 20px; line-height: 1.6; background: #0f172a; color: #f8fafc; margin: 0; }
-    .card { background: #1e293b; border-radius: 12px; padding: 20px; margin-bottom: 20px; border: 1px solid #334155; }
-    .btn { display: inline-block; background: #2563eb; color: white; padding: 14px 20px; border-radius: 8px; text-decoration: none; font-weight: bold; margin: 10px 0; text-align: center; }
-    .btn-green { background: #16a34a; }
-    code { background: #334155; padding: 2px 6px; border-radius: 4px; font-size: 0.9em; color: #38bdf8; }
-    ol { padding-left: 20px; }
-    li { margin-bottom: 12px; }
-    .badge { display: inline-block; padding: 4px 8px; border-radius: 4px; font-size: 0.8em; font-weight: bold; background: #0284c7; }
-  </style>
-</head>
-<body>
-  <h2>🔒 VREconder Local HTTPS CA Setup</h2>
-  <div class="card">
-    <span class="badge">Step 1</span>
-    <h3>Download & Install Root CA Profile</h3>
-    <p>Tap below in iPhone Safari to download the root certificate:</p>
-    <a class="btn" href="/ca.crt">📥 Download Root CA Profile</a>
-    <ol>
-      <li>Tap <b>Allow</b> when Safari asks to download profile.</li>
-      <li>Open iPhone <b>Settings</b> &rarr; tap <b>Profile Downloaded</b> &rarr; tap <b>Install</b>.</li>
-    </ol>
-  </div>
-  <div class="card">
-    <span class="badge">Step 2</span>
-    <h3>Enable Full Trust for Root CA</h3>
-    <ol>
-      <li>In iPhone <b>Settings</b>, go to: <code>General &gt; About &gt; Certificate Trust Settings</code>.</li>
-      <li>Turn ON <b>VREconder LAN Root CA</b> &rarr; tap <b>Continue</b>.</li>
-    </ol>
-  </div>
-  <div class="card">
-    <span class="badge">Step 3</span>
-    <h3>Open Secure VR Player</h3>
-    <a class="btn btn-green" href="https://${primaryIp}:${HTTPS_PORT}/">🚀 Open HTTPS VR Player (https://${primaryIp}:${HTTPS_PORT})</a>
-  </div>
-</body>
-</html>`);
+  res.end(`<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>VREconder CA Onboarding</title><style>body{font-family:-apple-system,sans-serif;padding:20px;line-height:1.6;background:#0f172a;color:#f8fafc;margin:0;}.card{background:#1e293b;border-radius:12px;padding:16px;margin-bottom:16px;border:1px solid #334155;}.btn{display:inline-block;background:#2563eb;color:white;padding:12px 18px;border-radius:8px;text-decoration:none;font-weight:bold;margin:8px 0;}.btn-green{background:#16a34a;}code{background:#334155;padding:2px 6px;border-radius:4px;font-size:0.9em;color:#38bdf8;}ol{padding-left:20px;}li{margin-bottom:8px;}.badge{display:inline-block;padding:3px 8px;border-radius:4px;font-size:0.8em;font-weight:bold;background:#0284c7;}</style></head><body><h2>🔒 VREconder Local HTTPS CA Setup</h2><div class="card"><span class="badge">Step 1</span><h3>Download & Install Root CA Profile</h3><p>Tap below in iPhone Safari to download the root certificate:</p><a class="btn" href="/ca.crt">📥 Download Root CA Profile</a><ol><li>Tap <b>Allow</b> when Safari asks to download profile.</li><li>Open iPhone <b>Settings</b> &rarr; tap <b>Profile Downloaded</b> &rarr; tap <b>Install</b>.</li></ol></div><div class="card"><span class="badge">Step 2</span><h3>Enable Full Trust for Root CA</h3><ol><li>In iPhone <b>Settings</b>, go to: <code>General &gt; About &gt; Certificate Trust Settings</code>.</li><li>Turn ON <b>VREconder LAN Root CA</b> &rarr; tap <b>Continue</b>.</li></ol></div><div class="card"><span class="badge">Step 3</span><h3>Open Secure VR Player</h3><a class="btn btn-green" href="https://${primaryIp}:${HTTPS_PORT}/">🚀 Open HTTPS VR Player (https://${primaryIp}:${HTTPS_PORT})</a></div></body></html>`);
 }
 
   res.writeHead(404, { 'Content-Type': 'text/plain' });

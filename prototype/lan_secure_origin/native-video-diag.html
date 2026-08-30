@@ -49,17 +49,22 @@
     <div class="video-container">
       <video id="nativeVideo" controls playsinline preload="auto"></video>
     </div>
+    <div class="card">
+      <div class="btn-row">
+        <button id="btnStartTest" onclick="startTestSession()" style="background:#059669; font-size:0.9rem; padding:8px 16px;">▶️ Start Test Protocol (User Gesture)</button>
+        <span id="sessionStatus" style="font-size:0.8rem; color:#94a3b8; align-self:center; font-family:monospace;">Session: Not Started</span>
+      </div>
+    </div>
 
     <div class="card">
-      <label style="font-size:0.75rem; color:#94a3b8; font-weight:600;">Quick Seek Diagnostics (Deterministic Jump):</label>
+      <label style="font-size:0.75rem; color:#94a3b8; font-weight:600;">Deterministic Protocol Jumps (Step 4 & 7):</label>
       <div class="btn-row">
+        <button class="btn-seek" onclick="seekAbsolute(300)">Seek 300s (5m)</button>
+        <button class="btn-seek" onclick="seekAbsolute(600)">Seek 600s (10m)</button>
+        <button class="btn-seek" onclick="seekAbsolute(1200)">Seek 1200s (20m)</button>
         <button class="btn-seek" onclick="seekRelative(10)">+10s</button>
         <button class="btn-seek" onclick="seekRelative(30)">+30s</button>
         <button class="btn-seek" onclick="seekRelative(60)">+60s</button>
-        <button class="btn-seek" onclick="seekAbsolute(300)">Jump 5m (300s)</button>
-        <button class="btn-seek" onclick="seekAbsolute(600)">Jump 10m (600s)</button>
-        <button class="btn-seek" onclick="seekAbsolute(1200)">Jump 20m (1200s)</button>
-        <button class="btn-seek" onclick="seekAbsolute(1500)">Jump 25m (1500s)</button>
       </div>
     </div>
 
@@ -83,7 +88,7 @@
           <div class="metric-val" id="valBufferAhead">0.0s</div>
         </div>
         <div class="metric-box">
-          <div class="metric-label">Stalls / Stalled Duration</div>
+          <div class="metric-label">Stalls / Duration</div>
           <div class="metric-val" id="valStalls">0 / 0.0s</div>
         </div>
         <div class="metric-box">
@@ -113,9 +118,34 @@
     const READY_STATES = ['HAVE_NOTHING (0)', 'HAVE_METADATA (1)', 'HAVE_CURRENT_DATA (2)', 'HAVE_FUTURE_DATA (3)', 'HAVE_ENOUGH_DATA (4)'];
     const NET_STATES = ['NETWORK_EMPTY (0)', 'NETWORK_IDLE (1)', 'NETWORK_LOADING (2)', 'NETWORK_NO_SOURCE (3)'];
 
+    let sessionId = null;
+    let sessionStartTime = 0;
+    let selectedMediaName = '';
     let stallCount = 0;
     let totalStallDurationMs = 0;
     let currentStallStart = 0;
+    let activeSeekRecord = null;
+
+    function sendSessionEvent(event, data = {}) {
+      if (!sessionId) return;
+      const payload = {
+        stage: 'STAGE_A_NATIVE',
+        sessionId: sessionId,
+        event: event,
+        mediaName: selectedMediaName,
+        currentTime: Number((video.currentTime || 0).toFixed(2)),
+        bufferAheadSec: Number(getBufferAhead().toFixed(2)),
+        readyState: video.readyState,
+        networkState: video.networkState,
+        bufferedRanges: getBufferedRangesList(),
+        ...data
+      };
+      fetch('/api/diagnostic-session', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      }).catch(() => {});
+    }
 
     function log(msg, type = 'info') {
       const time = new Date().toISOString().substring(11, 19);
@@ -154,7 +184,8 @@
     }
 
     function selectVideo(relPath) {
-      log('Selecting: ' + relPath, 'ok');
+      selectedMediaName = relPath.split('/').pop().split('\\').pop();
+      log('Selecting media: ' + selectedMediaName, 'ok');
       video.src = '/video?path=' + encodeURIComponent(relPath);
       video.load();
     }
@@ -163,35 +194,99 @@
       selectVideo(e.target.value);
     });
 
+    function startTestSession() {
+      sessionId = 'SESS_A_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6);
+      sessionStartTime = performance.now();
+      document.getElementById('sessionStatus').textContent = 'Active: ' + sessionId;
+      document.getElementById('sessionStatus').style.color = '#34d399';
+      log(`Starting Test Session ${sessionId}...`, 'ok');
+
+      sendSessionEvent('session_start', { userGestureTime: Date.now() });
+
+      const playPromise = video.play();
+      if (playPromise !== undefined) {
+        playPromise.then(() => {
+          const lat = (performance.now() - sessionStartTime).toFixed(1);
+          log(`▶️ Play promise resolved in ${lat}ms`, 'ok');
+          sendSessionEvent('play_resolved', { latencyMs: Number(lat) });
+        }).catch(err => {
+          log(`❌ Play rejected: ${err.message}`, 'error');
+          sendSessionEvent('play_rejected', { error: err.message });
+        });
+      }
+    }
+
     function seekRelative(sec) {
-      const target = Math.min(video.duration || 0, video.currentTime + sec);
-      log(`Seeking relative +${sec}s -> target ${target.toFixed(1)}s`, 'warn');
-      video.currentTime = target;
+      const target = Math.min(video.duration || 0, Math.max(0, video.currentTime + sec));
+      performSeek(target, `+${sec}s`);
     }
 
     function seekAbsolute(sec) {
-      log(`Seeking absolute to ${sec}s`, 'warn');
-      video.currentTime = sec;
+      performSeek(sec, `${sec}s`);
     }
 
-    const events = ['loadstart', 'loadedmetadata', 'loadeddata', 'canplay', 'canplaythrough', 'seeking', 'seeked', 'waiting', 'stalled', 'playing', 'pause', 'timeupdate', 'progress', 'suspend', 'error'];
+    function performSeek(targetSec, desc) {
+      const t0 = performance.now();
+      activeSeekRecord = {
+        targetSec: targetSec,
+        desc: desc,
+        preTime: video.currentTime,
+        preBufferAhead: getBufferAhead(),
+        startTime: t0,
+        seekedTime: 0,
+        firstFrameTime: 0
+      };
+      log(`Seeking ${desc} -> target ${targetSec.toFixed(1)}s (preBuf: ${activeSeekRecord.preBufferAhead.toFixed(2)}s)`, 'warn');
+      sendSessionEvent('seek_initiated', { targetSec, desc, preBufferAhead: activeSeekRecord.preBufferAhead });
+      video.currentTime = targetSec;
+    }
+
+    const events = ['loadstart', 'loadedmetadata', 'loadeddata', 'canplay', 'canplaythrough', 'seeking', 'seeked', 'waiting', 'stalled', 'playing', 'pause', 'timeupdate', 'progress', 'error'];
     events.forEach(evt => {
       video.addEventListener(evt, () => {
-        if (evt === 'waiting' || evt === 'stalled') {
+        if (evt === 'seeking') {
+          if (activeSeekRecord && !activeSeekRecord.seekingRecorded) {
+            activeSeekRecord.seekingRecorded = true;
+            activeSeekRecord.seekingTime = performance.now();
+          }
+        } else if (evt === 'seeked') {
+          if (activeSeekRecord) {
+            activeSeekRecord.seekedTime = performance.now();
+            const seekApiLat = (activeSeekRecord.seekedTime - activeSeekRecord.startTime).toFixed(1);
+            log(`Seeked API event fired in ${seekApiLat}ms (BufferAhead: ${getBufferAhead().toFixed(2)}s)`, 'ok');
+            sendSessionEvent('seeked_api', { seekApiLatencyMs: Number(seekApiLat) });
+          }
+        } else if (evt === 'timeupdate') {
+          if (activeSeekRecord && activeSeekRecord.seekedTime > 0 && !activeSeekRecord.firstFrameTime) {
+            if (Math.abs(video.currentTime - activeSeekRecord.targetSec) < 2.0 && !video.paused) {
+              activeSeekRecord.firstFrameTime = performance.now();
+              const totalSeekLat = (activeSeekRecord.firstFrameTime - activeSeekRecord.startTime).toFixed(1);
+              const postSeekDecLat = (activeSeekRecord.firstFrameTime - activeSeekRecord.seekedTime).toFixed(1);
+              log(`🎬 First advancing frame decoded in ${totalSeekLat}ms total (Decoder refill: ${postSeekDecLat}ms)`, 'ok');
+              sendSessionEvent('seek_first_frame', {
+                totalSeekLatencyMs: Number(totalSeekLat),
+                decoderRefillLatencyMs: Number(postSeekDecLat),
+                postSeekBufferAhead: Number(getBufferAhead().toFixed(2))
+              });
+              activeSeekRecord = null;
+            }
+          }
+        } else if (evt === 'waiting' || evt === 'stalled') {
           stallCount++;
           if (currentStallStart === 0) currentStallStart = performance.now();
           log(`⚠️ Event: ${evt} at curTime=${video.currentTime.toFixed(2)}s (BufferAhead=${getBufferAhead().toFixed(2)}s)`, 'warn');
+          sendSessionEvent(evt, { bufferAheadSec: Number(getBufferAhead().toFixed(2)) });
         } else if (evt === 'playing') {
           if (currentStallStart > 0) {
             totalStallDurationMs += (performance.now() - currentStallStart);
             currentStallStart = 0;
           }
           log(`▶️ Event: playing at curTime=${video.currentTime.toFixed(2)}s`, 'ok');
+          sendSessionEvent('playing');
         } else if (evt === 'error') {
           const err = video.error ? `code ${video.error.code}: ${video.error.message}` : 'unknown';
           log(`❌ Video Error: ${err}`, 'error');
-        } else if (evt !== 'timeupdate' && evt !== 'progress') {
-          log(`Event: ${evt} (readyState=${video.readyState}, curTime=${video.currentTime.toFixed(1)}s)`);
+          sendSessionEvent('video_error', { error: err });
         }
       });
     });
@@ -200,11 +295,20 @@
       if (!video.buffered || video.buffered.length === 0) return 0;
       const cur = video.currentTime;
       for (let i = 0; i < video.buffered.length; i++) {
-        const s = video.buffered.start(i);
-        const e = video.buffered.end(i);
+        const s = video.buffered.start(i), e = video.buffered.end(i);
         if (cur >= s && cur <= e) return e - cur;
       }
       return 0;
+    }
+
+    function getBufferedRangesList() {
+      const ranges = [];
+      if (video.buffered && video.buffered.length > 0) {
+        for (let i = 0; i < video.buffered.length; i++) {
+          ranges.push({ start: Number(video.buffered.start(i).toFixed(1)), end: Number(video.buffered.end(i).toFixed(1)) });
+        }
+      }
+      return ranges;
     }
 
     function updateHUD() {
@@ -215,12 +319,9 @@
       document.getElementById('valStalls').textContent = `${stallCount} / ${(totalStallDurationMs / 1000).toFixed(1)}s`;
       document.getElementById('valResolution').textContent = video.videoWidth ? `${video.videoWidth}x${video.videoHeight}` : '--';
 
-      if (video.buffered && video.buffered.length > 0) {
-        const ranges = [];
-        for (let i = 0; i < video.buffered.length; i++) {
-          ranges.push(`[${video.buffered.start(i).toFixed(1)}s - ${video.buffered.end(i).toFixed(1)}s]`);
-        }
-        document.getElementById('valBufferedRanges').textContent = ranges.join(', ');
+      const ranges = getBufferedRangesList();
+      if (ranges.length > 0) {
+        document.getElementById('valBufferedRanges').textContent = ranges.map(r => `[${r.start}s - ${r.end}s]`).join(', ');
       } else {
         document.getElementById('valBufferedRanges').textContent = 'None';
       }
