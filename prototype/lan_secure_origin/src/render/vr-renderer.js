@@ -67,6 +67,19 @@ export class VRRenderer {
   }
 
   initWebGL() {
+    if (this.canvas) {
+      this.canvas.addEventListener('webglcontextlost', (e) => {
+        perfTelemetry.recordGlContextLost();
+        console.warn('[WebGL] Context lost event received');
+        e.preventDefault();
+      }, false);
+
+      this.canvas.addEventListener('webglcontextrestored', () => {
+        perfTelemetry.recordGlContextRestored();
+        console.info('[WebGL] Context restored event received');
+      }, false);
+    }
+
     try {
       this.gl = this.canvas.getContext('webgl', { alpha: false, antialias: false, powerPreference: 'high-performance' }) ||
                 this.canvas.getContext('experimental-webgl');

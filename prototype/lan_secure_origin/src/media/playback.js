@@ -69,6 +69,13 @@ export class MediaController {
       if (elTime) elTime.textContent = this.video.currentTime.toFixed(1) + 's';
     });
 
+    const perfEvents = ['waiting', 'stalled', 'playing', 'canplay', 'seeking', 'seeked', 'pause', 'error'];
+    perfEvents.forEach(evt => {
+      this.video.addEventListener(evt, () => {
+        perfTelemetry.recordEvent(evt);
+      });
+    });
+
     this.video.addEventListener('play', () => {
       const elStat = document.getElementById('valPlayStatus');
       if (elStat) { elStat.textContent = 'Playing'; elStat.style.color = '#34d399'; }

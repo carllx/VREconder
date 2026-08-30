@@ -37,6 +37,7 @@ function broadcastCalibrationEvent(payload) {
 }
 
 let latestTelemetry = null;
+let lastLoggedPerfWindowSeq = -1;
 
 function handleRequest(req, res, isHttps) {
   const urlObj = new URL(req.url, `http://${req.headers.host}`);
@@ -155,15 +156,21 @@ function handleRequest(req, res, isHttps) {
           console.log(`[UX Event] Pattern ${payload.pattern} | ${payload.event} | target: ${payload.target || 'none'} | dwell: ${payload.dwellMs || 0}ms | timeToCmd: ${payload.timeToCmdMs || 0}ms | travel: ${payload.travelDeg ? payload.travelDeg.toFixed(1) : 0}°`);
         } else if (payload.type === 'ux_summary') {
           console.log(`[UX Summary] Pattern ${payload.pattern} | Activations: ${payload.activations} | Cancels: ${payload.cancels} | AvgDwell: ${payload.avgDwellMs}ms | AvgTimeToCmd: ${payload.avgTimeToCmdMs}ms | Travel: ${payload.travelDeg.toFixed(1)}°`);
+          // Save to local prototype evidence JSON
+          const summaryFile = path.join(__dirname, 'prototype_ux_telemetry.json');
+          fs.writeFileSync(summaryFile, JSON.stringify(payload, null, 2), 'utf8');
         } else if (payload.type === 'telemetry_sync') {
-          if (payload.perf) {
-            const perfLog = path.join(__dirname, 'prototype_perf_telemetry.log');
-            const p = payload.perf;
-            const cad = p.cadence || {};
-            const ft = p.frameTimeMs || {};
-            const pb = p.playback || {};
-            const line = `[${payload.serverTimestamp}] Mode:${p.performanceMode} Scale:${p.renderScale}x | rAF:${cad.rafPerSec} rVFC:${cad.rvfcPerSec} VidUp:${cad.videoUploadsPerSec} UIUp:${cad.uiUploadsPerSec} | avgFT:${ft.avg}ms p95FT:${ft.p95}ms maxFT:${ft.max}ms | Dropped:${pb.quality?.droppedVideoFrames} BufAhead:${pb.bufferAheadSec}s | Ready:${pb.readyState}\n`;
-            fs.appendFileSync(perfLog, line, 'utf8');
+          if (payload.perf && typeof payload.perf.windowSeq === 'number') {
+            if (payload.perf.windowSeq !== lastLoggedPerfWindowSeq) {
+              lastLoggedPerfWindowSeq = payload.perf.windowSeq;
+              const perfLog = path.join(__dirname, 'prototype_perf_telemetry.log');
+              const p = payload.perf;
+              const cad = p.cadence || {};
+              const ft = p.frameTimeMs || {};
+              const pb = p.playback || {};
+              const line = `[${payload.serverTimestamp}] Win:#${p.windowSeq} Mode:${p.performanceMode} Scale:${p.renderScale}x | rAF:${cad.rafPerSec} rVFC:${cad.rvfcPerSec} VidUp:${cad.videoUploadsPerSec} UIUp:${cad.uiUploadsPerSec} | avgFT:${ft.avg}ms p95FT:${ft.p95}ms maxFT:${ft.max}ms | Dropped:${pb.quality?.droppedVideoFrames} BufAhead:${pb.bufferAheadSec}s | Ready:${pb.readyState}\n`;
+              fs.appendFileSync(perfLog, line, 'utf8');
+            }
           }
         } else {
           const s = payload.state || {};

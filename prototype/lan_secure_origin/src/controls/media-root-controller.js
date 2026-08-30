@@ -58,10 +58,11 @@ export function showMediaRootStatus(msg, isError = false) {
   if (!statusEl) return;
   statusEl.textContent = msg;
   statusEl.style.color = isError ? '#f87171' : '#34d399';
+  if (!statusEl.dataset) statusEl.dataset = {};
   statusEl.dataset.customError = isError ? 'true' : '';
   if (!isError) {
     setTimeout(() => {
-      delete statusEl.dataset.customError;
+      if (statusEl.dataset) delete statusEl.dataset.customError;
       if (statusEl.textContent.startsWith('✓')) {
         statusEl.textContent = 'Active';
         statusEl.style.color = '#34d399';

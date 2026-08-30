@@ -473,21 +473,23 @@ export function updateTelemetryUI(data) {
     }
   }
 
+  const setEl = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
+
   const t = data.timings;
   if (t && t.selectedAt) {
-    document.getElementById('valMetaAt').textContent = t.metadataAt ? (t.metadataAt - t.selectedAt).toFixed(1) + ' ms' : '--';
-    document.getElementById('valCanplayAt').textContent = t.canplayAt ? (t.canplayAt - t.selectedAt).toFixed(1) + ' ms' : '--';
-    document.getElementById('valDecodeAt').textContent = t.firstFrameDecodedAt ? (t.firstFrameDecodedAt - t.selectedAt).toFixed(1) + ' ms' : '--';
-    document.getElementById('valUploadAt').textContent = t.firstTextureUploadAt ? (t.firstTextureUploadAt - t.selectedAt).toFixed(1) + ' ms' : '--';
-    document.getElementById('valRenderAt').textContent = t.firstRenderAt ? (t.firstRenderAt - t.selectedAt).toFixed(1) + ' ms' : '--';
-    document.getElementById('valTotalLat').textContent = t.firstRenderAt ? (t.firstRenderAt - t.selectedAt).toFixed(1) + ' ms' : (t.statusText || '--');
+    setEl('valMetaAt', t.metadataAt ? (t.metadataAt - t.selectedAt).toFixed(1) + ' ms' : '--');
+    setEl('valCanplayAt', t.canplayAt ? (t.canplayAt - t.selectedAt).toFixed(1) + ' ms' : '--');
+    setEl('valDecodeAt', t.firstFrameDecodedAt ? (t.firstFrameDecodedAt - t.selectedAt).toFixed(1) + ' ms' : '--');
+    setEl('valUploadAt', t.firstTextureUploadAt ? (t.firstTextureUploadAt - t.selectedAt).toFixed(1) + ' ms' : '--');
+    setEl('valRenderAt', t.firstRenderAt ? (t.firstRenderAt - t.selectedAt).toFixed(1) + ' ms' : '--');
+    setEl('valTotalLat', t.firstRenderAt ? (t.firstRenderAt - t.selectedAt).toFixed(1) + ' ms' : (t.statusText || '--'));
   }
 
   if (data.perf) {
     const { cadence: cad = {}, frameTimeMs: ft = {}, playback: pb = {}, display: disp = {}, webgl: wg = {} } = data.perf;
     const q = pb.quality || {};
 
-    const setT = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
+    const setT = setEl;
     setT('valPerfCadence', `rAF: ${cad.rafPerSec || 0}/s | rVFC: ${cad.rvfcPerSec || 0}/s`);
     setT('valUploadCadence', `VidUp: ${cad.videoUploadsPerSec || 0}/s | UIUp: ${cad.uiUploadsPerSec || 0}/s`);
     setT('valFrameTimeAvg', `avg: ${ft.avg || 0}ms | p95: ${ft.p95 || 0}ms`);

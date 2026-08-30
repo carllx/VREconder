@@ -164,6 +164,7 @@ export class TelemetryEngine {
 export class PerformanceTelemetry {
   constructor() {
     this.windowStart = performance.now();
+    this.windowSeq = 0;
     this.rafCount = 0;
     this.rvfcCount = 0;
     this.videoUploadCount = 0;
@@ -187,11 +188,20 @@ export class PerformanceTelemetry {
   recordUiUpload() { this.uiUploadCount++; }
   recordOrientation() { this.orientationCount++; }
   recordFrameTime(dtMs) { this.frameTimes.push(dtMs); }
+  recordGlContextLost() {
+    this.glContextLostCount++;
+    this.recordEvent('webglcontextlost');
+  }
+  recordGlContextRestored() {
+    this.glContextRestoredCount++;
+    this.recordEvent('webglcontextrestored');
+  }
 
   updateWindow(now, video, canvas, renderer) {
     const elapsed = now - this.windowStart;
     if (elapsed < 1000) return this.latestSnapshot;
 
+    this.windowSeq++;
     const scale = 1000 / elapsed;
     const rafRate = Number((this.rafCount * scale).toFixed(1));
     const rvfcRate = Number((this.rvfcCount * scale).toFixed(1));
@@ -252,6 +262,7 @@ export class PerformanceTelemetry {
     const fboH = renderer ? renderer.fboHeight : 0;
 
     this.latestSnapshot = {
+      windowSeq: this.windowSeq,
       timestamp: new Date().toISOString(),
       performanceMode: state.performanceMode || 'baseline',
       renderScale: state.renderScale || 1.0,
