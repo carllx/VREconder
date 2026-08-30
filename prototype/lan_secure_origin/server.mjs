@@ -169,9 +169,6 @@ function handleRequest(req, res, isHttps) {
         const payload = JSON.parse(body);
         payload.serverTimestamp = new Date().toISOString();
         payload.clientIp = req.socket.remoteAddress;
-        
-        lastIphoneTelemetryAt = Date.now();
-        latestTelemetry = payload;
 
         // If it's a UX interaction event or metric summary
         if (payload.type === 'ux_event') {
@@ -182,6 +179,8 @@ function handleRequest(req, res, isHttps) {
           const summaryFile = path.join(__dirname, 'prototype_ux_telemetry.json');
           fs.writeFileSync(summaryFile, JSON.stringify(payload, null, 2), 'utf8');
         } else if (payload.type === 'telemetry_sync') {
+          lastIphoneTelemetryAt = Date.now();
+          latestTelemetry = payload;
           if (payload.perf && typeof payload.perf.windowSeq === 'number') {
             if (payload.perf.windowSeq !== lastLoggedPerfWindowSeq) {
               lastLoggedPerfWindowSeq = payload.perf.windowSeq;

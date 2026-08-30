@@ -172,7 +172,7 @@ export function renderHevcDiagnosticPage(res) {
     <div style="font-size:0.75rem; font-weight:bold; color:#94a3b8; text-transform:uppercase;">Select Diagnostic Candidate:</div>
     <div class="btn-row">
       <button id="btn8kAmatsuki" class="active" onclick="pickPreset('8K/Amatsuki Azu (Hoshi Nako) - HNVR142.mp4')">⭐ 8K Amatsuki (hev1)</button>
-      <button id="btn8kHvc1" onclick="pickPreset('8K/Amatsuki_8K_HVC1_test.mp4')">🔥 8K Amatsuki (hvc1 Sibling)</button>
+      <button id="btn8kHvc1" onclick="pickPreset('8K/Amatsuki_8K_60s_HVC1.mp4')">🔥 8K Amatsuki (60s hvc1)</button>
       <button id="btn8kKamiki" onclick="pickPreset('8K/Kamiki Rei - DSVR01433.mp4')">⭐ 8K Kamiki (hev1)</button>
       <button id="btn8kOguri" onclick="pickPreset('8K/Oguri Misao (Momose Asuka) - SAVR01127.mp4')">⭐ 8K Oguri (10-bit)</button>
       <button id="btnAvc1Ref" onclick="pickPreset('4K/4096_2048_crf18_avc1-Kururugi Aoi - WAVR224.mp4')">4K AVC Control</button>
@@ -265,9 +265,20 @@ export function renderHevcDiagnosticPage(res) {
       maxRenderBuf = gl.getParameter(gl.MAX_RENDERBUFFER_SIZE) || 0;
     }
     function probeCodecSupport(relPath) {
-      const is8k = relPath.includes('8K');
-      const isHevc = relPath.includes('HEVC') || relPath.includes('8K');
-      const codecStr = isHevc ? 'video/mp4; codecs="hvc1.1.6.L183.B0, mp4a.40.2"' : 'video/mp4; codecs="avc1.640028, mp4a.40.2"';
+      let is8k = relPath.includes('8K') || relPath.includes('8192');
+      let is10bit = relPath.includes('10-bit') || relPath.includes('Oguri');
+      let isHvc1 = relPath.includes('HVC1') || relPath.includes('hvc1');
+      let isAvc = relPath.includes('avc') || relPath.includes('AVC') || relPath.includes('WAVR224');
+
+      let codecStr = '';
+      if (isAvc) {
+        codecStr = 'video/mp4; codecs="avc1.640028, mp4a.40.2"';
+      } else if (isHvc1) {
+        codecStr = is10bit ? 'video/mp4; codecs="hvc1.2.4.L183.B0, mp4a.40.2"' : 'video/mp4; codecs="hvc1.1.6.L183.B0, mp4a.40.2"';
+      } else {
+        codecStr = is10bit ? 'video/mp4; codecs="hev1.2.4.L183.B0, mp4a.40.2"' : 'video/mp4; codecs="hev1.1.6.L183.B0, mp4a.40.2"';
+      }
+
       const canPlay = video.canPlayType(codecStr);
       document.getElementById('mCanPlay').textContent = 'canPlay: "' + canPlay + '"';
       if (navigator.mediaCapabilities && navigator.mediaCapabilities.decodingInfo) {
@@ -281,7 +292,7 @@ export function renderHevcDiagnosticPage(res) {
             framerate: 60
           }
         }).then(info => {
-          document.getElementById('mMediaCap').textContent = 'supp:' + info.supported + ' smooth:' + info.smooth + ' pwr:' + info.powerEfficient;
+          document.getElementById('mMediaCap').textContent = 'supp:' + info.supported + ' smooth:' + info.smooth + ' pwr:' + info.powerEfficient + ' (' + codecStr.split('codecs=')[1] + ')';
         }).catch(e => {
           document.getElementById('mMediaCap').textContent = 'error: ' + e.message;
         });
@@ -298,7 +309,7 @@ export function renderHevcDiagnosticPage(res) {
     function pickPreset(relPath) {
       currentRelPath = relPath;
       document.querySelectorAll('.btn-row button').forEach(b => b.classList.remove('active'));
-      if (relPath.includes('Amatsuki_8K_HVC1_test')) document.getElementById('btn8kHvc1')?.classList.add('active');
+      if (relPath.includes('Amatsuki_8K_60s_HVC1') || relPath.includes('Amatsuki_8K_HVC1_test')) document.getElementById('btn8kHvc1')?.classList.add('active');
       else if (relPath.includes('Amatsuki Azu (Hoshi Nako) - HNVR142')) document.getElementById('btn8kAmatsuki')?.classList.add('active');
       else if (relPath.includes('Kamiki Rei - DSVR01433')) document.getElementById('btn8kKamiki')?.classList.add('active');
       else if (relPath.includes('Oguri Misao')) document.getElementById('btn8kOguri')?.classList.add('active');
