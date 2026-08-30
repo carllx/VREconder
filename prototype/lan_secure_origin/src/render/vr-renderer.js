@@ -157,10 +157,7 @@ export class VRRenderer {
     try {
       gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
       gl.bindTexture(gl.TEXTURE_2D, this.videoTex);
-      const t0 = performance.now();
       gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, videoElement);
-      const t1 = performance.now();
-      perfTelemetry.recordUploadDuration(t1 - t0);
       if (!state.firstFrameTimings.firstTextureUploadAt && state.firstFrameTimings.selectedAt) {
         state.firstFrameTimings.firstTextureUploadAt = performance.now();
       }
