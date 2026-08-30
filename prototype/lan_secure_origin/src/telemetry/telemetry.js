@@ -174,6 +174,8 @@ export class PerformanceTelemetry {
     this.glContextLostCount = 0;
     this.glContextRestoredCount = 0;
     this.recentEvents = [];
+    this.lastTotalFrames = -1;
+    this.lastDroppedFrames = -1;
     this.latestSnapshot = {
       windowSeq: 0,
       timestamp: new Date().toISOString(),
@@ -231,7 +233,7 @@ export class PerformanceTelemetry {
       maxFrameTimeMs = Number(sorted[sorted.length - 1].toFixed(2));
     }
 
-    let quality = { totalVideoFrames: 'unavailable', droppedVideoFrames: 'unavailable', dropRate: 'unavailable' };
+    let quality = { totalVideoFrames: 'unavailable', droppedVideoFrames: 'unavailable', dropRate: 'unavailable', windowDeltaTotal: 0, windowDeltaDropped: 0, windowDropRate: 0 };
     if (video && typeof video.getVideoPlaybackQuality === 'function') {
       try {
         const q = video.getVideoPlaybackQuality();
@@ -239,7 +241,22 @@ export class PerformanceTelemetry {
           const tot = q.totalVideoFrames;
           const drop = q.droppedVideoFrames || 0;
           const rate = tot > 0 ? Number(((drop / tot) * 100).toFixed(2)) : 0;
-          quality = { totalVideoFrames: tot, droppedVideoFrames: drop, dropRate: rate };
+
+          const deltaTot = (this.lastTotalFrames >= 0 && tot >= this.lastTotalFrames) ? (tot - this.lastTotalFrames) : 0;
+          const deltaDrop = (this.lastDroppedFrames >= 0 && drop >= this.lastDroppedFrames) ? (drop - this.lastDroppedFrames) : 0;
+          const winDropRate = deltaTot > 0 ? Number(((deltaDrop / deltaTot) * 100).toFixed(2)) : 0;
+
+          this.lastTotalFrames = tot;
+          this.lastDroppedFrames = drop;
+
+          quality = {
+            totalVideoFrames: tot,
+            droppedVideoFrames: drop,
+            dropRate: rate,
+            windowDeltaTotal: deltaTot,
+            windowDeltaDropped: deltaDrop,
+            windowDropRate: winDropRate
+          };
         }
       } catch (e) {}
     }

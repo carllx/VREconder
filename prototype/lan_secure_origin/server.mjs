@@ -139,10 +139,24 @@ function handleRequest(req, res, isHttps) {
     return;
   }
 
-  // Telemetry endpoint
+  // Telemetry status and summary
   if (pathname === '/api/telemetry' && req.method === 'GET') {
+    const now = Date.now();
+    const ageMs = lastIphoneTelemetryAt > 0 ? (now - lastIphoneTelemetryAt) : -1;
+    let state = 'offline';
+    if (ageMs >= 0 && ageMs <= 3000) state = 'active';
+    else if (ageMs > 3000 && ageMs <= 10000) state = 'stale';
+
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ latestTelemetry: latestTelemetry || null }));
+    res.end(JSON.stringify({
+      serverOnline: true,
+      iphoneStatus: {
+        state,
+        ageMs: ageMs >= 0 ? ageMs : null,
+        lastSeenAt: lastIphoneTelemetryAt > 0 ? new Date(lastIphoneTelemetryAt).toISOString() : null
+      },
+      latestTelemetry: latestTelemetry || null
+    }, null, 2));
     return;
   }
 
@@ -155,6 +169,7 @@ function handleRequest(req, res, isHttps) {
         payload.serverTimestamp = new Date().toISOString();
         payload.clientIp = req.socket.remoteAddress;
         
+        lastIphoneTelemetryAt = Date.now();
         latestTelemetry = payload;
 
         // If it's a UX interaction event or metric summary
@@ -174,7 +189,9 @@ function handleRequest(req, res, isHttps) {
               const cad = p.cadence || {};
               const ft = p.frameTimeMs || {};
               const pb = p.playback || {};
-              const line = `[${payload.serverTimestamp}] Win:#${p.windowSeq} Mode:${p.performanceMode} Scale:${p.renderScale}x | rAF:${cad.rafPerSec} rVFC:${cad.rvfcPerSec} VidUp:${cad.videoUploadsPerSec} UIUp:${cad.uiUploadsPerSec} | avgFT:${ft.avg}ms p95FT:${ft.p95}ms maxFT:${ft.max}ms | Dropped:${pb.quality?.droppedVideoFrames} BufAhead:${pb.bufferAheadSec}s | Ready:${pb.readyState}\n`;
+              const q = pb.quality || {};
+              const mName = payload.mediaName || (payload.mediaPath ? payload.mediaPath.split('/').pop() : '--');
+              const line = `[${payload.serverTimestamp}] Win:#${p.windowSeq} Mode:${p.performanceMode} Scale:${p.renderScale}x Media:${mName} Net:${pb.networkState} | rAF:${cad.rafPerSec} rVFC:${cad.rvfcPerSec} VidUp:${cad.videoUploadsPerSec} UIUp:${cad.uiUploadsPerSec} | avgFT:${ft.avg}ms p95FT:${ft.p95}ms maxFT:${ft.max}ms | Dropped:${q.droppedVideoFrames} TotalF:${q.totalVideoFrames} BufAhead:${pb.bufferAheadSec}s | Ready:${pb.readyState}\n`;
               fs.appendFileSync(perfLog, line, 'utf8');
             }
           }

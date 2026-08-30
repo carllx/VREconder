@@ -12,23 +12,46 @@ export let diagOverlays = { showGrid: true, showPlumbLines: true, showHorizon: t
 export let latestSavedMyProfile = null;
 export let videoList = [];
 
-let isOnline = false;
+let isServerOnline = false;
 
-export function setConnectedBadge(text = '🟢 Connected') {
-  const badge = document.getElementById('badgeConnection');
+export function setServerConnectionBadge(online = true, text = '') {
+  isServerOnline = online;
+  const badge = document.getElementById('badgeServerConnection');
   if (badge) {
-    badge.className = 'badge badge-green';
-    badge.textContent = text;
+    badge.className = online ? 'badge badge-green' : 'badge badge-amber';
+    badge.textContent = text || (online ? '🟢 Server: Connected' : '🟡 Server: Reconnecting...');
   }
+}
+
+export function setIphoneConnectionBadge(status = {}) {
+  const badge = document.getElementById('badgeIphoneConnection');
+  const card = document.getElementById('cardPerfTelemetry');
+  const freshness = document.getElementById('badgePerfFreshness');
+  const state = status.state || 'offline';
+  const ageSec = status.ageMs !== null ? (status.ageMs / 1000).toFixed(1) : null;
+
+  if (badge) {
+    if (state === 'active') { badge.className = 'badge badge-green'; badge.textContent = '🟢 iPhone: Active'; }
+    else if (state === 'stale') { badge.className = 'badge badge-amber'; badge.textContent = `🟡 iPhone: Stale (${ageSec}s ago)`; }
+    else { badge.className = 'badge badge-slate'; badge.textContent = '⚪ iPhone: Offline'; }
+  }
+
+  if (freshness) {
+    if (state === 'active') { freshness.textContent = '🟢 Live Telemetry Stream'; freshness.style.color = '#34d399'; }
+    else if (state === 'stale') { freshness.textContent = `🟡 Cached Data (Last seen ${ageSec}s ago)`; freshness.style.color = '#fbbf24'; }
+    else { freshness.textContent = '⚪ Disconnected / Offline'; freshness.style.color = '#94a3b8'; }
+  }
+
+  if (card) card.classList.toggle('card-dim', state === 'offline');
 }
 
 export function initEventSource() {
   try {
     const es = new EventSource('/api/calibration/events');
-    es.onopen = () => { isOnline = true; setConnectedBadge('🟢 Connected (SSE)'); };
-    es.onerror = () => {};
+    es.onopen = () => { setServerConnectionBadge(true, '🟢 Server: Connected (SSE)'); };
+    es.onerror = () => { setServerConnectionBadge(false, '🟡 Server: Reconnecting (SSE)...'); };
     es.onmessage = (e) => {
-      isOnline = true;
+      setServerConnectionBadge(true);
       try {
         const msg = JSON.parse(e.data);
         if (msg.type === 'telemetry_sync') updateTelemetryUI(msg);
@@ -545,20 +568,21 @@ setInterval(async () => {
   try {
     const res = await fetch('/api/telemetry');
     if (res.ok) {
-      isOnline = true;
-      setConnectedBadge('🟢 Connected');
+      setServerConnectionBadge(true);
       const data = await res.json();
+      if (data && data.iphoneStatus) {
+        setIphoneConnectionBadge(data.iphoneStatus);
+      }
       if (data && data.latestTelemetry && data.latestTelemetry.type === 'telemetry_sync') {
         updateTelemetryUI(data.latestTelemetry);
       }
+    } else {
+      setServerConnectionBadge(false);
     }
   } catch (e) {
-    if (!isOnline) {
-      const badge = document.getElementById('badgeConnection');
-      if (badge) {
-        badge.className = 'badge badge-amber';
-        badge.textContent = '🟡 Reconnecting...';
-      }
+    if (!isServerOnline) {
+      setServerConnectionBadge(false);
+      setIphoneConnectionBadge({ state: 'offline' });
     }
   }
 }, 500);

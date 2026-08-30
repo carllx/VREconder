@@ -15,6 +15,9 @@
     .badge { display: inline-block; padding: 3px 8px; border-radius: 6px; font-size: 0.75rem; font-weight: bold; }
     .badge-green { background: #065f46; color: #34d399; }
     .badge-amber { background: #78350f; color: #fbbf24; }
+    .badge-red { background: #7f1d1d; color: #f87171; }
+    .badge-slate { background: #334155; color: #94a3b8; }
+    .card-dim { opacity: 0.55; filter: grayscale(40%); transition: opacity 0.3s ease; }
     .stage-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-top: 8px; }
     .stage-btn { padding: 10px 8px; background: #1e293b; color: #94a3b8; border: 2px solid #334155; border-radius: 8px; font-size: 0.82rem; font-weight: 700; cursor: pointer; text-align: center; }
     .stage-btn:hover { border-color: #64748b; color: #fff; }
@@ -68,9 +71,10 @@
     <div class="card">
       <h1>
         <span>🎛️ VREconder PC Calibration Controller</span>
-        <div style="display:flex; gap:6px;">
+        <div style="display:flex; gap:6px; flex-wrap:wrap;">
+          <span class="badge badge-green" id="badgeServerConnection">🟢 Server: Connected</span>
+          <span class="badge badge-slate" id="badgeIphoneConnection">⚪ iPhone: Offline</span>
           <span class="badge badge-amber" id="badgeArmStatus">🟡 iPhone Unarmed</span>
-          <span class="badge badge-green" id="badgeConnection">🟢 SSE Connected</span>
         </div>
       </h1>
       <div class="subtitle">Authoritative Calibration & Verification Gate (Issue #13 SSOT Control Surface)</div>
@@ -307,8 +311,11 @@
     </div>
 
     <!-- iPhone Telemetry & Measured Timings -->
-    <div class="card">
-      <div style="font-size:0.8rem; font-weight:700; color:var(--muted); text-transform:uppercase;">5. iPhone Telemetry &amp; Measured Performance</div>
+    <div class="card" id="cardPerfTelemetry">
+      <div style="display:flex; justify-content:space-between; align-items:center;">
+        <div style="font-size:0.8rem; font-weight:700; color:var(--muted); text-transform:uppercase;">5. iPhone Telemetry &amp; Measured Performance</div>
+        <span id="badgePerfFreshness" style="font-size:0.72rem; font-weight:600; color:var(--muted);">Awaiting telemetry...</span>
+      </div>
       <table class="timing-table">
         <tr><th>Metric Group</th><th>Cadence / Rates</th><th>Details / Quality</th></tr>
         <tr><td>Cadence (per sec)</td><td id="valPerfCadence">rAF: -- | rVFC: --</td><td id="valUploadCadence">VideoUp: -- | UIUp: --</td></tr>
