@@ -209,6 +209,7 @@ mediaController.selectVideo = (relPath) => {
 
 // Bootstrap hydration sequence: hydrate server profiles first, then bind initial media
 async function bootstrapApp() {
+  state.firstFrameTimings.appShellReadyAt = performance.now();
   await profileStorage.loadServerProfiles();
   if (calibrationUI.storage && calibrationUI.storage.activeViewerProfile) {
     calibrationUI.activeViewerProfile = calibrationUI.storage.activeViewerProfile;

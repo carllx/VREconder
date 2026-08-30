@@ -162,8 +162,10 @@ export class MediaController {
 
   async loadVideoList() {
     try {
+      state.firstFrameTimings.mediaListRequestAt = performance.now();
       const res = await fetch('/api/videos');
       const data = await res.json();
+      state.firstFrameTimings.mediaListReadyAt = performance.now();
       if (data.videos && data.videos.length > 0) {
         state.videoList = data.videos;
         if (this.videoSelect) {

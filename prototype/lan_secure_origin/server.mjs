@@ -195,7 +195,9 @@ function handleRequest(req, res, isHttps) {
               const dTot = (typeof q.windowDeltaTotal !== 'undefined') ? q.windowDeltaTotal : '--';
               const dRate = (typeof q.windowDropRate !== 'undefined') ? q.windowDropRate + '%' : '--';
               const uiInfo = payload.uiState ? ` UI[vis:${payload.uiState.isStereoUIVisible?'Y':'N'} menu:${payload.uiState.menuOpen?'Y':'N'} toast:${payload.uiState.toastActive?'Y':'N'}]` : '';
-              const line = `[${payload.serverTimestamp}] Win:#${p.windowSeq} Mode:${p.performanceMode} Scale:${p.renderScale}x Media:${mName} Net:${pb.networkState}${uiInfo} | rAF:${cad.rafPerSec} rVFC:${cad.rvfcPerSec} VidUp:${cad.videoUploadsPerSec} UIUp:${cad.uiUploadsPerSec} | avgFT:${ft.avg}ms p95FT:${ft.p95}ms maxFT:${ft.max}ms | WinDropRate:${dRate} (dDrop:${dDrop}/dTot:${dTot}) Dropped:${q.droppedVideoFrames} TotalF:${q.totalVideoFrames} BufAhead:${pb.bufferAheadSec}s | Ready:${pb.readyState}\n`;
+              const curTimeStr = typeof pb.currentTime === 'number' ? ` CurTime:${pb.currentTime}s` : '';
+              const pausedStr = pb.paused ? ' Paused:1' : ' Paused:0';
+              const line = `[${payload.serverTimestamp}] Win:#${p.windowSeq} Mode:${p.performanceMode} Scale:${p.renderScale}x Media:${mName} Net:${pb.networkState}${curTimeStr}${pausedStr}${uiInfo} | rAF:${cad.rafPerSec} rVFC:${cad.rvfcPerSec} VidUp:${cad.videoUploadsPerSec} UIUp:${cad.uiUploadsPerSec} | avgFT:${ft.avg}ms p95FT:${ft.p95}ms maxFT:${ft.max}ms | WinDropRate:${dRate} (dDrop:${dDrop}/dTot:${dTot}) Dropped:${q.droppedVideoFrames} TotalF:${q.totalVideoFrames} BufAhead:${pb.bufferAheadSec}s | Ready:${pb.readyState}\n`;
               fs.appendFileSync(perfLog, line, 'utf8');
             }
           }

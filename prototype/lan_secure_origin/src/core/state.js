@@ -24,6 +24,9 @@ export const state = {
 
   // First-Frame Timing & Black-Screen Instrumentation
   firstFrameTimings: {
+    appShellReadyAt: 0,
+    mediaListRequestAt: 0,
+    mediaListReadyAt: 0,
     selectedAt: 0,
     metadataAt: 0,
     canplayAt: 0,
