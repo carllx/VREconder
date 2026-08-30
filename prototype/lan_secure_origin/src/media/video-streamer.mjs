@@ -37,24 +37,22 @@ export function streamVideo(req, res, filePath) {
     }
 
     const chunksize = (end - start) + 1;
+    const file = fs.createReadStream(filePath, { start, end });
     res.writeHead(206, {
       'Content-Range': `bytes ${start}-${end}/${fileSize}`,
       'Accept-Ranges': 'bytes',
       'Content-Length': chunksize,
       'Content-Type': 'video/mp4',
-      'Access-Control-Allow-Origin': '*',
-      'Cache-Control': 'no-cache'
+      'Access-Control-Allow-Origin': '*'
     });
-    const file = fs.createReadStream(filePath, { start, end, highWaterMark: 1024 * 1024 });
     file.pipe(res);
   } else {
     res.writeHead(200, {
       'Content-Length': fileSize,
       'Content-Type': 'video/mp4',
       'Accept-Ranges': 'bytes',
-      'Access-Control-Allow-Origin': '*',
-      'Cache-Control': 'no-cache'
+      'Access-Control-Allow-Origin': '*'
     });
-    fs.createReadStream(filePath, { highWaterMark: 1024 * 1024 }).pipe(res);
+    fs.createReadStream(filePath).pipe(res);
   }
 }
