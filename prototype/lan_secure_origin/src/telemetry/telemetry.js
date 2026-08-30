@@ -174,7 +174,17 @@ export class PerformanceTelemetry {
     this.glContextLostCount = 0;
     this.glContextRestoredCount = 0;
     this.recentEvents = [];
-    this.latestSnapshot = null;
+    this.latestSnapshot = {
+      windowSeq: 0,
+      timestamp: new Date().toISOString(),
+      performanceMode: 'baseline',
+      renderScale: 1.0,
+      cadence: { rafPerSec: 0, rvfcPerSec: 0, videoUploadsPerSec: 0, uiUploadsPerSec: 0, orientationPerSec: 0 },
+      frameTimeMs: { avg: 0, p95: 0, max: 0, samples: 0 },
+      playback: { currentTime: 0, duration: 0, paused: true, readyState: 0, networkState: 0, bufferAheadSec: 0, quality: { totalVideoFrames: 0, droppedVideoFrames: 0, dropRate: 0 }, recentEvents: [] },
+      display: { cssViewport: '--', dpr: 1, renderScale: 1.0, drawingBuffer: '--', eyeFbo: '--' },
+      webgl: { glError: 'NO_ERROR', contextLostCount: 0, contextRestoredCount: 0 }
+    };
   }
 
   recordEvent(name) {

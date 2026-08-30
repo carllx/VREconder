@@ -12,6 +12,8 @@ export let diagOverlays = { showGrid: true, showPlumbLines: true, showHorizon: t
 export let latestSavedMyProfile = null;
 export let videoList = [];
 
+let isOnline = false;
+
 export function setConnectedBadge(text = '🟢 Connected') {
   const badge = document.getElementById('badgeConnection');
   if (badge) {
@@ -23,10 +25,10 @@ export function setConnectedBadge(text = '🟢 Connected') {
 export function initEventSource() {
   try {
     const es = new EventSource('/api/calibration/events');
-    es.onopen = () => { setConnectedBadge('🟢 SSE Connected'); };
+    es.onopen = () => { isOnline = true; setConnectedBadge('🟢 Connected (SSE)'); };
     es.onerror = () => {};
     es.onmessage = (e) => {
-      setConnectedBadge('🟢 SSE Connected');
+      isOnline = true;
       try {
         const msg = JSON.parse(e.data);
         if (msg.type === 'telemetry_sync') updateTelemetryUI(msg);
@@ -551,16 +553,21 @@ applyStageLocks('A');
 setInterval(async () => {
   try {
     const res = await fetch('/api/telemetry');
-    const data = await res.json();
-    setConnectedBadge('🟢 Live Connected');
-    if (data && data.latestTelemetry && data.latestTelemetry.type === 'telemetry_sync') {
-      updateTelemetryUI(data.latestTelemetry);
+    if (res.ok) {
+      isOnline = true;
+      setConnectedBadge('🟢 Connected');
+      const data = await res.json();
+      if (data && data.latestTelemetry && data.latestTelemetry.type === 'telemetry_sync') {
+        updateTelemetryUI(data.latestTelemetry);
+      }
     }
   } catch (e) {
-    const badge = document.getElementById('badgeConnection');
-    if (badge) {
-      badge.className = 'badge badge-amber';
-      badge.textContent = '🟡 Reconnecting...';
+    if (!isOnline) {
+      const badge = document.getElementById('badgeConnection');
+      if (badge) {
+        badge.className = 'badge badge-amber';
+        badge.textContent = '🟡 Reconnecting...';
+      }
     }
   }
 }, 500);
