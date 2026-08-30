@@ -83,11 +83,27 @@ export function isStereoUIVisible(now) {
   return true;
 }
 
+export function isStereoUIDynamic(gazeEngine, now) {
+  if (state.recenterCountdown.active) return true;
+  if (state.toastText && (now - state.toastTime < 2000)) return true;
+  if (state.calibrationStage === 'C' && !state.firstFrameTimings.ready) return true;
+
+  const isMenuOpen = (state.activePattern === 'A' && state.patternA_open) ||
+                     (state.activePattern === 'B' && state.patternB_open) ||
+                     (state.activePattern === 'C' && state.patternC_open);
+  if (isMenuOpen) {
+    if (gazeEngine && (gazeEngine.dwellProgress > 0 || gazeEngine.currentHoveredItem !== null)) return true;
+    return true; // Timeline/playhead or menu animations active
+  }
+  return false; // Static reticle alone is not dynamic
+}
+
 export function renderStereoUI(uiCtx, gazeEngine, commandModel, videoElement, now, width, height, viewerProfile = null) {
   if (!uiCtx) return false;
 
   const isDirtyUIMode = (state.performanceMode === 'strict-rvfc-dirty-ui');
   const visible = isStereoUIVisible(now);
+  const dynamic = isStereoUIDynamic(gazeEngine, now);
 
   if (isDirtyUIMode) {
     if (!visible) {
@@ -98,12 +114,16 @@ export function renderStereoUI(uiCtx, gazeEngine, commandModel, videoElement, no
       }
       return false; // UI is hidden & clean -> skip render & texture upload
     }
+    // Visible: if not dynamic and not explicitly dirty, skip redraw & texture upload
+    if (!dynamic && !state.uiIsDirty) {
+      return false;
+    }
   }
 
   uiCtx.clearRect(0, 0, width, height);
   if (!state.inVR) return false;
 
-  state.uiIsDirty = true;
+  state.uiIsDirty = false;
   const eyeGeom = deriveCardboardEyeGeometry(activeScreenProfile, viewerProfile);
   const halfW = Math.floor(width / 2);
   const virtualDepth = state.menuVirtualDepth || 2.0;

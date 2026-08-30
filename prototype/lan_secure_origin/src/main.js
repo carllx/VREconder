@@ -9,7 +9,7 @@ import { DiagnosticOverlay } from './render/diagnostic-overlay.js';
 import { MediaController } from './media/playback.js';
 import { CommandModel } from './controls/command-model.js';
 import { GazeEngine } from './controls/gaze-engine.js';
-import { renderStereoUI } from './controls/stereo-ui.js';
+import { renderStereoUI, isStereoUIVisible } from './controls/stereo-ui.js';
 import { telemetry, perfTelemetry } from './telemetry/telemetry.js';
 import { initAudioContext } from './controls/audio-haptics.js';
 import { profileStorage, computeMediaFingerprint } from './core/projection-profile.js';
@@ -449,6 +449,14 @@ setInterval(() => {
     performanceMode: state.performanceMode || 'baseline',
     renderScale: state.renderScale || 1.0,
     calibrationStage: state.calibrationStage,
+    uiState: {
+      isStereoUIVisible: (typeof isStereoUIVisible === 'function') ? isStereoUIVisible(performance.now()) : false,
+      activePattern: state.activePattern,
+      menuOpen: (state.activePattern === 'A' && state.patternA_open) || (state.activePattern === 'B' && state.patternB_open) || (state.activePattern === 'C' && state.patternC_open),
+      recenterActive: state.recenterCountdown.active,
+      toastActive: !!(state.toastText && (performance.now() - state.toastTime < 2000)),
+      ready: state.firstFrameTimings.ready
+    },
     mediaName: state.videoPath ? state.videoPath.split('/').pop() : '--',
     mediaPath: state.videoPath || '',
     mediaStatus: state.firstFrameTimings.statusText || 'Ready',
