@@ -228,7 +228,6 @@ export function renderHevcDiagnosticPage(res) {
     const c2dCtx = c2dCanvas.getContext('2d');
     const glCanvas = document.getElementById('webglCanvas');
     const gl = glCanvas.getContext('webgl');
-    let currentRelPath = '4096_2048_crf21_avc1-Amatsuki Azu(Hoshi Nako) - VRKM1502.mp4 - (HEVC_23.0).mp4';
     let rvfcCount = 0;
     let lastRvfcMeta = null;
     let glTexture = null;
@@ -257,6 +256,7 @@ export function renderHevcDiagnosticPage(res) {
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
     }
+    initGL();
     let currentRelPath = '8K/Amatsuki Azu (Hoshi Nako) - HNVR142.mp4';
     let maxTexSize = 0, maxRenderBuf = 0;
     if (gl) {
