@@ -195,8 +195,8 @@ function handleRequest(req, res, isHttps) {
               const dTot = (typeof q.windowDeltaTotal !== 'undefined') ? q.windowDeltaTotal : '--';
               const dRate = (typeof q.windowDropRate !== 'undefined') ? q.windowDropRate + '%' : '--';
               const uiInfo = payload.uiState ? ` UI[vis:${payload.uiState.isStereoUIVisible?'Y':'N'} menu:${payload.uiState.menuOpen?'Y':'N'} toast:${payload.uiState.toastActive?'Y':'N'}]` : '';
-              const up = p.texImage2DCallDuration || {};
-              const upInfo = (typeof up.medianMs === 'number' && up.uploadCount > 0) ? ` | TexUp[med:${up.medianMs}ms p95:${up.p95Ms}ms max:${up.maxMs}ms >16ms:${up.countGt16_7ms} >33ms:${up.countGt33ms} >100ms:${up.countGt100ms}]` : '';
+              const curTimeStr = (typeof pb.currentTime !== 'undefined') ? ` CurTime:${pb.currentTime}s` : '';
+              const pausedStr = (typeof pb.paused !== 'undefined') ? ` Paused:${pb.paused ? 1 : 0}` : '';
               const line = `[${payload.serverTimestamp}] Win:#${p.windowSeq} Mode:${p.performanceMode} Scale:${p.renderScale}x Media:${mName} Net:${pb.networkState}${curTimeStr}${pausedStr}${uiInfo} | rAF:${cad.rafPerSec} rVFC:${cad.rvfcPerSec} VidUp:${cad.videoUploadsPerSec} UIUp:${cad.uiUploadsPerSec}${upInfo} | avgFT:${ft.avg}ms p95FT:${ft.p95}ms maxFT:${ft.max}ms | WinDropRate:${dRate} (dDrop:${dDrop}/dTot:${dTot}) Dropped:${q.droppedVideoFrames} TotalF:${q.totalVideoFrames} BufAhead:${pb.bufferAheadSec}s | Ready:${pb.readyState}\n`;
               fs.appendFileSync(perfLog, line, 'utf8');
             }
