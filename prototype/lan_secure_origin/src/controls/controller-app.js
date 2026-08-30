@@ -435,10 +435,10 @@ export function updateTelemetryUI(data) {
     }
   }
 
-  if (data.fps) document.getElementById('valFps').textContent = data.fps + ' FPS';
-  if (data.mediaName) document.getElementById('valMediaName').textContent = data.mediaName;
-  if (data.mediaStatus) document.getElementById('valMediaStatus').textContent = data.mediaStatus;
-  if (data.devStatus) document.getElementById('valDevStatus').textContent = data.devStatus;
+  if (data.fps) setEl('valFps', data.fps + ' FPS');
+  if (data.mediaName) setEl('valMediaName', data.mediaName);
+  if (data.mediaStatus) setEl('valMediaStatus', data.mediaStatus);
+  if (data.devStatus) setEl('valDevStatus', data.devStatus);
 
   const vp = data.viewerProfile;
   if (vp) {
