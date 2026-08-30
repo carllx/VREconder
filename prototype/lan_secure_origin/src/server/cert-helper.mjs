@@ -174,9 +174,8 @@ export function renderHevcDiagnosticPage(res) {
       <button id="btn8kAmatsuki" class="active" onclick="pickPreset('8K/Amatsuki Azu (Hoshi Nako) - HNVR142.mp4')">⭐ 8K Amatsuki (8192×4096 Main 60p)</button>
       <button id="btn8kKamiki" onclick="pickPreset('8K/Kamiki Rei - DSVR01433.mp4')">⭐ 8K Kamiki (8192×4096 Main 60p)</button>
       <button id="btn8kOguri" onclick="pickPreset('8K/Oguri Misao (Momose Asuka) - SAVR01127.mp4')">⭐ 8K Oguri (8192×4096 Main10 60p)</button>
-      <button id="btnAvc1Ref" onclick="pickPreset('4K/4096_2048_crf18_avc1-Kururugi Aoi - WAVR224.mp4')">4K AVC Control</button>
-      <button id="btnAmatsukiHev1" onclick="pickPreset('4096_2048_crf21_avc1-Amatsuki Azu(Hoshi Nako) - VRKM1502.mp4 - (HEVC_23.0).mp4')">4K HEVC hev1</button>
-      <button id="btnAmatsukiHvc1" onclick="pickPreset('4096_2048_crf21_avc1-Amatsuki Azu(Hoshi Nako) - VRKM1502.mp4 - (HEVC_23.0)_HVC1.mp4')">4K HEVC hvc1</button>
+      <button id="btnAvc1Ref" onclick="pickPreset('4K/4096_2048_crf18_avc1-Kururugi Aoi - WAVR224.mp4')">4K AVC Control (4096×2048)</button>
+      <button id="btnHevcHvc1" onclick="pickPreset('New folder/4096_2048_crf21_avc1-Amatsuki Azu(Hoshi Nako) - VRKM1502.mp4 - (HEVC_23.0)_HVC1.mp4')">4K HEVC hvc1 (Working 4K)</button>
     </div>
     <select id="selAllVideos" onchange="pickPreset(this.value)"></select>
     <div class="btn-row" style="margin-top:8px;">
@@ -258,6 +257,7 @@ export function renderHevcDiagnosticPage(res) {
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
     }
+    let currentRelPath = '8K/Amatsuki Azu (Hoshi Nako) - HNVR142.mp4';
     let maxTexSize = 0, maxRenderBuf = 0;
     if (gl) {
       maxTexSize = gl.getParameter(gl.MAX_TEXTURE_SIZE) || 0;
@@ -301,8 +301,7 @@ export function renderHevcDiagnosticPage(res) {
       else if (relPath.includes('Kamiki Rei - DSVR01433')) document.getElementById('btn8kKamiki')?.classList.add('active');
       else if (relPath.includes('Oguri Misao')) document.getElementById('btn8kOguri')?.classList.add('active');
       else if (relPath.includes('WAVR224')) document.getElementById('btnAvc1Ref')?.classList.add('active');
-      else if (relPath.includes('VRKM1502') && !relPath.includes('_HVC1')) document.getElementById('btnAmatsukiHev1')?.classList.add('active');
-      else if (relPath.includes('VRKM1502') && relPath.includes('_HVC1')) document.getElementById('btnAmatsukiHvc1')?.classList.add('active');
+      else if (relPath.includes('HVC1')) document.getElementById('btnHevcHvc1')?.classList.add('active');
       rvfcCount = 0;
       lastRvfcMeta = null;
       probeCodecSupport(relPath);
