@@ -37,14 +37,14 @@ export function parseByteRange(rangeHeader, fileSize) {
 
 export function streamVideo(req, res, filePath) {
   if (!fs.existsSync(filePath)) {
-    res.writeHead(404, { 'Content-Type': 'text/plain' });
+    res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
     res.end('Video file not found: ' + filePath);
     return;
   }
 
   const stat = fs.statSync(filePath);
   const fileSize = stat.size;
-  const range = req.headers.range;
+  const rawRange = req.headers.range || null;
 
   if (req.method === 'HEAD') {
     res.writeHead(200, {
@@ -57,36 +57,53 @@ export function streamVideo(req, res, filePath) {
     return;
   }
 
-  if (range) {
-    const parsed = parseByteRange(range, fileSize);
-    if (parsed.type === 'single') {
-      const file = fs.createReadStream(filePath, { start: parsed.start, end: parsed.end });
-      res.writeHead(206, {
-        'Content-Range': `bytes ${parsed.start}-${parsed.end}/${fileSize}`,
-        'Accept-Ranges': 'bytes',
-        'Content-Length': parsed.contentLength,
-        'Content-Type': 'video/mp4',
-        'Access-Control-Allow-Origin': '*'
-      });
-      file.pipe(res);
-      return;
-    }
-    if (parsed.type === 'unsatisfiable' || parsed.type === 'invalid' || parsed.type === 'multiple') {
-      res.writeHead(416, {
-        'Content-Range': `bytes */${fileSize}`,
-        'Content-Type': 'video/mp4',
-        'Access-Control-Allow-Origin': '*'
-      });
-      res.end();
-      return;
-    }
+  const rangeParsed = parseByteRange(rawRange, fileSize);
+
+  if (rangeParsed.type === 'multiple' || rangeParsed.type === 'invalid' || rangeParsed.type === 'unsatisfiable') {
+    res.writeHead(416, {
+      'Content-Range': `bytes */${fileSize}`,
+      'Content-Type': 'video/mp4',
+      'Access-Control-Allow-Origin': '*'
+    });
+    res.end();
+    return;
   }
 
-  res.writeHead(200, {
-    'Content-Length': fileSize,
-    'Content-Type': 'video/mp4',
+  let statusCode = 200;
+  let headers = {
     'Accept-Ranges': 'bytes',
+    'Content-Type': 'video/mp4',
     'Access-Control-Allow-Origin': '*'
-  });
-  fs.createReadStream(filePath).pipe(res);
+  };
+
+  let readStart = 0;
+  let readEnd = fileSize - 1;
+
+  if (rangeParsed.type === 'single') {
+    statusCode = 206;
+    readStart = rangeParsed.start;
+    readEnd = rangeParsed.end;
+    headers['Content-Range'] = `bytes ${readStart}-${readEnd}/${fileSize}`;
+    headers['Content-Length'] = rangeParsed.contentLength;
+  } else {
+    statusCode = 200;
+    headers['Content-Length'] = fileSize;
+  }
+
+  res.writeHead(statusCode, headers);
+
+  const fileStream = fs.createReadStream(filePath, { start: readStart, end: readEnd });
+
+  const cleanup = () => {
+    if (!fileStream.destroyed) {
+      fileStream.destroy();
+    }
+  };
+
+  fileStream.on('error', cleanup);
+  res.on('close', cleanup);
+  res.on('finish', cleanup);
+  req.on('aborted', cleanup);
+
+  fileStream.pipe(res);
 }
