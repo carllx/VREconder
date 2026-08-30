@@ -9,7 +9,7 @@ export const state = {
   activePattern: 'B', // Default to Pattern B (Radial)
   // Performance Harness & A/B Diagnostics (Issue #14)
   // performanceMode: 'baseline' | 'strict-rvfc' | 'strict-rvfc-dirty-ui'
-  performanceMode: 'baseline',
+  performanceMode: 'strict-rvfc-dirty-ui',
   renderScale: 1.0, // 1.00 | 0.85 | 0.70
   uiIsDirty: true,
 

@@ -192,7 +192,10 @@ function handleRequest(req, res, isHttps) {
               const pb = p.playback || {};
               const q = pb.quality || {};
               const mName = payload.mediaName || (payload.mediaPath ? payload.mediaPath.split('/').pop() : '--');
-              const line = `[${payload.serverTimestamp}] Win:#${p.windowSeq} Mode:${p.performanceMode} Scale:${p.renderScale}x Media:${mName} Net:${pb.networkState} | rAF:${cad.rafPerSec} rVFC:${cad.rvfcPerSec} VidUp:${cad.videoUploadsPerSec} UIUp:${cad.uiUploadsPerSec} | avgFT:${ft.avg}ms p95FT:${ft.p95}ms maxFT:${ft.max}ms | Dropped:${q.droppedVideoFrames} TotalF:${q.totalVideoFrames} BufAhead:${pb.bufferAheadSec}s | Ready:${pb.readyState}\n`;
+              const dDrop = (typeof q.windowDeltaDropped !== 'undefined') ? q.windowDeltaDropped : '--';
+              const dTot = (typeof q.windowDeltaTotal !== 'undefined') ? q.windowDeltaTotal : '--';
+              const dRate = (typeof q.windowDropRate !== 'undefined') ? q.windowDropRate + '%' : '--';
+              const line = `[${payload.serverTimestamp}] Win:#${p.windowSeq} Mode:${p.performanceMode} Scale:${p.renderScale}x Media:${mName} Net:${pb.networkState} | rAF:${cad.rafPerSec} rVFC:${cad.rvfcPerSec} VidUp:${cad.videoUploadsPerSec} UIUp:${cad.uiUploadsPerSec} | avgFT:${ft.avg}ms p95FT:${ft.p95}ms maxFT:${ft.max}ms | WinDropRate:${dRate} (dDrop:${dDrop}/dTot:${dTot}) Dropped:${q.droppedVideoFrames} TotalF:${q.totalVideoFrames} BufAhead:${pb.bufferAheadSec}s | Ready:${pb.readyState}\n`;
               fs.appendFileSync(perfLog, line, 'utf8');
             }
           }

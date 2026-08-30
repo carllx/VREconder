@@ -179,7 +179,7 @@ export class PerformanceTelemetry {
     this.latestSnapshot = {
       windowSeq: 0,
       timestamp: new Date().toISOString(),
-      performanceMode: 'baseline',
+      performanceMode: 'strict-rvfc-dirty-ui',
       renderScale: 1.0,
       cadence: { rafPerSec: 0, rvfcPerSec: 0, videoUploadsPerSec: 0, uiUploadsPerSec: 0, orientationPerSec: 0 },
       frameTimeMs: { avg: 0, p95: 0, max: 0, samples: 0 },

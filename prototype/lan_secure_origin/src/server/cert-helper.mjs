@@ -167,17 +167,16 @@ export function renderHevcDiagnosticPage(res) {
   </style>
 </head>
 <body>
-  <h1>🔬 VREconder HEVC 3-Way Diagnostic (A/B Test)</h1>
+  <h1>🔬 VREconder 8K &amp; HEVC Capability Diagnostic</h1>
   <div class="card">
-    <div style="font-size:0.75rem; font-weight:bold; color:#94a3b8; text-transform:uppercase;">Select Sample Candidate:</div>
+    <div style="font-size:0.75rem; font-weight:bold; color:#94a3b8; text-transform:uppercase;">Select Diagnostic Candidate:</div>
     <div class="btn-row">
-      <button id="btnMeiHev1" onclick="pickPreset('tnb/Mei Matsumoto-TD- Vr Japanese, Mei Matsumoto, Mei Matsumoto Vr Porn - SpankBang-HEVC.mp4')">0. Mei (HEVC hev1)</button>
-      <button id="btnMeiHvc1" onclick="pickPreset('tnb/Mei Matsumoto-TD- Vr Japanese, Mei Matsumoto, Mei Matsumoto Vr Porn - SpankBang-HEVC_HVC1.mp4')">0b. Mei (HEVC hvc1 Sibling)</button>
-      <button id="btnAmatsukiHev1" class="active" onclick="pickPreset('4096_2048_crf21_avc1-Amatsuki Azu(Hoshi Nako) - VRKM1502.mp4 - (HEVC_23.0).mp4')">1. Amatsuki (HEVC hev1)</button>
-      <button id="btnAmatsukiHvc1" onclick="pickPreset('4096_2048_crf21_avc1-Amatsuki Azu(Hoshi Nako) - VRKM1502.mp4 - (HEVC_23.0)_HVC1.mp4')">2. Amatsuki (HEVC hvc1 Sibling)</button>
-      <button id="btnHarunaHev1" onclick="pickPreset('4096_2048_crf21_avc1-Haruna Noa - KIWVR739.mp4 - (HEVC_23.0).mp4')">3. Haruna (HEVC hev1)</button>
-      <button id="btnHarunaHvc1" onclick="pickPreset('4096_2048_crf21_avc1-Haruna Noa - KIWVR739.mp4 - (HEVC_23.0)_HVC1.mp4')">4. Haruna (HEVC hvc1 Sibling)</button>
-      <button id="btnAvc1Ref" onclick="pickPreset('4K/4096_2048_crf18_avc1-Kururugi Aoi - WAVR224.mp4')">5. AVC Control (avc1)</button>
+      <button id="btn8kAmatsuki" class="active" onclick="pickPreset('8K/Amatsuki Azu (Hoshi Nako) - HNVR142.mp4')">⭐ 8K Amatsuki (8192×4096 Main 60p)</button>
+      <button id="btn8kKamiki" onclick="pickPreset('8K/Kamiki Rei - DSVR01433.mp4')">⭐ 8K Kamiki (8192×4096 Main 60p)</button>
+      <button id="btn8kOguri" onclick="pickPreset('8K/Oguri Misao (Momose Asuka) - SAVR01127.mp4')">⭐ 8K Oguri (8192×4096 Main10 60p)</button>
+      <button id="btnAvc1Ref" onclick="pickPreset('4K/4096_2048_crf18_avc1-Kururugi Aoi - WAVR224.mp4')">4K AVC Control</button>
+      <button id="btnAmatsukiHev1" onclick="pickPreset('4096_2048_crf21_avc1-Amatsuki Azu(Hoshi Nako) - VRKM1502.mp4 - (HEVC_23.0).mp4')">4K HEVC hev1</button>
+      <button id="btnAmatsukiHvc1" onclick="pickPreset('4096_2048_crf21_avc1-Amatsuki Azu(Hoshi Nako) - VRKM1502.mp4 - (HEVC_23.0)_HVC1.mp4')">4K HEVC hvc1</button>
     </div>
     <select id="selAllVideos" onchange="pickPreset(this.value)"></select>
     <div class="btn-row" style="margin-top:8px;">
@@ -211,6 +210,8 @@ export function renderHevcDiagnosticPage(res) {
       <thead><tr><th>Parameter</th><th>Value</th><th>Interpretation / Status</th></tr></thead>
       <tbody>
         <tr><td>Active File</td><td id="mFile">--</td><td id="mCodecTag">--</td></tr>
+        <tr><td>canPlayType &amp; MediaCapabilities</td><td id="mMediaCap">--</td><td id="mCanPlay">--</td></tr>
+        <tr><td>WebGL Hardware Limits</td><td id="mGlLimits">MAX_TEX: --</td><td id="mGlDimFit">--</td></tr>
         <tr><td>video.error</td><td id="mError">null</td><td id="mErrorCode">None</td></tr>
         <tr><td>readyState / networkState</td><td id="mStates">0 / 0</td><td id="mStatesDesc">HAVE_NOTHING</td></tr>
         <tr><td>videoWidth &times; videoHeight</td><td id="mDimensions">0 &times; 0</td><td id="mAspect">--</td></tr>
@@ -218,7 +219,7 @@ export function renderHevcDiagnosticPage(res) {
         <tr><td>rVFC Frame Count</td><td id="mRvfcCount">0</td><td id="mRvfcMeta">none</td></tr>
         <tr><td>WebGL gl.getError()</td><td id="mGlError">NO_ERROR</td><td id="mGlStatus">OK</td></tr>
         <tr><td>getVideoPlaybackQuality()</td><td id="mQuality">--</td><td id="mDropRate">--</td></tr>
-        <tr><td><b>Summary 2&times;3 Verdict</b></td><td colspan="2" id="mVerdict" style="font-weight:bold; color:#38bdf8;">Evaluating...</td></tr>
+        <tr><td><b>Summary 3-Path Verdict</b></td><td colspan="2" id="mVerdict" style="font-weight:bold; color:#38bdf8;">Evaluating...</td></tr>
       </tbody>
     </table>
   </div>
@@ -257,7 +258,36 @@ export function renderHevcDiagnosticPage(res) {
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
     }
-    initGL();
+    let maxTexSize = 0, maxRenderBuf = 0;
+    if (gl) {
+      maxTexSize = gl.getParameter(gl.MAX_TEXTURE_SIZE) || 0;
+      maxRenderBuf = gl.getParameter(gl.MAX_RENDERBUFFER_SIZE) || 0;
+    }
+    function probeCodecSupport(relPath) {
+      const is8k = relPath.includes('8K');
+      const isHevc = relPath.includes('HEVC') || relPath.includes('8K');
+      const codecStr = isHevc ? 'video/mp4; codecs="hvc1.1.6.L183.B0, mp4a.40.2"' : 'video/mp4; codecs="avc1.640028, mp4a.40.2"';
+      const canPlay = video.canPlayType(codecStr);
+      document.getElementById('mCanPlay').textContent = 'canPlay: "' + canPlay + '"';
+      if (navigator.mediaCapabilities && navigator.mediaCapabilities.decodingInfo) {
+        navigator.mediaCapabilities.decodingInfo({
+          type: 'file',
+          video: {
+            contentType: codecStr,
+            width: is8k ? 8192 : 4096,
+            height: is8k ? 4096 : 2048,
+            bitrate: is8k ? 25000000 : 18000000,
+            framerate: 60
+          }
+        }).then(info => {
+          document.getElementById('mMediaCap').textContent = 'supp:' + info.supported + ' smooth:' + info.smooth + ' pwr:' + info.powerEfficient;
+        }).catch(e => {
+          document.getElementById('mMediaCap').textContent = 'error: ' + e.message;
+        });
+      } else {
+        document.getElementById('mMediaCap').textContent = 'MediaCapabilities unavailable';
+      }
+    }
     function onRvfc(now, metadata) {
       rvfcCount++;
       lastRvfcMeta = metadata;
@@ -267,15 +297,15 @@ export function renderHevcDiagnosticPage(res) {
     function pickPreset(relPath) {
       currentRelPath = relPath;
       document.querySelectorAll('.btn-row button').forEach(b => b.classList.remove('active'));
-      if (relPath.includes('Mei') && !relPath.includes('_HVC1')) document.getElementById('btnMeiHev1')?.classList.add('active');
-      else if (relPath.includes('Mei') && relPath.includes('_HVC1')) document.getElementById('btnMeiHvc1')?.classList.add('active');
+      if (relPath.includes('Amatsuki Azu (Hoshi Nako) - HNVR142')) document.getElementById('btn8kAmatsuki')?.classList.add('active');
+      else if (relPath.includes('Kamiki Rei - DSVR01433')) document.getElementById('btn8kKamiki')?.classList.add('active');
+      else if (relPath.includes('Oguri Misao')) document.getElementById('btn8kOguri')?.classList.add('active');
+      else if (relPath.includes('WAVR224')) document.getElementById('btnAvc1Ref')?.classList.add('active');
       else if (relPath.includes('VRKM1502') && !relPath.includes('_HVC1')) document.getElementById('btnAmatsukiHev1')?.classList.add('active');
       else if (relPath.includes('VRKM1502') && relPath.includes('_HVC1')) document.getElementById('btnAmatsukiHvc1')?.classList.add('active');
-      else if (relPath.includes('KIWVR739') && !relPath.includes('_HVC1')) document.getElementById('btnHarunaHev1')?.classList.add('active');
-      else if (relPath.includes('KIWVR739') && relPath.includes('_HVC1')) document.getElementById('btnHarunaHvc1')?.classList.add('active');
-      else if (relPath.includes('WAVR224')) document.getElementById('btnAvc1Ref')?.classList.add('active');
       rvfcCount = 0;
       lastRvfcMeta = null;
+      probeCodecSupport(relPath);
       video.src = '/video?path=' + encodeURIComponent(relPath);
       video.load();
       video.play().catch(()=>{});
@@ -340,6 +370,9 @@ export function renderHevcDiagnosticPage(res) {
       const stateNames = ['HAVE_NOTHING', 'HAVE_METADATA', 'HAVE_CURRENT_DATA', 'HAVE_FUTURE_DATA', 'HAVE_ENOUGH_DATA'];
       document.getElementById('mStates').textContent = 'ready: ' + video.readyState + ', net: ' + video.networkState;
       document.getElementById('mStatesDesc').textContent = stateNames[video.readyState] || 'UNKNOWN';
+      const fitsTex = (video.videoWidth > 0 && maxTexSize > 0) ? (video.videoWidth <= maxTexSize && video.videoHeight <= maxTexSize) : true;
+      document.getElementById('mGlLimits').textContent = 'MAX_TEX: ' + maxTexSize + ', MAX_BUF: ' + maxRenderBuf;
+      document.getElementById('mGlDimFit').textContent = (video.videoWidth > 0) ? (fitsTex ? 'Fits Texture (<= ' + maxTexSize + ')' : 'EXCEEDS MAX_TEX (' + video.videoWidth + ' > ' + maxTexSize + ')') : '--';
       document.getElementById('mDimensions').textContent = video.videoWidth + ' × ' + video.videoHeight;
       document.getElementById('mAspect').textContent = video.videoWidth ? ((video.videoWidth / video.videoHeight).toFixed(2) + ':1') : '--';
       document.getElementById('mTime').textContent = video.currentTime.toFixed(2) + 's / ' + (video.duration||0).toFixed(2) + 's';
@@ -376,12 +409,16 @@ export function renderHevcDiagnosticPage(res) {
         ended: video.ended,
         rvfcCount: rvfcCount,
         glError: lastGlError,
+        maxTexSize: maxTexSize,
+        maxRenderBuf: maxRenderBuf,
+        canPlay: document.getElementById('mCanPlay').innerText,
+        mediaCap: document.getElementById('mMediaCap').innerText,
         nativePixel: document.getElementById('statusNative').innerText,
         c2dPixel: document.getElementById('statusC2D').innerText,
         webglPixel: document.getElementById('statusWebGL').innerText,
         userAgent: navigator.userAgent
       };
-      await fetch('/api/log', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ level: 'HEVC_DIAG_REPORT', message: 'HEVC 3-Way Diagnostic Matrix Sample', data: payload }) }).catch(()=>{});
+      await fetch('/api/log', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ level: 'HEVC_DIAG_REPORT', message: 'HEVC/8K 3-Way Diagnostic Matrix Sample', data: payload }) }).catch(()=>{});
       alert('Diagnostic log sent to server!');
     }
     fetch('/api/videos').then(r => r.json()).then(d => {
