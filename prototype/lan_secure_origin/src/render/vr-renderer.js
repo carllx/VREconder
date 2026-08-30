@@ -334,7 +334,7 @@ export class VRRenderer {
       gl.viewport(0, 0, width, height);
       gl.scissor(0, 0, width, height);
       gl.bindTexture(gl.TEXTURE_2D, this.uiTex);
-      gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
+      gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
       gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, uiCanvas);
       perfTelemetry.recordUiUpload();
 

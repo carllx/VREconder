@@ -42,7 +42,7 @@ export function projectWorldDirToEye(dirWorld, eyeIndex, eyeGeom, halfW, height,
   if (u < -0.35 || u > 1.35 || v < -0.35 || v > 1.35) return null;
 
   const px = (eyeIndex * halfW) + u * halfW;
-  const py = (1.0 - v) * height;
+  const py = v * height;
 
   return { x: px, y: py, u, v, zDepth, tanSpanX: tanL + tanR };
 }
@@ -140,7 +140,7 @@ export function renderStereoUI(uiCtx, gazeEngine, commandModel, videoElement, no
     const centerU = (centerTanX + tanL) / (tanL + tanR);
     const centerV = (centerTanY + tanB) / (tanB + tanT);
     const eyeCenterX = eyeOffsetX + centerU * halfW;
-    const eyeCenterY = (1.0 - centerV) * height;
+    const eyeCenterY = centerV * height;
 
     uiCtx.save();
     uiCtx.beginPath();
