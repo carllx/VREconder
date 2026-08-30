@@ -171,11 +171,12 @@ export function renderHevcDiagnosticPage(res) {
   <div class="card">
     <div style="font-size:0.75rem; font-weight:bold; color:#94a3b8; text-transform:uppercase;">Select Diagnostic Candidate:</div>
     <div class="btn-row">
-      <button id="btn8kAmatsuki" class="active" onclick="pickPreset('8K/Amatsuki Azu (Hoshi Nako) - HNVR142.mp4')">⭐ 8K Amatsuki (8192×4096 Main 60p)</button>
-      <button id="btn8kKamiki" onclick="pickPreset('8K/Kamiki Rei - DSVR01433.mp4')">⭐ 8K Kamiki (8192×4096 Main 60p)</button>
-      <button id="btn8kOguri" onclick="pickPreset('8K/Oguri Misao (Momose Asuka) - SAVR01127.mp4')">⭐ 8K Oguri (8192×4096 Main10 60p)</button>
-      <button id="btnAvc1Ref" onclick="pickPreset('4K/4096_2048_crf18_avc1-Kururugi Aoi - WAVR224.mp4')">4K AVC Control (4096×2048)</button>
-      <button id="btnHevcHvc1" onclick="pickPreset('New folder/4096_2048_crf21_avc1-Amatsuki Azu(Hoshi Nako) - VRKM1502.mp4 - (HEVC_23.0)_HVC1.mp4')">4K HEVC hvc1 (Working 4K)</button>
+      <button id="btn8kAmatsuki" class="active" onclick="pickPreset('8K/Amatsuki Azu (Hoshi Nako) - HNVR142.mp4')">⭐ 8K Amatsuki (hev1)</button>
+      <button id="btn8kHvc1" onclick="pickPreset('8K/Amatsuki_8K_HVC1_test.mp4')">🔥 8K Amatsuki (hvc1 Sibling)</button>
+      <button id="btn8kKamiki" onclick="pickPreset('8K/Kamiki Rei - DSVR01433.mp4')">⭐ 8K Kamiki (hev1)</button>
+      <button id="btn8kOguri" onclick="pickPreset('8K/Oguri Misao (Momose Asuka) - SAVR01127.mp4')">⭐ 8K Oguri (10-bit)</button>
+      <button id="btnAvc1Ref" onclick="pickPreset('4K/4096_2048_crf18_avc1-Kururugi Aoi - WAVR224.mp4')">4K AVC Control</button>
+      <button id="btnHevcHvc1" onclick="pickPreset('New folder/4096_2048_crf21_avc1-Amatsuki Azu(Hoshi Nako) - VRKM1502.mp4 - (HEVC_23.0)_HVC1.mp4')">4K HEVC (hvc1)</button>
     </div>
     <select id="selAllVideos" onchange="pickPreset(this.value)"></select>
     <div class="btn-row" style="margin-top:8px;">
@@ -297,7 +298,8 @@ export function renderHevcDiagnosticPage(res) {
     function pickPreset(relPath) {
       currentRelPath = relPath;
       document.querySelectorAll('.btn-row button').forEach(b => b.classList.remove('active'));
-      if (relPath.includes('Amatsuki Azu (Hoshi Nako) - HNVR142')) document.getElementById('btn8kAmatsuki')?.classList.add('active');
+      if (relPath.includes('Amatsuki_8K_HVC1_test')) document.getElementById('btn8kHvc1')?.classList.add('active');
+      else if (relPath.includes('Amatsuki Azu (Hoshi Nako) - HNVR142')) document.getElementById('btn8kAmatsuki')?.classList.add('active');
       else if (relPath.includes('Kamiki Rei - DSVR01433')) document.getElementById('btn8kKamiki')?.classList.add('active');
       else if (relPath.includes('Oguri Misao')) document.getElementById('btn8kOguri')?.classList.add('active');
       else if (relPath.includes('WAVR224')) document.getElementById('btnAvc1Ref')?.classList.add('active');
