@@ -302,233 +302,224 @@ export function sendAction(act) { sendControl({ action: act }); }
 
 export function updateTelemetryUI(data) {
   if (!data) return;
-  if (typeof data.isArmed === 'boolean') {
-    isArmed = data.isArmed;
-    const b = document.getElementById('badgeArmStatus');
-    if (b) {
-      b.className = isArmed ? 'badge badge-green' : 'badge badge-amber';
-      b.textContent = isArmed ? '🟢 iPhone Armed (VR Ready)' : '🟡 Tap "Arm & Enter VR" on iPhone';
-    }
-  }
-
-  if (data.mediaList && Array.isArray(data.mediaList) && data.mediaList.length > 0 && videoList.length === 0) {
-    videoList = data.mediaList;
-    renderVideoSelect();
-  }
-
-  if (data.mediaPath) {
-    const sel = document.getElementById('selMediaList');
-    const optionExists = sel
-      ? Array.from(sel.options).some(o => o.value === data.mediaPath)
-      : videoList.some(v => v.relPath === data.mediaPath);
-    if (optionExists) {
-      lastAuthoritativeMediaPath = data.mediaPath;
-      if (sel && sel.value !== data.mediaPath) {
-        sel.value = data.mediaPath;
-      }
-    }
-  }
-
-  if (typeof data.currentTime === 'number') {
-    const cur = data.currentTime;
-    const dur = (typeof data.duration === 'number' && data.duration > 0) ? data.duration : 0;
-    if (!isScrubbing) {
-      const scrubber = document.getElementById('timelineScrubber');
-      if (scrubber) {
-        if (dur > 0 && Math.abs(parseFloat(scrubber.max) - dur) > 0.5) {
-          scrubber.max = dur;
-        }
-        scrubber.value = cur;
-      }
-      const el = document.getElementById('transportVideoTime');
-      if (el) el.textContent = `${formatTime(cur)} / ${dur > 0 ? formatTime(dur) : '--'}`;
-    }
-  }
-
-  if (typeof data.videoPaused === 'boolean') {
-    const btn = document.getElementById('btnPlayPause');
-    if (btn) btn.textContent = data.videoPaused ? '▶ Play' : '⏸ Freeze';
-  }
-
-  if (typeof data.selectedEye === 'number') {
-    diagEye = data.selectedEye;
-    const btn = document.getElementById('btnDiagEye');
-    if (btn) btn.textContent = `👁 Eye: ${diagEye === 0 ? 'Left' : 'Right'}`;
-  }
-
-  if (data.diagOverlay) {
-    ['showGrid', 'showPlumbLines', 'showHorizon'].forEach(k => {
-      if (typeof data.diagOverlay[k] === 'boolean') {
-        diagOverlays[k] = data.diagOverlay[k];
-        const btnMap = { showGrid: 'btnDiagGrid', showPlumbLines: 'btnDiagPlumb', showHorizon: 'btnDiagHorizon' };
-        const btn = document.getElementById(btnMap[k]);
-        if (btn) btn.classList.toggle('active', diagOverlays[k]);
-      }
-    });
-  }
-
-  if (typeof data.savedMyViewerProfileExists === 'boolean') {
-    latestSavedMyProfile = data.savedMyViewerProfile || null;
-    const opt = document.querySelector('#selViewerPreset option[value="viewer:my_profile"]');
-    if (opt) {
-      opt.textContent = data.savedMyViewerProfileExists
-        ? 'My Viewer Profile (Saved Working Profile)'
-        : 'My Viewer Profile (Not saved yet)';
-    }
-  }
-
-  if (typeof data.showReferenceGrid === 'boolean') {
-    const chk = document.getElementById('chkReferenceGrid');
-    if (chk) chk.checked = data.showReferenceGrid;
-  }
-
-  if (data.viewerVisualMode && data.viewerVisualMode !== currentVisualMode) {
-    currentVisualMode = data.viewerVisualMode;
-    document.getElementById('btnVisualGridOnly')?.classList.toggle('active', currentVisualMode === 'grid_only');
-    document.getElementById('btnVisualVideoGrid')?.classList.toggle('active', currentVisualMode === 'video_grid');
-  }
-
-  if (data.calibrationStage && data.calibrationStage !== currentStage) {
-    currentStage = data.calibrationStage;
-    ['A', 'B', 'C'].forEach(s => {
-      document.getElementById('btnStage' + s)?.classList.toggle('active', s === currentStage);
-    });
-    applyStageLocks(currentStage);
-  }
-
-  if (data.videoProfile) {
-    const vp = data.videoProfile;
-    const vstat = document.getElementById('txtVideoMappingStatus');
-    if (vstat) {
-      if ((vp.confidence === 'user-confirmed' || vp.confidence === 'user-calibrated') &&
-          vp.projection !== 'unknown' && vp.stereoMode !== 'unknown' && vp.eyeOrder !== 'unknown') {
-        vstat.textContent = `✓ Confirmed Video Mapping (${vp.projection} / ${vp.stereoMode} / ${vp.eyeOrder})`;
-        vstat.style.color = '#34d399';
-      } else {
-        vstat.textContent = `⚠️ Unconfirmed Video Mapping (${vp.projection || 'unknown'})`;
-        vstat.style.color = '#f87171';
-      }
-    }
-    const selProj = document.getElementById('selProjection'); if (selProj) selProj.value = vp.projection || 'unknown';
-    const selStereo = document.getElementById('selStereo'); if (selStereo) selStereo.value = vp.stereoMode || 'unknown';
-    const selEye = document.getElementById('selEyeOrder'); if (selEye) selEye.value = vp.eyeOrder || 'unknown';
-    const selCov = document.getElementById('selCoverageFov');
-    if (selCov) {
-      if (!vp.projection || vp.projection === 'unknown' || vp.projection === 'flat') {
-        selCov.value = 'unknown'; selCov.disabled = true;
-      } else {
-        selCov.disabled = false;
-        const hCov = (typeof vp.horizontalCoverageDeg === 'number') ? vp.horizontalCoverageDeg : 180;
-        selCov.value = (hCov > 270) ? '360' : '180';
-      }
-    }
-    if (vp.pose) {
-      const y = (typeof vp.pose.yawDeg === 'number') ? vp.pose.yawDeg : 0;
-      const p = (typeof vp.pose.pitchDeg === 'number') ? vp.pose.pitchDeg : 0;
-      const r = (typeof vp.pose.rollDeg === 'number') ? vp.pose.rollDeg : 0;
-      const rngY = document.getElementById('rngPoseYaw'); if (rngY) rngY.value = y;
-      const rngP = document.getElementById('rngPosePitch'); if (rngP) rngP.value = p;
-      const rngR = document.getElementById('rngPoseRoll'); if (rngR) rngR.value = r;
-      const valY = document.getElementById('valPoseYaw'); if (valY) valY.textContent = y.toFixed(1) + '°';
-      const valP = document.getElementById('valPosePitch'); if (valP) valP.textContent = p.toFixed(1) + '°';
-      const valR = document.getElementById('valPoseRoll'); if (valR) valR.textContent = r.toFixed(1) + '°';
-    }
-  }
-
-  if (data.fps) setEl('valFps', data.fps + ' FPS');
-  if (data.mediaName) setEl('valMediaName', data.mediaName);
-  if (data.mediaStatus) setEl('valMediaStatus', data.mediaStatus);
-  if (data.devStatus) setEl('valDevStatus', data.devStatus);
-
-  const vp = data.viewerProfile;
-  if (vp) {
-    lensEnabled = vp.lensCorrectionEnabled === true;
-    const btn = document.getElementById('btnLensToggle');
-    if (btn) {
-      btn.textContent = lensEnabled ? '🛡️ LENS CORRECTION: ON' : '⚪ LENS CORRECTION: OFF';
-      btn.className = 'action-btn ' + (lensEnabled ? 'btn-lens-on' : 'btn-lens-off');
-    }
-
-    const selPreset = document.getElementById('selViewerPreset');
-    if (selPreset) {
-      if (vp.viewerProfileId === 'viewer:my_profile' || vp.confidence === 'working-user-tuned') {
-        selPreset.value = 'viewer:my_profile';
-      } else {
-        selPreset.value = 'cardboard:reference_50deg';
-      }
-    }
-
-    populateSlidersFromProfile(vp);
-
-    const statEl = document.getElementById('txtProfileStatus');
-    if (statEl) {
-      if (vp.confidence === 'working-user-tuned' || vp.viewerProfileId === 'viewer:my_profile') {
-        statEl.textContent = '⚙️ ' + (vp.name || 'My Viewer Profile') + ' [Unvalidated / User-tuned — Not Ground Truth]';
-        statEl.style.color = '#38bdf8';
-      } else if (vp.confidence === 'historical-reference' || vp.viewerProfileId === 'cardboard:reference_50deg') {
-        statEl.textContent = '✓ ' + (vp.name || 'Cardboard Reference') + ' [Reference Optics — Not Ground Truth]';
-        statEl.style.color = '#34d399';
-      } else {
-        statEl.textContent = '⚠️ UNCALIBRATED BASELINE (Draft edits not validated)';
-        statEl.style.color = '#f87171';
-      }
-    }
-  }
 
   const setEl = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
 
-  const t = data.timings;
-  if (t && t.selectedAt) {
-    setEl('valMetaAt', t.metadataAt ? (t.metadataAt - t.selectedAt).toFixed(1) + ' ms' : '--');
-    setEl('valCanplayAt', t.canplayAt ? (t.canplayAt - t.selectedAt).toFixed(1) + ' ms' : '--');
-    setEl('valDecodeAt', t.firstFrameDecodedAt ? (t.firstFrameDecodedAt - t.selectedAt).toFixed(1) + ' ms' : '--');
-    setEl('valUploadAt', t.firstTextureUploadAt ? (t.firstTextureUploadAt - t.selectedAt).toFixed(1) + ' ms' : '--');
-    setEl('valRenderAt', t.firstRenderAt ? (t.firstRenderAt - t.selectedAt).toFixed(1) + ' ms' : '--');
-    setEl('valTotalLat', t.firstRenderAt ? (t.firstRenderAt - t.selectedAt).toFixed(1) + ' ms' : (t.statusText || '--'));
-  }
-
+  // 1. Critical Priority: Performance Diagnostics (Always executes first)
   if (data.perf) {
-    const { cadence: cad = {}, frameTimeMs: ft = {}, playback: pb = {}, display: disp = {}, webgl: wg = {} } = data.perf;
-    const q = pb.quality || {};
+    try {
+      const { cadence: cad = {}, frameTimeMs: ft = {}, playback: pb = {}, display: disp = {}, webgl: wg = {} } = data.perf;
+      const q = pb.quality || {};
 
-    const setT = setEl;
-    setT('valPerfCadence', `rAF: ${cad.rafPerSec || 0}/s | rVFC: ${cad.rvfcPerSec || 0}/s`);
-    setT('valUploadCadence', `VidUp: ${cad.videoUploadsPerSec || 0}/s | UIUp: ${cad.uiUploadsPerSec || 0}/s`);
-    setT('valFrameTimeAvg', `avg: ${ft.avg || 0}ms | p95: ${ft.p95 || 0}ms`);
-    setT('valFrameTimeMax', `max: ${ft.max || 0}ms (${ft.samples || 0} frames)`);
-    setT('valVideoQuality', `total: ${q.totalVideoFrames} | drop: ${q.droppedVideoFrames}`);
-    setT('valVideoDropRate', (typeof q.dropRate === 'number') ? `${q.dropRate}% dropped` : String(q.dropRate));
-    setT('valDisplayViewport', `VP: ${disp.cssViewport || '--'} (DPR: ${disp.dpr || '--'})`);
-    setT('valDrawingBuffer', `DrawBuf: ${disp.drawingBuffer || '--'} | FBO: ${disp.eyeFbo || '--'}`);
-    setT('valPlaybackStates', `ready: ${pb.readyState} | net: ${pb.networkState} | ${pb.paused ? '⏸' : '▶'}`);
-    setT('valBufferDetails', `ahead: ${pb.bufferAheadSec}s`);
-    setT('valGlError', wg.glError || 'NO_ERROR');
-    setT('valGlContextLoss', `Loss/Rest: ${wg.contextLostCount || 0}/${wg.contextRestoredCount || 0}`);
-    setT('valActivePerfMode', data.perf.performanceMode || 'baseline');
-    setT('valActiveRenderScale', (data.perf.renderScale || 1.0).toFixed(2) + 'x');
-    setT('valEyeFboSize', disp.eyeFbo || '--');
-    setT('valBufferAhead', `${pb.bufferAheadSec}s`);
+      setEl('valPerfCadence', `rAF: ${cad.rafPerSec || 0}/s | rVFC: ${cad.rvfcPerSec || 0}/s`);
+      setEl('valUploadCadence', `VidUp: ${cad.videoUploadsPerSec || 0}/s | UIUp: ${cad.uiUploadsPerSec || 0}/s`);
+      setEl('valFrameTimeAvg', `avg: ${ft.avg || 0}ms | p95: ${ft.p95 || 0}ms`);
+      setEl('valFrameTimeMax', `max: ${ft.max || 0}ms (${ft.samples || 0} frames)`);
+      setEl('valVideoQuality', `total: ${q.totalVideoFrames} | drop: ${q.droppedVideoFrames}`);
+      setEl('valVideoDropRate', (typeof q.dropRate === 'number') ? `${q.dropRate}% dropped` : String(q.dropRate));
+      setEl('valDisplayViewport', `VP: ${disp.cssViewport || '--'} (DPR: ${disp.dpr || '--'})`);
+      setEl('valDrawingBuffer', `DrawBuf: ${disp.drawingBuffer || '--'} | FBO: ${disp.eyeFbo || '--'}`);
+      setEl('valPlaybackStates', `ready: ${pb.readyState} | net: ${pb.networkState} | ${pb.paused ? '⏸' : '▶'}`);
+      setEl('valBufferDetails', `ahead: ${pb.bufferAheadSec}s`);
+      setEl('valGlError', wg.glError || 'NO_ERROR');
+      setEl('valGlContextLoss', `Loss/Rest: ${wg.contextLostCount || 0}/${wg.contextRestoredCount || 0}`);
+      setEl('valActivePerfMode', data.perf.performanceMode || 'baseline');
+      setEl('valActiveRenderScale', (data.perf.renderScale || 1.0).toFixed(2) + 'x');
+      setEl('valEyeFboSize', disp.eyeFbo || '--');
+      setEl('valBufferAhead', `${pb.bufferAheadSec}s`);
+    } catch (e) {
+      console.warn('Error updating perf telemetry UI:', e);
+    }
   }
 
-  if (data.controllerInput) {
-    const ci = data.controllerInput;
-    const statEl = document.getElementById('valControllerStatus');
-    const evtEl = document.getElementById('valControllerEvent');
-    if (statEl) {
-      if (ci.gamepadConnected && ci.activeGamepads && ci.activeGamepads.length > 0) {
-        statEl.textContent = `🎮 Gamepad Active (${ci.activeGamepads[0].id || 'SHINECON'})`;
-      } else if (ci.lastKeyDown) {
-        statEl.textContent = `⌨️ Keyboard (${ci.lastKeyDown.key || ci.lastKeyDown.code})`;
-      } else if (ci.lastPointer) {
-        statEl.textContent = `🖱️ Pointer (${ci.lastPointer.pointerType})`;
-      } else {
-        statEl.textContent = 'Standby (Listening)';
+  // 2. Armed & General Status
+  try {
+    if (typeof data.isArmed === 'boolean') {
+      isArmed = data.isArmed;
+      const b = document.getElementById('badgeArmStatus');
+      if (b) {
+        b.className = isArmed ? 'badge badge-green' : 'badge badge-amber';
+        b.textContent = isArmed ? '🟢 iPhone Armed (VR Ready)' : '🟡 Tap "Arm & Enter VR" on iPhone';
       }
     }
-    if (evtEl && ci.lastEvent) {
-      evtEl.textContent = `${ci.lastEvent.type}: ${JSON.stringify(ci.lastEvent.data || {})}`;
+  } catch (e) {}
+
+  // 3. Media & Transport
+  try {
+    if (data.mediaList && Array.isArray(data.mediaList) && data.mediaList.length > 0 && videoList.length === 0) {
+      videoList = data.mediaList;
+      renderVideoSelect();
     }
-  }
+    if (data.mediaPath) {
+      const sel = document.getElementById('selMediaList');
+      const optionExists = sel ? Array.from(sel.options).some(o => o.value === data.mediaPath) : videoList.some(v => v.relPath === data.mediaPath);
+      if (optionExists) {
+        lastAuthoritativeMediaPath = data.mediaPath;
+        if (sel && sel.value !== data.mediaPath) sel.value = data.mediaPath;
+      }
+    }
+    if (typeof data.currentTime === 'number') {
+      const cur = data.currentTime;
+      const dur = (typeof data.duration === 'number' && data.duration > 0) ? data.duration : 0;
+      if (!isScrubbing) {
+        const scrubber = document.getElementById('timelineScrubber');
+        if (scrubber) {
+          if (dur > 0 && Math.abs(parseFloat(scrubber.max) - dur) > 0.5) scrubber.max = dur;
+          scrubber.value = cur;
+        }
+        const el = document.getElementById('transportVideoTime');
+        if (el) el.textContent = `${formatTime(cur)} / ${dur > 0 ? formatTime(dur) : '--'}`;
+      }
+    }
+    if (typeof data.videoPaused === 'boolean') {
+      const btn = document.getElementById('btnPlayPause');
+      if (btn) btn.textContent = data.videoPaused ? '▶ Play' : '⏸ Freeze';
+    }
+  } catch (e) {}
+
+  // 4. Overlays, Calibration, Optics
+  try {
+    if (typeof data.selectedEye === 'number') {
+      diagEye = data.selectedEye;
+      const btn = document.getElementById('btnDiagEye');
+      if (btn) btn.textContent = `👁 Eye: ${diagEye === 0 ? 'Left' : 'Right'}`;
+    }
+    if (data.diagOverlay) {
+      ['showGrid', 'showPlumbLines', 'showHorizon'].forEach(k => {
+        if (typeof data.diagOverlay[k] === 'boolean') {
+          diagOverlays[k] = data.diagOverlay[k];
+          const btnMap = { showGrid: 'btnDiagGrid', showPlumbLines: 'btnDiagPlumb', showHorizon: 'btnDiagHorizon' };
+          const btn = document.getElementById(btnMap[k]);
+          if (btn) btn.classList.toggle('active', diagOverlays[k]);
+        }
+      });
+    }
+    if (typeof data.savedMyViewerProfileExists === 'boolean') {
+      latestSavedMyProfile = data.savedMyViewerProfile || null;
+      const opt = document.querySelector('#selViewerPreset option[value="viewer:my_profile"]');
+      if (opt) {
+        opt.textContent = data.savedMyViewerProfileExists ? 'My Viewer Profile (Saved Working Profile)' : 'My Viewer Profile (Not saved yet)';
+      }
+    }
+    if (typeof data.showReferenceGrid === 'boolean') {
+      const chk = document.getElementById('chkReferenceGrid');
+      if (chk) chk.checked = data.showReferenceGrid;
+    }
+    if (data.viewerVisualMode && data.viewerVisualMode !== currentVisualMode) {
+      currentVisualMode = data.viewerVisualMode;
+      document.getElementById('btnVisualGridOnly')?.classList.toggle('active', currentVisualMode === 'grid_only');
+      document.getElementById('btnVisualVideoGrid')?.classList.toggle('active', currentVisualMode === 'video_grid');
+    }
+    if (data.calibrationStage && data.calibrationStage !== currentStage) {
+      currentStage = data.calibrationStage;
+      ['A', 'B', 'C'].forEach(s => {
+        document.getElementById('btnStage' + s)?.classList.toggle('active', s === currentStage);
+      });
+      applyStageLocks(currentStage);
+    }
+    if (data.videoProfile) {
+      const vp = data.videoProfile;
+      const vstat = document.getElementById('txtVideoMappingStatus');
+      if (vstat) {
+        if ((vp.confidence === 'user-confirmed' || vp.confidence === 'user-calibrated') &&
+            vp.projection !== 'unknown' && vp.stereoMode !== 'unknown' && vp.eyeOrder !== 'unknown') {
+          vstat.textContent = `✓ Confirmed Video Mapping (${vp.projection} / ${vp.stereoMode} / ${vp.eyeOrder})`;
+          vstat.style.color = '#34d399';
+        } else {
+          vstat.textContent = `⚠️ Unconfirmed Video Mapping (${vp.projection || 'unknown'})`;
+          vstat.style.color = '#f87171';
+        }
+      }
+      const selProj = document.getElementById('selProjection'); if (selProj) selProj.value = vp.projection || 'unknown';
+      const selStereo = document.getElementById('selStereo'); if (selStereo) selStereo.value = vp.stereoMode || 'unknown';
+      const selEye = document.getElementById('selEyeOrder'); if (selEye) selEye.value = vp.eyeOrder || 'unknown';
+      const selCov = document.getElementById('selCoverageFov');
+      if (selCov) {
+        if (!vp.projection || vp.projection === 'unknown' || vp.projection === 'flat') {
+          selCov.value = 'unknown'; selCov.disabled = true;
+        } else {
+          selCov.disabled = false;
+          const hCov = (typeof vp.horizontalCoverageDeg === 'number') ? vp.horizontalCoverageDeg : 180;
+          selCov.value = (hCov > 270) ? '360' : '180';
+        }
+      }
+      if (vp.pose) {
+        const y = (typeof vp.pose.yawDeg === 'number') ? vp.pose.yawDeg : 0;
+        const p = (typeof vp.pose.pitchDeg === 'number') ? vp.pose.pitchDeg : 0;
+        const r = (typeof vp.pose.rollDeg === 'number') ? vp.pose.rollDeg : 0;
+        const rngY = document.getElementById('rngPoseYaw'); if (rngY) rngY.value = y;
+        const rngP = document.getElementById('rngPosePitch'); if (rngP) rngP.value = p;
+        const rngR = document.getElementById('rngPoseRoll'); if (rngR) rngR.value = r;
+        const valY = document.getElementById('valPoseYaw'); if (valY) valY.textContent = y.toFixed(1) + '°';
+        const valP = document.getElementById('valPosePitch'); if (valP) valP.textContent = p.toFixed(1) + '°';
+        const valR = document.getElementById('valPoseRoll'); if (valR) valR.textContent = r.toFixed(1) + '°';
+      }
+    }
+    if (data.fps) setEl('valFps', data.fps + ' FPS');
+    if (data.mediaName) setEl('valMediaName', data.mediaName);
+    if (data.mediaStatus) setEl('valMediaStatus', data.mediaStatus);
+    if (data.devStatus) setEl('valDevStatus', data.devStatus);
+
+    const vp = data.viewerProfile;
+    if (vp) {
+      lensEnabled = vp.lensCorrectionEnabled === true;
+      const btn = document.getElementById('btnLensToggle');
+      if (btn) {
+        btn.textContent = lensEnabled ? '🛡️ LENS CORRECTION: ON' : '⚪ LENS CORRECTION: OFF';
+        btn.className = 'action-btn ' + (lensEnabled ? 'btn-lens-on' : 'btn-lens-off');
+      }
+      const selPreset = document.getElementById('selViewerPreset');
+      if (selPreset) {
+        selPreset.value = (vp.viewerProfileId === 'viewer:my_profile' || vp.confidence === 'working-user-tuned') ? 'viewer:my_profile' : 'cardboard:reference_50deg';
+      }
+      populateSlidersFromProfile(vp);
+      const statEl = document.getElementById('txtProfileStatus');
+      if (statEl) {
+        if (vp.confidence === 'working-user-tuned' || vp.viewerProfileId === 'viewer:my_profile') {
+          statEl.textContent = '⚙️ ' + (vp.name || 'My Viewer Profile') + ' [Unvalidated / User-tuned — Not Ground Truth]';
+          statEl.style.color = '#38bdf8';
+        } else if (vp.confidence === 'historical-reference' || vp.viewerProfileId === 'cardboard:reference_50deg') {
+          statEl.textContent = '✓ ' + (vp.name || 'Cardboard Reference') + ' [Reference Optics — Not Ground Truth]';
+          statEl.style.color = '#34d399';
+        } else {
+          statEl.textContent = '⚠️ UNCALIBRATED BASELINE (Draft edits not validated)';
+          statEl.style.color = '#f87171';
+        }
+      }
+    }
+  } catch (e) {}
+
+  // 5. Timings & Controller Inputs
+  try {
+    const t = data.timings;
+    if (t && t.selectedAt) {
+      setEl('valMetaAt', t.metadataAt ? (t.metadataAt - t.selectedAt).toFixed(1) + ' ms' : '--');
+      setEl('valCanplayAt', t.canplayAt ? (t.canplayAt - t.selectedAt).toFixed(1) + ' ms' : '--');
+      setEl('valDecodeAt', t.firstFrameDecodedAt ? (t.firstFrameDecodedAt - t.selectedAt).toFixed(1) + ' ms' : '--');
+      setEl('valUploadAt', t.firstTextureUploadAt ? (t.firstTextureUploadAt - t.selectedAt).toFixed(1) + ' ms' : '--');
+      setEl('valRenderAt', t.firstRenderAt ? (t.firstRenderAt - t.selectedAt).toFixed(1) + ' ms' : '--');
+      setEl('valTotalLat', t.firstRenderAt ? (t.firstRenderAt - t.selectedAt).toFixed(1) + ' ms' : (t.statusText || '--'));
+    }
+    if (data.controllerInput) {
+      const ci = data.controllerInput;
+      const statEl = document.getElementById('valControllerStatus');
+      const evtEl = document.getElementById('valControllerEvent');
+      if (statEl) {
+        if (ci.gamepadConnected && ci.activeGamepads && ci.activeGamepads.length > 0) {
+          statEl.textContent = `🎮 Gamepad Active (${ci.activeGamepads[0].id || 'SHINECON'})`;
+        } else if (ci.lastKeyDown) {
+          statEl.textContent = `⌨️ Keyboard (${ci.lastKeyDown.key || ci.lastKeyDown.code})`;
+        } else if (ci.lastPointer) {
+          statEl.textContent = `🖱️ Pointer (${ci.lastPointer.pointerType})`;
+        } else {
+          statEl.textContent = 'Standby (Listening)';
+        }
+      }
+      if (evtEl && ci.lastEvent) {
+        evtEl.textContent = `${ci.lastEvent.type}: ${JSON.stringify(ci.lastEvent.data || {})}`;
+      }
+    }
+  } catch (e) {}
 }
 
 export function onPerformanceModeChange(mode) { sendControl({ action: 'set_performance_mode', mode }); }

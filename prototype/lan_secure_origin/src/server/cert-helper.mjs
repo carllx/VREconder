@@ -70,7 +70,9 @@ let cachedVideos = [];
 export function isLoopbackIp(remoteAddress) {
   if (!remoteAddress) return false;
   const cleaned = remoteAddress.replace(/^::ffff:/, '');
-  return cleaned === '127.0.0.1' || cleaned === '::1' || cleaned === 'localhost';
+  if (cleaned === '127.0.0.1' || cleaned === '::1' || cleaned === 'localhost') return true;
+  const localIps = getLocalIPs();
+  return localIps.includes(cleaned);
 }
 
 export function getActiveMediaRoot() {
