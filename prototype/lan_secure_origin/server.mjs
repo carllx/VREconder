@@ -471,6 +471,7 @@ function handleRequest(req, res, isHttps) {
   // Static assets (.html, .js, .mjs, .css, .json, .png, .svg)
   let safePath = path.normalize(path.join(__dirname, pathname));
   if (pathname === '/controller') safePath = path.join(__dirname, 'controller.html');
+  if (pathname === '/native-diag' || pathname === '/native-diag.html') safePath = path.join(__dirname, 'native-video-diag.html');
   if (pathname === '/hevc-diag' || pathname === '/hevc-diag.html') {
     renderHevcDiagnosticPage(res);
     return;

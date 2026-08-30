@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>VREconder - Native Video Isolation Diagnostic</title>
+  <style>
+    body { background: #090d16; color: #f8fafc; font-family: -apple-system, BlinkMacSystemFont, sans-serif; padding: 16px; margin: 0; line-height: 1.4; }
+    .container { max-width: 800px; margin: 0 auto; display: flex; flex-direction: column; gap: 12px; }
+    .card { background: #131b2e; border: 1px solid #243048; border-radius: 10px; padding: 12px 16px; }
+    h1 { font-size: 1.15rem; font-weight: 700; color: #fff; display: flex; align-items: center; justify-content: space-between; }
+    .badge { display: inline-block; padding: 3px 8px; border-radius: 6px; font-size: 0.75rem; font-weight: bold; background: #0369a1; color: #38bdf8; }
+    .video-container { width: 100%; aspect-ratio: 16/9; background: #000; border-radius: 8px; overflow: hidden; display: flex; align-items: center; justify-content: center; border: 1px solid #243048; }
+    video { width: 100%; height: 100%; object-fit: contain; }
+    .metric-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 8px; margin-top: 8px; }
+    .metric-box { background: #1e293b; padding: 8px 10px; border-radius: 6px; border: 1px solid #334155; }
+    .metric-label { font-size: 0.7rem; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px; }
+    .metric-val { font-size: 0.95rem; font-weight: 700; color: #38bdf8; font-family: ui-monospace, monospace; margin-top: 2px; }
+    .btn-row { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+    button { padding: 6px 12px; border-radius: 6px; border: none; font-size: 0.8rem; font-weight: 600; cursor: pointer; color: #fff; background: #2563eb; }
+    button:active { opacity: 0.8; }
+    .btn-seek { background: #334155; border: 1px solid #475569; }
+    select { width: 100%; padding: 8px 10px; background: #1e293b; color: #fff; border: 1px solid #334155; border-radius: 6px; font-size: 0.85rem; }
+    #logBox { height: 180px; overflow-y: auto; background: #020617; border: 1px solid #1e293b; border-radius: 6px; padding: 8px; font-family: ui-monospace, monospace; font-size: 0.72rem; color: #cbd5e1; white-space: pre-wrap; }
+    .log-err { color: #f87171; }
+    .log-warn { color: #fbbf24; }
+    .log-ok { color: #34d399; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="card">
+      <h1>
+        <span>🧪 Native Video Isolation Diagnostic</span>
+        <span class="badge">No WebGL / Direct HTML5</span>
+      </h1>
+      <p style="font-size:0.75rem; color:#94a3b8; margin-top:4px;">
+        Pure Safari &lt;video&gt; element baseline test. Isolates Range transport &amp; AV1 decode from VR rendering / Stereo UI / texture upload.
+      </p>
+    </div>
+
+    <div class="card">
+      <label style="font-size:0.75rem; color:#94a3b8; font-weight:600;">Select Video Source (from Media Root):</label>
+      <select id="mediaSelect" style="margin-top:6px;">
+        <option value="">Loading video list...</option>
+      </select>
+    </div>
+
+    <div class="video-container">
+      <video id="nativeVideo" controls playsinline preload="auto"></video>
+    </div>
+
+    <div class="card">
+      <label style="font-size:0.75rem; color:#94a3b8; font-weight:600;">Quick Seek Diagnostics (Deterministic Jump):</label>
+      <div class="btn-row">
+        <button class="btn-seek" onclick="seekRelative(10)">+10s</button>
+        <button class="btn-seek" onclick="seekRelative(30)">+30s</button>
+        <button class="btn-seek" onclick="seekRelative(60)">+60s</button>
+        <button class="btn-seek" onclick="seekAbsolute(300)">Jump 5m (300s)</button>
+        <button class="btn-seek" onclick="seekAbsolute(600)">Jump 10m (600s)</button>
+        <button class="btn-seek" onclick="seekAbsolute(1200)">Jump 20m (1200s)</button>
+        <button class="btn-seek" onclick="seekAbsolute(1500)">Jump 25m (1500s)</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2 style="font-size:0.85rem; font-weight:700; color:#cbd5e1;">📊 Real-Time Video &amp; Transport Telemetry</h2>
+      <div class="metric-grid">
+        <div class="metric-box">
+          <div class="metric-label">Time / Duration</div>
+          <div class="metric-val" id="valTime">0.0s / 0.0s</div>
+        </div>
+        <div class="metric-box">
+          <div class="metric-label">ReadyState</div>
+          <div class="metric-val" id="valReadyState">0</div>
+        </div>
+        <div class="metric-box">
+          <div class="metric-label">NetworkState</div>
+          <div class="metric-val" id="valNetState">0</div>
+        </div>
+        <div class="metric-box">
+          <div class="metric-label">Buffer Ahead</div>
+          <div class="metric-val" id="valBufferAhead">0.0s</div>
+        </div>
+        <div class="metric-box">
+          <div class="metric-label">Stalls / Stalled Duration</div>
+          <div class="metric-val" id="valStalls">0 / 0.0s</div>
+        </div>
+        <div class="metric-box">
+          <div class="metric-label">Video Resolution</div>
+          <div class="metric-val" id="valResolution">--</div>
+        </div>
+      </div>
+      <div style="margin-top:8px; font-size:0.75rem; color:#94a3b8;">
+        <b>Buffered Ranges:</b> <span id="valBufferedRanges" style="font-family:monospace; color:#cbd5e1;">None</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2 style="font-size:0.85rem; font-weight:700; color:#cbd5e1; margin-bottom:6px;">📜 Video Event Stream Log</h2>
+      <div id="logBox"></div>
+      <div class="btn-row" style="margin-top:6px;">
+        <button onclick="document.getElementById('logBox').textContent = ''" style="background:#334155;">Clear Log</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const video = document.getElementById('nativeVideo');
+    const mediaSelect = document.getElementById('mediaSelect');
+    const logBox = document.getElementById('logBox');
+
+    const READY_STATES = ['HAVE_NOTHING (0)', 'HAVE_METADATA (1)', 'HAVE_CURRENT_DATA (2)', 'HAVE_FUTURE_DATA (3)', 'HAVE_ENOUGH_DATA (4)'];
+    const NET_STATES = ['NETWORK_EMPTY (0)', 'NETWORK_IDLE (1)', 'NETWORK_LOADING (2)', 'NETWORK_NO_SOURCE (3)'];
+
+    let stallCount = 0;
+    let totalStallDurationMs = 0;
+    let currentStallStart = 0;
+
+    function log(msg, type = 'info') {
+      const time = new Date().toISOString().substring(11, 19);
+      const div = document.createElement('div');
+      div.className = type === 'error' ? 'log-err' : (type === 'warn' ? 'log-warn' : (type === 'ok' ? 'log-ok' : ''));
+      div.textContent = `[${time}] ${msg}`;
+      logBox.appendChild(div);
+      logBox.scrollTop = logBox.scrollHeight;
+
+      fetch('/api/log', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ level: type.toUpperCase(), message: '[NativeDiag] ' + msg })
+      }).catch(() => {});
+    }
+
+    async function loadVideos() {
+      try {
+        const res = await fetch('/api/videos');
+        const data = await res.json();
+        mediaSelect.innerHTML = '';
+        if (data.videos && data.videos.length > 0) {
+          data.videos.forEach(v => {
+            const opt = document.createElement('option');
+            opt.value = v.relPath;
+            opt.textContent = `[${v.sizeGB}] ${v.name}`;
+            mediaSelect.appendChild(opt);
+          });
+          const target = data.videos.find(v => v.name.includes('Aosaka Aoi')) || data.videos[0];
+          mediaSelect.value = target.relPath;
+          selectVideo(target.relPath);
+        }
+      } catch (err) {
+        log('Failed to fetch video list: ' + err.message, 'error');
+      }
+    }
+
+    function selectVideo(relPath) {
+      log('Selecting: ' + relPath, 'ok');
+      video.src = '/video?path=' + encodeURIComponent(relPath);
+      video.load();
+    }
+
+    mediaSelect.addEventListener('change', (e) => {
+      selectVideo(e.target.value);
+    });
+
+    function seekRelative(sec) {
+      const target = Math.min(video.duration || 0, video.currentTime + sec);
+      log(`Seeking relative +${sec}s -> target ${target.toFixed(1)}s`, 'warn');
+      video.currentTime = target;
+    }
+
+    function seekAbsolute(sec) {
+      log(`Seeking absolute to ${sec}s`, 'warn');
+      video.currentTime = sec;
+    }
+
+    const events = ['loadstart', 'loadedmetadata', 'loadeddata', 'canplay', 'canplaythrough', 'seeking', 'seeked', 'waiting', 'stalled', 'playing', 'pause', 'timeupdate', 'progress', 'suspend', 'error'];
+    events.forEach(evt => {
+      video.addEventListener(evt, () => {
+        if (evt === 'waiting' || evt === 'stalled') {
+          stallCount++;
+          if (currentStallStart === 0) currentStallStart = performance.now();
+          log(`⚠️ Event: ${evt} at curTime=${video.currentTime.toFixed(2)}s (BufferAhead=${getBufferAhead().toFixed(2)}s)`, 'warn');
+        } else if (evt === 'playing') {
+          if (currentStallStart > 0) {
+            totalStallDurationMs += (performance.now() - currentStallStart);
+            currentStallStart = 0;
+          }
+          log(`▶️ Event: playing at curTime=${video.currentTime.toFixed(2)}s`, 'ok');
+        } else if (evt === 'error') {
+          const err = video.error ? `code ${video.error.code}: ${video.error.message}` : 'unknown';
+          log(`❌ Video Error: ${err}`, 'error');
+        } else if (evt !== 'timeupdate' && evt !== 'progress') {
+          log(`Event: ${evt} (readyState=${video.readyState}, curTime=${video.currentTime.toFixed(1)}s)`);
+        }
+      });
+    });
+
+    function getBufferAhead() {
+      if (!video.buffered || video.buffered.length === 0) return 0;
+      const cur = video.currentTime;
+      for (let i = 0; i < video.buffered.length; i++) {
+        const s = video.buffered.start(i);
+        const e = video.buffered.end(i);
+        if (cur >= s && cur <= e) return e - cur;
+      }
+      return 0;
+    }
+
+    function updateHUD() {
+      document.getElementById('valTime').textContent = `${(video.currentTime || 0).toFixed(1)}s / ${(video.duration || 0).toFixed(1)}s`;
+      document.getElementById('valReadyState').textContent = READY_STATES[video.readyState] || video.readyState;
+      document.getElementById('valNetState').textContent = NET_STATES[video.networkState] || video.networkState;
+      document.getElementById('valBufferAhead').textContent = getBufferAhead().toFixed(2) + 's';
+      document.getElementById('valStalls').textContent = `${stallCount} / ${(totalStallDurationMs / 1000).toFixed(1)}s`;
+      document.getElementById('valResolution').textContent = video.videoWidth ? `${video.videoWidth}x${video.videoHeight}` : '--';
+
+      if (video.buffered && video.buffered.length > 0) {
+        const ranges = [];
+        for (let i = 0; i < video.buffered.length; i++) {
+          ranges.push(`[${video.buffered.start(i).toFixed(1)}s - ${video.buffered.end(i).toFixed(1)}s]`);
+        }
+        document.getElementById('valBufferedRanges').textContent = ranges.join(', ');
+      } else {
+        document.getElementById('valBufferedRanges').textContent = 'None';
+      }
+    }
+
+    setInterval(updateHUD, 250);
+    loadVideos();
+  </script>
+</body>
+</html>
