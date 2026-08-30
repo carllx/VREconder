@@ -38,12 +38,13 @@ function broadcastCalibrationEvent(payload) {
 
 let latestTelemetry = null;
 let lastLoggedPerfWindowSeq = -1;
+let lastIphoneTelemetryAt = 0;
 
 function handleRequest(req, res, isHttps) {
   const urlObj = new URL(req.url, `http://${req.headers.host}`);
   const pathname = urlObj.pathname;
 
-  if (pathname !== '/api/calibration/events') {
+  if (pathname !== '/api/calibration/events' && pathname !== '/api/telemetry') {
     console.log(`[REQ] ${req.method} ${pathname} (${req.socket.remoteAddress})`);
   }
 
