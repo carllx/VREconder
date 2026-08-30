@@ -172,6 +172,7 @@ export class PerformanceTelemetry {
     this.uiUploadCount = 0;
     this.orientationCount = 0;
     this.frameTimes = [];
+    this.uploadDurations = [];
     this.glContextLostCount = 0;
     this.glContextRestoredCount = 0;
     this.recentEvents = [];
@@ -184,7 +185,8 @@ export class PerformanceTelemetry {
       renderScale: 1.0,
       cadence: { rafPerSec: 0, rvfcPerSec: 0, videoUploadsPerSec: 0, uiUploadsPerSec: 0, orientationPerSec: 0 },
       frameTimeMs: { avg: 0, p95: 0, max: 0, samples: 0 },
-      playback: { currentTime: 0, duration: 0, paused: true, readyState: 0, networkState: 0, bufferAheadSec: 0, quality: { totalVideoFrames: 0, droppedVideoFrames: 0, dropRate: 0 }, recentEvents: [] },
+      texImage2DCallDuration: { uploadCount: 0, medianMs: 0, p95Ms: 0, maxMs: 0, countGt16_7ms: 0, countGt33ms: 0, countGt100ms: 0 },
+      playback: { currentTime: 0, duration: 0, paused: true, readyState: 0, networkState: 0, bufferAheadSec: 0, bufferedRanges: [], quality: { totalVideoFrames: 0, droppedVideoFrames: 0, dropRate: 0 }, recentEvents: [] },
       display: { cssViewport: '--', dpr: 1, renderScale: 1.0, drawingBuffer: '--', eyeFbo: '--' },
       webgl: { glError: 'NO_ERROR', contextLostCount: 0, contextRestoredCount: 0 }
     };
@@ -198,6 +200,7 @@ export class PerformanceTelemetry {
   recordRaf() { this.rafCount++; }
   recordRvfc() { this.rvfcCount++; }
   recordVideoUpload() { this.videoUploadCount++; }
+  recordUploadDuration(durationMs) { this.uploadDurations.push(durationMs); }
   recordUiUpload() { this.uiUploadCount++; }
   recordOrientation() { this.orientationCount++; }
   recordFrameTime(dtMs) { this.frameTimes.push(dtMs); }
@@ -234,6 +237,27 @@ export class PerformanceTelemetry {
       maxFrameTimeMs = Number(sorted[sorted.length - 1].toFixed(2));
     }
 
+    let uploadStats = {
+      uploadCount: this.uploadDurations.length,
+      medianMs: 0,
+      p95Ms: 0,
+      maxMs: 0,
+      countGt16_7ms: 0,
+      countGt33ms: 0,
+      countGt100ms: 0
+    };
+    if (this.uploadDurations.length > 0) {
+      const sorted = [...this.uploadDurations].sort((a, b) => a - b);
+      const medianIdx = Math.floor(sorted.length * 0.5);
+      const p95Idx = Math.min(sorted.length - 1, Math.floor(sorted.length * 0.95));
+      uploadStats.medianMs = Number(sorted[medianIdx].toFixed(2));
+      uploadStats.p95Ms = Number(sorted[p95Idx].toFixed(2));
+      uploadStats.maxMs = Number(sorted[sorted.length - 1].toFixed(2));
+      uploadStats.countGt16_7ms = sorted.filter(d => d > 16.7).length;
+      uploadStats.countGt33ms = sorted.filter(d => d > 33.3).length;
+      uploadStats.countGt100ms = sorted.filter(d => d > 100.0).length;
+    }
+
     let quality = { totalVideoFrames: 'unavailable', droppedVideoFrames: 'unavailable', dropRate: 'unavailable', windowDeltaTotal: 0, windowDeltaDropped: 0, windowDropRate: 0 };
     if (video && typeof video.getVideoPlaybackQuality === 'function') {
       try {
@@ -264,13 +288,14 @@ export class PerformanceTelemetry {
 
     let bufferAhead = 0;
     const curTime = (video && typeof video.currentTime === 'number') ? video.currentTime : 0;
+    const bufferedRanges = [];
     if (video && video.buffered && video.buffered.length > 0) {
       for (let i = 0; i < video.buffered.length; i++) {
         const start = video.buffered.start(i);
         const end = video.buffered.end(i);
+        bufferedRanges.push({ start: Number(start.toFixed(2)), end: Number(end.toFixed(2)) });
         if (curTime >= start && curTime <= end) {
           bufferAhead = Number((end - curTime).toFixed(2));
-          break;
         }
       }
     }
@@ -307,6 +332,7 @@ export class PerformanceTelemetry {
         max: maxFrameTimeMs,
         samples: this.frameTimes.length
       },
+      texImage2DCallDuration: uploadStats,
       playback: {
         currentTime: Number(curTime.toFixed(2)),
         duration: (video && isFinite(video.duration)) ? Number(video.duration.toFixed(2)) : 0,
@@ -314,6 +340,7 @@ export class PerformanceTelemetry {
         readyState: video ? video.readyState : 0,
         networkState: video ? video.networkState : 0,
         bufferAheadSec: bufferAhead,
+        bufferedRanges: bufferedRanges,
         quality: quality,
         recentEvents: [...this.recentEvents]
       },
@@ -338,6 +365,7 @@ export class PerformanceTelemetry {
     this.uiUploadCount = 0;
     this.orientationCount = 0;
     this.frameTimes = [];
+    this.uploadDurations = [];
     this.recentEvents = [];
 
     return this.latestSnapshot;

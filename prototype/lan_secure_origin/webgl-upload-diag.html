@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>VREconder - Stage B: WebGL Upload-Only Diagnostic</title>
+  <style>
+    body { background: #090d16; color: #f8fafc; font-family: -apple-system, BlinkMacSystemFont, sans-serif; padding: 16px; margin: 0; line-height: 1.4; }
+    .container { max-width: 800px; margin: 0 auto; display: flex; flex-direction: column; gap: 12px; }
+    .card { background: #131b2e; border: 1px solid #243048; border-radius: 10px; padding: 12px 16px; }
+    h1 { font-size: 1.15rem; font-weight: 700; color: #fff; display: flex; align-items: center; justify-content: space-between; }
+    .badge { display: inline-block; padding: 3px 8px; border-radius: 6px; font-size: 0.75rem; font-weight: bold; background: #7c3aed; color: #ddd6fe; }
+    .gl-container { width: 100%; aspect-ratio: 16/9; background: #000; border-radius: 8px; overflow: hidden; display: flex; align-items: center; justify-content: center; border: 1px solid #243048; position: relative; }
+    canvas { width: 100%; height: 100%; object-fit: contain; }
+    .metric-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 8px; margin-top: 8px; }
+    .metric-box { background: #1e293b; padding: 8px 10px; border-radius: 6px; border: 1px solid #334155; }
+    .metric-label { font-size: 0.7rem; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px; }
+    .metric-val { font-size: 0.95rem; font-weight: 700; color: #38bdf8; font-family: ui-monospace, monospace; margin-top: 2px; }
+    .val-warn { color: #fbbf24 !important; }
+    .val-alert { color: #f87171 !important; }
+    .btn-row { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+    button { padding: 6px 12px; border-radius: 6px; border: none; font-size: 0.8rem; font-weight: 600; cursor: pointer; color: #fff; background: #2563eb; }
+    button:active { opacity: 0.8; }
+    .btn-seek { background: #334155; border: 1px solid #475569; }
+    .btn-mode { background: #1e293b; color: #94a3b8; border: 1px solid #334155; }
+    .btn-mode.active { background: #6d28d9; color: #fff; border-color: #a78bfa; }
+    select { width: 100%; padding: 8px 10px; background: #1e293b; color: #fff; border: 1px solid #334155; border-radius: 6px; font-size: 0.85rem; }
+    #logBox { height: 160px; overflow-y: auto; background: #020617; border: 1px solid #1e293b; border-radius: 6px; padding: 8px; font-family: ui-monospace, monospace; font-size: 0.72rem; color: #cbd5e1; white-space: pre-wrap; }
+    .log-err { color: #f87171; }
+    .log-warn { color: #fbbf24; }
+    .log-ok { color: #34d399; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="card">
+      <h1>
+        <span>🧪 Stage B: WebGL Upload-Only Diagnostic</span>
+        <span class="badge">Minimal 2D Quad</span>
+      </h1>
+      <p style="font-size:0.75rem; color:#94a3b8; margin-top:4px;">
+        Tests pure <code>HTMLVideoElement &rarr; WebGL texture</code> upload cost without VR equirectangular projections, stereo dual-FBOs, lens distortion, or UI canvas.
+      </p>
+    </div>
+    <div class="card">
+      <label style="font-size:0.75rem; color:#94a3b8; font-weight:600;">Select Video Source:</label>
+      <select id="mediaSelect" style="margin-top:6px;"><option value="">Loading video list...</option></select>
+    </div>
+    <div class="card">
+      <label style="font-size:0.75rem; color:#94a3b8; font-weight:600;">Upload Experiment Mode (Isolated A/B):</label>
+      <div class="btn-row">
+        <button id="btnModeB1" class="btn-mode active" onclick="setUploadMode('B1_FLIP_Y')">B1: UNPACK_FLIP_Y=true (Current)</button>
+        <button id="btnModeB2" class="btn-mode" onclick="setUploadMode('B2_NO_FLIP_Y')">B2: UNPACK_FLIP_Y=false (Shader Compensated)</button>
+        <button id="btnModeB3" class="btn-mode" onclick="setUploadMode('B3_SUB_IMAGE')">B3: Preallocated texSubImage2D</button>
+      </div>
+    </div>
+    <div class="gl-container">
+      <canvas id="glCanvas"></canvas>
+    </div>
+    <div style="display:none;"><video id="hiddenVideo" playsinline preload="auto"></video></div>
+    <div class="card">
+      <div class="btn-row">
+        <button onclick="togglePlay()" id="btnPlay" style="background:#059669;">Play / Pause</button>
+        <button class="btn-seek" onclick="seekRelative(10)">+10s</button>
+        <button class="btn-seek" onclick="seekRelative(30)">+30s</button>
+        <button class="btn-seek" onclick="seekRelative(60)">+60s</button>
+        <button class="btn-seek" onclick="seekAbsolute(300)">Jump 5m (300s)</button>
+        <button class="btn-seek" onclick="seekAbsolute(600)">Jump 10m (600s)</button>
+        <button class="btn-seek" onclick="seekAbsolute(1200)">Jump 20m (1200s)</button>
+      </div>
+    </div>
+    <div class="card">
+      <h2 style="font-size:0.85rem; font-weight:700; color:#cbd5e1;">📊 Real-Time texImage2D &amp; Pipeline Telemetry</h2>
+      <div class="metric-grid">
+        <div class="metric-box"><div class="metric-label">Time / Duration</div><div class="metric-val" id="valTime">0.0s / 0.0s</div></div>
+        <div class="metric-box"><div class="metric-label">rAF / rVFC / Uploads</div><div class="metric-val" id="valCadence">0 / 0 / 0</div></div>
+        <div class="metric-box"><div class="metric-label">texImage2D Median</div><div class="metric-val" id="valUploadMed">0.00ms</div></div>
+        <div class="metric-box"><div class="metric-label">texImage2D p95 / Max</div><div class="metric-val" id="valUploadP95Max">0.0 / 0.0ms</div></div>
+        <div class="metric-box"><div class="metric-label">Spikes (&gt;16ms / &gt;33ms / &gt;100ms)</div><div class="metric-val" id="valSpikes">0 / 0 / 0</div></div>
+        <div class="metric-box"><div class="metric-label">Buffer Ahead / State</div><div class="metric-val" id="valBufferAhead">0.0s | Ready:0</div></div>
+      </div>
+      <div style="margin-top:8px; font-size:0.75rem; color:#94a3b8;"><b>Buffered Ranges:</b> <span id="valBufferedRanges" style="font-family:monospace; color:#cbd5e1;">None</span></div>
+    </div>
+    <div class="card">
+      <h2 style="font-size:0.85rem; font-weight:700; color:#cbd5e1; margin-bottom:6px;">📜 Diagnostic Event Log</h2>
+      <div id="logBox"></div>
+    </div>
+  </div>
+  <script>
+    const canvas = document.getElementById('glCanvas');
+    const video = document.getElementById('hiddenVideo');
+    const mediaSelect = document.getElementById('mediaSelect');
+    const logBox = document.getElementById('logBox');
+    const gl = canvas.getContext('webgl', { alpha: false, antialias: false, powerPreference: 'high-performance' });
+    let uploadMode = 'B1_FLIP_Y';
+    let currentTexAllocW = 0, currentTexAllocH = 0;
+    let videoTex = null;
+    let shaderProgram = null;
+    let uFlipYLoc = null;
+    let uploadDurationsWindow = [];
+    let rafCountWindow = 0, rvfcCountWindow = 0, uploadCountWindow = 0;
+    let lastWindowTime = performance.now();
+    let newFrameAvailable = false;
+
+    function log(msg, type = 'info') {
+      const time = new Date().toISOString().substring(11, 19);
+      const div = document.createElement('div');
+      div.className = type === 'error' ? 'log-err' : (type === 'warn' ? 'log-warn' : (type === 'ok' ? 'log-ok' : ''));
+      div.textContent = `[${time}] ${msg}`;
+      logBox.appendChild(div);
+      logBox.scrollTop = logBox.scrollHeight;
+      fetch('/api/log', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ level: type.toUpperCase(), message: `[UploadDiag:${uploadMode}] ` + msg })
+      }).catch(() => {});
+    }
+
+    function initGL() {
+      const vs = `
+        attribute vec2 aPosition;
+        varying vec2 vUv;
+        uniform int uFlipY;
+        void main() {
+          vec2 uv = aPosition * 0.5 + 0.5;
+          vUv = (uFlipY == 1) ? vec2(uv.x, 1.0 - uv.y) : uv;
+          gl_Position = vec4(aPosition, 0.0, 1.0);
+        }
+      `;
+      const fs = `
+        precision mediump float;
+        varying vec2 vUv;
+        uniform sampler2D uTex;
+        void main() {
+          gl_FragColor = texture2D(uTex, vUv);
+        }
+      `;
+      const vShader = gl.createShader(gl.VERTEX_SHADER);
+      gl.shaderSource(vShader, vs);
+      gl.compileShader(vShader);
+      const fShader = gl.createShader(gl.FRAGMENT_SHADER);
+      gl.shaderSource(fShader, fs);
+      gl.compileShader(fShader);
+      shaderProgram = gl.createProgram();
+      gl.attachShader(shaderProgram, vShader);
+      gl.attachShader(shaderProgram, fShader);
+      gl.linkProgram(shaderProgram);
+      gl.useProgram(shaderProgram);
+      uFlipYLoc = gl.getUniformLocation(shaderProgram, 'uFlipY');
+
+      const posBuf = gl.createBuffer();
+      gl.bindBuffer(gl.ARRAY_BUFFER, posBuf);
+      gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
+        -1, -1,  1, -1, -1,  1,
+        -1,  1,  1, -1,  1,  1
+      ]), gl.STATIC_DRAW);
+
+      const aPos = gl.getAttribLocation(shaderProgram, 'aPosition');
+      gl.enableVertexAttribArray(aPos);
+      gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 0, 0);
+
+      videoTex = gl.createTexture();
+      gl.bindTexture(gl.TEXTURE_2D, videoTex);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([10, 20, 30, 255]));
+    }
+
+    function setUploadMode(mode) {
+      uploadMode = mode;
+      document.querySelectorAll('.btn-mode').forEach(b => b.classList.remove('active'));
+      if (mode === 'B1_FLIP_Y') document.getElementById('btnModeB1').classList.add('active');
+      if (mode === 'B2_NO_FLIP_Y') document.getElementById('btnModeB2').classList.add('active');
+      if (mode === 'B3_SUB_IMAGE') document.getElementById('btnModeB3').classList.add('active');
+      currentTexAllocW = 0;
+      currentTexAllocH = 0;
+      log(`Switched Upload Mode to: ${mode}`, 'ok');
+    }
+
+    function doUploadTexture() {
+      if (video.readyState < 2) return;
+      gl.bindTexture(gl.TEXTURE_2D, videoTex);
+      const t0 = performance.now();
+      if (uploadMode === 'B1_FLIP_Y') {
+        gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, video);
+      } else if (uploadMode === 'B2_NO_FLIP_Y') {
+        gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, video);
+      } else if (uploadMode === 'B3_SUB_IMAGE') {
+        gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
+        const vw = video.videoWidth, vh = video.videoHeight;
+        if (vw !== currentTexAllocW || vh !== currentTexAllocH) {
+          gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, vw, vh, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+          currentTexAllocW = vw; currentTexAllocH = vh;
+        }
+        gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, gl.RGBA, gl.UNSIGNED_BYTE, video);
+      }
+      const dt = performance.now() - t0;
+      uploadDurationsWindow.push(dt);
+      uploadCountWindow++;
+    }
+
+    function renderLoop(now) {
+      rafCountWindow++;
+      if (newFrameAvailable) {
+        newFrameAvailable = false;
+        doUploadTexture();
+      }
+      if (canvas.width !== canvas.clientWidth || canvas.height !== canvas.clientHeight) {
+        canvas.width = canvas.clientWidth;
+        canvas.height = canvas.clientHeight;
+        gl.viewport(0, 0, canvas.width, canvas.height);
+      }
+      gl.useProgram(shaderProgram);
+      const needShaderFlip = (uploadMode !== 'B1_FLIP_Y') ? 1 : 0;
+      gl.uniform1i(uFlipYLoc, needShaderFlip);
+      gl.drawArrays(gl.TRIANGLES, 0, 6);
+      requestAnimationFrame(renderLoop);
+    }
+
+    function onRvfc() {
+      rvfcCountWindow++;
+      newFrameAvailable = true;
+      if (video.requestVideoFrameCallback) {
+        video.requestVideoFrameCallback(onRvfc);
+      }
+    }
+
+    function setupVideoCallbacks() {
+      if (video.requestVideoFrameCallback) {
+        video.requestVideoFrameCallback(onRvfc);
+      } else {
+        video.addEventListener('timeupdate', () => { newFrameAvailable = true; });
+      }
+      const evts = ['loadstart', 'loadedmetadata', 'canplay', 'seeking', 'seeked', 'waiting', 'stalled', 'playing', 'pause', 'error'];
+      evts.forEach(evt => {
+        video.addEventListener(evt, () => {
+          log(`Event: ${evt} at curTime=${(video.currentTime||0).toFixed(2)}s (BufferAhead=${getBufferAhead().toFixed(2)}s)`);
+        });
+      });
+    }
+
+    function getBufferAhead() {
+      if (!video.buffered || video.buffered.length === 0) return 0;
+      const cur = video.currentTime;
+      for (let i = 0; i < video.buffered.length; i++) {
+        const s = video.buffered.start(i), e = video.buffered.end(i);
+        if (cur >= s && cur <= e) return e - cur;
+      }
+      return 0;
+    }
+
+    function updateTelemetryHUD() {
+      const now = performance.now();
+      const elapsedSec = (now - lastWindowTime) / 1000;
+      if (elapsedSec >= 1.0) {
+        const rafRate = (rafCountWindow / elapsedSec).toFixed(1);
+        const rvfcRate = (rvfcCountWindow / elapsedSec).toFixed(1);
+        const upRate = (uploadCountWindow / elapsedSec).toFixed(1);
+        document.getElementById('valCadence').textContent = `${rafRate} / ${rvfcRate} / ${upRate}`;
+
+        let med = 0, p95 = 0, max = 0, g16 = 0, g33 = 0, g100 = 0;
+        if (uploadDurationsWindow.length > 0) {
+          const sorted = [...uploadDurationsWindow].sort((a, b) => a - b);
+          med = sorted[Math.floor(sorted.length * 0.5)];
+          p95 = sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * 0.95)) || 0];
+          max = sorted[sorted.length - 1];
+          g16 = sorted.filter(d => d > 16.7).length;
+          g33 = sorted.filter(d => d > 33.3).length;
+          g100 = sorted.filter(d => d > 100).length;
+        }
+
+        const elMed = document.getElementById('valUploadMed');
+        elMed.textContent = med.toFixed(2) + 'ms';
+        elMed.className = 'metric-val' + (med > 33 ? ' val-alert' : (med > 16 ? ' val-warn' : ''));
+        document.getElementById('valUploadP95Max').textContent = `${p95.toFixed(1)} / ${max.toFixed(1)}ms`;
+        document.getElementById('valSpikes').textContent = `${g16} / ${g33} / ${g100}`;
+        document.getElementById('valTime').textContent = `${(video.currentTime || 0).toFixed(1)}s / ${(video.duration || 0).toFixed(1)}s`;
+        document.getElementById('valBufferAhead').textContent = `${getBufferAhead().toFixed(2)}s | Ready:${video.readyState}`;
+
+        if (video.buffered && video.buffered.length > 0) {
+          const ranges = [];
+          for (let i = 0; i < video.buffered.length; i++) {
+            ranges.push(`[${video.buffered.start(i).toFixed(1)}s - ${video.buffered.end(i).toFixed(1)}s]`);
+          }
+          document.getElementById('valBufferedRanges').textContent = ranges.join(', ');
+        } else {
+          document.getElementById('valBufferedRanges').textContent = 'None';
+        }
+
+        rafCountWindow = 0; rvfcCountWindow = 0; uploadCountWindow = 0;
+        uploadDurationsWindow = [];
+        lastWindowTime = now;
+      }
+    }
+
+    async function loadVideos() {
+      try {
+        const res = await fetch('/api/videos');
+        const data = await res.json();
+        mediaSelect.innerHTML = '';
+        if (data.videos && data.videos.length > 0) {
+          data.videos.forEach(vpr => {
+            const opt = document.createElement('option');
+            opt.value = vpr.relPath;
+            opt.textContent = `[${vpr.sizeGB}] ${vpr.name}`;
+            mediaSelect.appendChild(opt);
+          });
+          const target = data.videos.find(v => v.name.includes('Aosaka Aoi')) || data.videos[0];
+          mediaSelect.value = target.relPath;
+          selectVideo(target.relPath);
+        }
+      } catch (e) { log('Failed to load videos: ' + e.message, 'error'); }
+    }
+
+    function selectVideo(relPath) {
+      log('Selecting: ' + relPath, 'ok');
+      video.src = '/video?path=' + encodeURIComponent(relPath);
+      video.load();
+      video.play().catch(() => {});
+    }
+
+    mediaSelect.addEventListener('change', (e) => { selectVideo(e.target.value); });
+
+    function togglePlay() {
+      if (video.paused) video.play();
+      else video.pause();
+    }
+
+    function seekRelative(sec) {
+      const target = Math.min(video.duration || 0, video.currentTime + sec);
+      log(`Seek relative +${sec}s -> ${target.toFixed(1)}s`, 'warn');
+      video.currentTime = target;
+    }
+
+    function seekAbsolute(sec) {
+      log(`Seek absolute -> ${sec}s`, 'warn');
+      video.currentTime = sec;
+    }
+
+    initGL();
+    setupVideoCallbacks();
+    requestAnimationFrame(renderLoop);
+    setInterval(updateTelemetryHUD, 200);
+    loadVideos();
+  </script>
+</body>
+</html>
