@@ -121,6 +121,7 @@ export class MediaController {
 
   selectVideo(relPath) {
     state.videoPath = relPath;
+    stallDetector.resetForMedia(relPath);
     this.hasLoggedFirstFrame = false;
     const now = performance.now();
     state.firstFrameTimings = {

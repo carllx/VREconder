@@ -5,8 +5,26 @@ let rangeRequestSeq = 0;
 const recentRangeLifecycles = [];
 const MAX_RANGE_HISTORY = 100;
 
-export function getRecentRangeLifecycles() {
-  return recentRangeLifecycles;
+export function getRecentRangeLifecycles(options = {}) {
+  const { sinceMs = null, mediaPath = null, limit = 20 } = options;
+  const now = Date.now();
+  let filtered = recentRangeLifecycles;
+
+  if (typeof sinceMs === 'number' && sinceMs > 0) {
+    const cutoff = now - sinceMs;
+    filtered = filtered.filter(r => (r.startTime >= cutoff || (r.endTime && r.endTime >= cutoff)));
+  }
+
+  if (typeof mediaPath === 'string' && mediaPath) {
+    const targetName = path.basename(mediaPath);
+    filtered = filtered.filter(r => r.mediaName === targetName || (r.fullPath && r.fullPath.includes(mediaPath)));
+  }
+
+  if (typeof limit === 'number' && limit > 0 && filtered.length > limit) {
+    filtered = filtered.slice(-limit);
+  }
+
+  return filtered;
 }
 
 export function resetRangeLifecycles() {
@@ -55,20 +73,45 @@ export function streamVideo(req, res, filePath) {
   const rawRange = req.headers ? (req.headers.range || null) : null;
   const mediaName = filePath ? path.basename(filePath) : '--';
 
+  const record = {
+    requestId: reqId,
+    mediaName: mediaName,
+    fullPath: filePath,
+    rangeHeader: rawRange,
+    requestedStart: null,
+    requestedEnd: null,
+    contentLength: 0,
+    status: 200,
+    startTime: startTime,
+    startTimestamp: new Date(startTime).toISOString(),
+    endTime: null,
+    endTimestamp: null,
+    durationMs: null,
+    outcome: 'in_progress',
+    contentRange: null
+  };
+
+  recentRangeLifecycles.push(record);
+  if (recentRangeLifecycles.length > MAX_RANGE_HISTORY) {
+    recentRangeLifecycles.shift();
+  }
+
+  const markFinal = (outcome, status, contentRange, contentLength) => {
+    if (record.endTime !== null) return;
+    const endTime = Date.now();
+    record.endTime = endTime;
+    record.endTimestamp = new Date(endTime).toISOString();
+    record.durationMs = endTime - startTime;
+    record.outcome = outcome;
+    record.status = status;
+    record.contentRange = contentRange || null;
+    if (typeof contentLength === 'number') record.contentLength = contentLength;
+  };
+
   if (!fs.existsSync(filePath)) {
     res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
     res.end('Video file not found: ' + filePath);
-    const endRecord = {
-      event: 'RANGE_FINISH',
-      requestId: reqId,
-      timestamp: new Date().toISOString(),
-      durationMs: 0,
-      outcome: 'not_found',
-      responseStatus: 404,
-      contentRange: null,
-      contentLength: 0
-    };
-    recentRangeLifecycles.push(endRecord);
+    markFinal('not_found', 404, null, 0);
     return;
   }
 
@@ -83,17 +126,7 @@ export function streamVideo(req, res, filePath) {
       'Access-Control-Allow-Origin': '*'
     });
     res.end();
-    const endRecord = {
-      event: 'RANGE_FINISH',
-      requestId: reqId,
-      timestamp: new Date().toISOString(),
-      durationMs: Date.now() - startTime,
-      outcome: 'head',
-      responseStatus: 200,
-      contentRange: null,
-      contentLength: fileSize
-    };
-    recentRangeLifecycles.push(endRecord);
+    markFinal('head', 200, null, fileSize);
     return;
   }
 
@@ -107,17 +140,7 @@ export function streamVideo(req, res, filePath) {
       'Access-Control-Allow-Origin': '*'
     });
     res.end();
-    const endRecord = {
-      event: 'RANGE_FINISH',
-      requestId: reqId,
-      timestamp: new Date().toISOString(),
-      durationMs: Date.now() - startTime,
-      outcome: 'unsatisfiable',
-      responseStatus: 416,
-      contentRange: rangeHeaderVal,
-      contentLength: 0
-    };
-    recentRangeLifecycles.push(endRecord);
+    markFinal('unsatisfiable', 416, rangeHeaderVal, 0);
     return;
   }
 
@@ -142,36 +165,21 @@ export function streamVideo(req, res, filePath) {
     headers['Content-Length'] = fileSize;
   }
 
-  console.log(`[RANGE_START #${reqId}] ${mediaName} | Range:${rawRange || 'none'} (${readStart}-${readEnd}) | Status:${statusCode} | Len:${headers['Content-Length']}`);
+  record.requestedStart = readStart;
+  record.requestedEnd = readEnd;
+  record.contentLength = headers['Content-Length'];
+  record.status = statusCode;
+  record.contentRange = headers['Content-Range'] || null;
 
   res.writeHead(statusCode, headers);
 
   const fileStream = fs.createReadStream(filePath, { start: readStart, end: readEnd });
 
-  let finalized = false;
   const finalize = (outcome) => {
-    if (finalized) return;
-    finalized = true;
     if (!fileStream.destroyed) {
       fileStream.destroy();
     }
-    const durationMs = Date.now() - startTime;
-    const endEventName = outcome === 'finish' ? 'RANGE_FINISH' : (outcome === 'aborted' ? 'RANGE_ABORT' : 'RANGE_CLOSE');
-    const endRecord = {
-      event: endEventName,
-      requestId: reqId,
-      timestamp: new Date().toISOString(),
-      durationMs,
-      outcome, // 'finish' | 'close' | 'aborted' | 'error'
-      responseStatus: statusCode,
-      contentRange: headers['Content-Range'] || null,
-      contentLength: headers['Content-Length']
-    };
-    recentRangeLifecycles.push(endRecord);
-    if (recentRangeLifecycles.length > MAX_RANGE_HISTORY) {
-      recentRangeLifecycles.shift();
-    }
-    console.log(`[${endEventName} #${reqId}] outcome:${outcome} | dur:${durationMs}ms | Status:${statusCode} | Range:${headers['Content-Range'] || '--'}`);
+    markFinal(outcome, statusCode, headers['Content-Range'], headers['Content-Length']);
   };
 
   fileStream.on('error', () => finalize('error'));

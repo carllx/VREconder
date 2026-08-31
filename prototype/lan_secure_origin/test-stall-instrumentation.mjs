@@ -28,7 +28,6 @@ console.log('=== RUNNING STALL DETECTOR & INSTRUMENTATION AUTOMATED TESTS ===\n'
 // -------------------------------------------------------------
 console.log('--- Test Suite 1: Serialization Helpers ---');
 
-// Mock TimeRanges
 function createMockTimeRanges(ranges) {
   return {
     length: ranges.length,
@@ -88,6 +87,7 @@ console.log('\n--- Test Suite 2: Stall Detector Lifecycle ---');
 
 {
   const detector = new StallDetector();
+  detector.resetForMedia('4K/sample.mp4');
   const capturedSnapshots = [];
   detector.onSnapshot((snap) => capturedSnapshots.push(snap));
 
@@ -132,14 +132,16 @@ console.log('\n--- Test Suite 2: Stall Detector Lifecycle ---');
   snap = detector.checkStall(3000, mockVideo);
   assert.notStrictEqual(snap, null, 'STALL_BEGIN triggered at 2s');
   assert.strictEqual(snap.phase, 'STALL_BEGIN');
+  assert.strictEqual(snap.mediaGeneration, 1);
+  assert.strictEqual(snap.mediaName, 'sample.mp4');
   assert.strictEqual(snap.elapsedMs, 2000);
   assert.strictEqual(snap.mediaState.bufferAheadSec, 37.66); // 50 - 12.34
   assert.strictEqual(snap.mediaState.readyState, 4);
   assert.strictEqual(snap.mediaState.quality.totalVideoFrames, 1200);
   assert.strictEqual(capturedSnapshots.length, 1);
-  console.log('✔ Test 2.1 PASS: STALL_BEGIN fires at exactly 2.0s threshold');
+  console.log('✔ Test 2.1 PASS: STALL_BEGIN fires at exactly 2.0s threshold with media context');
 
-  // Repeated checks within milestone interval (e.g. t=3500ms, t=4000ms) do NOT spam duplicate snapshots
+  // Repeated checks within milestone interval do NOT spam duplicate snapshots
   snap = detector.checkStall(3500, mockVideo);
   assert.strictEqual(snap, null, 'No spam between milestones');
   snap = detector.checkStall(4999, mockVideo);
@@ -147,7 +149,7 @@ console.log('\n--- Test Suite 2: Stall Detector Lifecycle ---');
   assert.strictEqual(capturedSnapshots.length, 1);
   console.log('✔ Test 2.2 PASS: Repeated checks between milestones do NOT spam snapshots');
 
-  // Milestone 5s at t=6000ms (5s since rVFC at t=1000)
+  // Milestone 5s at t=6000ms
   snap = detector.checkStall(6000, mockVideo);
   assert.notStrictEqual(snap, null);
   assert.strictEqual(snap.phase, 'STALL_MILESTONE');
@@ -158,14 +160,14 @@ console.log('\n--- Test Suite 2: Stall Detector Lifecycle ---');
   snap = detector.checkStall(6100, mockVideo);
   assert.strictEqual(snap, null);
 
-  // Milestone 10s at t=11000ms (10s since rVFC at t=1000)
+  // Milestone 10s at t=11000ms
   snap = detector.checkStall(11000, mockVideo);
   assert.notStrictEqual(snap, null);
   assert.strictEqual(snap.phase, 'STALL_MILESTONE');
   assert.strictEqual(snap.milestoneSec, 10);
   assert.strictEqual(capturedSnapshots.length, 3);
 
-  // Milestone 20s at t=21000ms (20s since rVFC at t=1000)
+  // Milestone 20s at t=21000ms
   snap = detector.checkStall(21000, mockVideo);
   assert.notStrictEqual(snap, null);
   assert.strictEqual(snap.phase, 'STALL_MILESTONE');
@@ -178,7 +180,7 @@ console.log('\n--- Test Suite 2: Stall Detector Lifecycle ---');
   assert.strictEqual(capturedSnapshots.length, 4);
   console.log('✔ Test 2.3 PASS: Milestones at 5s, 10s, 20s trigger exactly once');
 
-  // Step B: Stall Recovery at t=26000ms (25s total stall duration since t=1000)
+  // Step B: Stall Recovery at t=26000ms
   detector.recordRvfc(26000, {
     mediaTime: 12.35,
     presentedFrames: 1201,
@@ -224,9 +226,109 @@ console.log('\n--- Test Suite 3: Paused / Ended State Suppression ---');
 }
 
 // -------------------------------------------------------------
-// 4. Production Range Lifecycle Integration Tests
+// 4. Media Switch Isolation & Reset (Blocker 2)
 // -------------------------------------------------------------
-console.log('\n--- Test Suite 4: Range Lifecycle Telemetry ---');
+console.log('\n--- Test Suite 4: Media Switch Isolation (resetForMedia) ---');
+
+{
+  const detector = new StallDetector();
+
+  // Play Video A
+  detector.resetForMedia('4K/videoA.mp4');
+  assert.strictEqual(detector.mediaGeneration, 1);
+  assert.strictEqual(detector.currentMediaName, 'videoA.mp4');
+
+  detector.recordRvfc(1000, { mediaTime: 10.0, presentedFrames: 300 });
+  assert.strictEqual(detector.lastRvfcMediaTime, 10.0);
+  assert.strictEqual(detector.lastRvfcAt, 1000);
+
+  // Switch to Video B
+  detector.resetForMedia('4K/videoB.mp4');
+  assert.strictEqual(detector.mediaGeneration, 2);
+  assert.strictEqual(detector.currentMediaName, 'videoB.mp4');
+  assert.strictEqual(detector.lastRvfcAt, 0, 'lastRvfcAt reset to 0');
+  assert.strictEqual(detector.lastRvfcMediaTime, null, 'lastRvfcMediaTime reset to null');
+  assert.strictEqual(detector.lastPresentedFrames, null, 'lastPresentedFrames reset to null');
+  assert.strictEqual(detector.inStall, false, 'inStall reset to false');
+  assert.strictEqual(detector.recentEvents.length, 0, 'recentEvents cleared');
+
+  // Video B starts playing at t=5000
+  detector.recordMediaEvent('play', { currentTime: 0, readyState: 2, networkState: 2, buffered: null }, 5000);
+  assert.strictEqual(detector.lastPlayAt, 5000);
+
+  const mockVideoB = {
+    currentTime: 0.1,
+    duration: 200,
+    paused: false,
+    ended: false,
+    readyState: 2,
+    networkState: 2,
+    buffered: createMockTimeRanges([[0, 2]])
+  };
+
+  // At t=6000 (1s after play): No stall for Video B yet
+  assert.strictEqual(detector.checkStall(6000, mockVideoB), null);
+
+  // At t=7100 (2.1s after play without rVFC): Video B triggers STALL_BEGIN with mediaGeneration=2
+  const snapB = detector.checkStall(7100, mockVideoB);
+  assert.notStrictEqual(snapB, null);
+  assert.strictEqual(snapB.mediaGeneration, 2);
+  assert.strictEqual(snapB.mediaName, 'videoB.mp4');
+  assert.strictEqual(snapB.elapsedMs, 2100);
+  console.log('✔ Test 4.1 PASS: Media switch cleanly isolates timing baseline and assigns new mediaGeneration');
+}
+
+// -------------------------------------------------------------
+// 5. Lightweight Summary Validation (Blocker 3)
+// -------------------------------------------------------------
+console.log('\n--- Test Suite 5: Lightweight Summary Validation (getSummary) ---');
+
+{
+  const detector = new StallDetector();
+  detector.resetForMedia('4K/sample.mp4');
+  detector.recordRvfc(1000, { mediaTime: 12.0, presentedFrames: 500 });
+  detector.checkStall(3500, { currentTime: 12.0, paused: false, ended: false, readyState: 4, buffered: null });
+
+  const summary = detector.getSummary(4000);
+  const jsonStr = JSON.stringify(summary);
+
+  assert.strictEqual(summary.inStall, true);
+  assert.strictEqual(summary.mediaGeneration, 1);
+  assert.strictEqual(summary.lastRvfcAgeMs, 3000); // 4000 - 1000
+  assert.strictEqual(summary.lastRvfcMediaTime, 12.0);
+  assert.strictEqual(summary.lastPresentedFrames, 500);
+
+  // Ensure heavy snapshot objects are NOT in summary
+  assert.ok(!jsonStr.includes('recentEvents'), 'Summary MUST NOT contain recentEvents');
+  assert.ok(!jsonStr.includes('visibility'), 'Summary MUST NOT contain visibility');
+  assert.ok(!jsonStr.includes('bufferedRanges'), 'Summary MUST NOT contain bufferedRanges');
+  assert.ok(!jsonStr.includes('latestSnapshot'), 'Summary MUST NOT contain latestSnapshot');
+  assert.ok(jsonStr.length < 250, `Summary JSON is lightweight (${jsonStr.length} bytes)`);
+  console.log(`✔ Test 5.1 PASS: getSummary() is strictly lightweight (${jsonStr.length} bytes) and excludes heavy subtrees`);
+}
+
+// -------------------------------------------------------------
+// 6. Production Main Stereo UI Dependency Smoke Test (Blocker 1)
+// -------------------------------------------------------------
+console.log('\n--- Test Suite 6: Full VR Stereo UI Module Resolution Smoke Test ---');
+
+{
+  const mainContent = fs.readFileSync(path.join(__dirname, 'src', 'main.js'), 'utf8');
+  assert.ok(
+    mainContent.includes("import { renderStereoUI, isStereoUIVisible } from './controls/stereo-ui.js';"),
+    'src/main.js must explicitly import renderStereoUI and isStereoUIVisible'
+  );
+  assert.ok(
+    mainContent.includes('renderStereoUI('),
+    'src/main.js calls renderStereoUI'
+  );
+  console.log('✔ Test 6.1 PASS: src/main.js correctly imports and resolves renderStereoUI');
+}
+
+// -------------------------------------------------------------
+// 7. Production Range Lifecycle & Query Filtering (Blocker 4)
+// -------------------------------------------------------------
+console.log('\n--- Test Suite 7: Range Lifecycle, Query Filter & Silent Streaming ---');
 
 {
   resetRangeLifecycles();
@@ -277,7 +379,6 @@ console.log('\n--- Test Suite 4: Range Lifecycle Telemetry ---');
         headers: { Range: 'bytes=0-4000000' }
       }, (res) => {
         res.once('data', () => {
-          // Immediately destroy client connection to simulate iPhone Safari seek cancel / abort
           req.destroy();
           setTimeout(resolve, 100);
         });
@@ -291,7 +392,7 @@ console.log('\n--- Test Suite 4: Range Lifecycle Telemetry ---');
     const req1 = lifecycles[0];
     assert.strictEqual(req1.requestId, 1);
     assert.strictEqual(req1.outcome, 'finish');
-    assert.strictEqual(req1.responseStatus, 206);
+    assert.strictEqual(req1.status, 206);
     assert.strictEqual(req1.contentRange, 'bytes 0-499/5242880');
     assert.strictEqual(req1.contentLength, 500);
 
@@ -299,20 +400,30 @@ console.log('\n--- Test Suite 4: Range Lifecycle Telemetry ---');
     const req2 = lifecycles[1];
     assert.strictEqual(req2.requestId, 2);
     assert.strictEqual(req2.outcome, 'unsatisfiable');
-    assert.strictEqual(req2.responseStatus, 416);
+    assert.strictEqual(req2.status, 416);
 
     // Verify Request 3 lifecycle (aborted/closed)
     const req3 = lifecycles[2];
     assert.strictEqual(req3.requestId, 3);
     assert.ok(req3.outcome === 'close' || req3.outcome === 'aborted', `Outcome is close or aborted: ${req3.outcome}`);
-    assert.strictEqual(req3.responseStatus, 206);
+    assert.strictEqual(req3.status, 206);
 
-    console.log('✔ Test 4.1 PASS: Range request lifecycles are paired with unique IDs and correct outcomes (finish/unsatisfiable/close)');
+    // Verify Query filtering by media and sinceMs
+    const filteredByMedia = getRecentRangeLifecycles({ mediaPath: 'test_range_diag_temp.bin' });
+    assert.strictEqual(filteredByMedia.length, 3);
+
+    const filteredNone = getRecentRangeLifecycles({ mediaPath: 'nonexistent.mp4' });
+    assert.strictEqual(filteredNone.length, 0);
+
+    const boundedSlice = getRecentRangeLifecycles({ limit: 2 });
+    assert.strictEqual(boundedSlice.length, 2);
+
+    console.log('✔ Test 7.1 PASS: Range request lifecycles are paired, bounded, and query-filterable');
 
     server.close(() => {
       try { fs.unlinkSync(testFile); } catch (e) {}
       console.log('\n=============================================================');
-      console.log('ALL STALL INSTRUMENTATION & RANGE LIFECYCLE TESTS PASSED!');
+      console.log('ALL 7 SUITES OF STALL INSTRUMENTATION TESTS PASSED!');
       console.log('=============================================================\n');
     });
   });

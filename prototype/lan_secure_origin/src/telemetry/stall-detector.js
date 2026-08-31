@@ -118,6 +118,11 @@ export class StallDetector {
     this.video = null;
     this.boundListeners = [];
 
+    // Media Context & Generation
+    this.mediaGeneration = 0;
+    this.currentMediaPath = '';
+    this.currentMediaName = '';
+
     // rVFC Tracking (In-memory only)
     this.lastRvfcAt = 0; // performance.now()
     this.lastRvfcWallClock = 0; // Date.now()
@@ -143,6 +148,28 @@ export class StallDetector {
     // Summary statistics
     this.stallCount = 0;
     this.totalStallDurationMs = 0;
+    this.latestSnapshot = null;
+  }
+
+  resetForMedia(mediaPath = '') {
+    this.mediaGeneration++;
+    this.currentMediaPath = mediaPath || '';
+    this.currentMediaName = mediaPath ? mediaPath.split('/').pop() : '';
+
+    // Reset per-media timing and stall state
+    this.lastRvfcAt = 0;
+    this.lastRvfcWallClock = 0;
+    this.lastRvfcMediaTime = null;
+    this.lastPresentedFrames = null;
+    this.lastRvfcMetadata = null;
+    this.lastPlayAt = 0;
+
+    this.inStall = false;
+    this.stallDetectedAt = 0;
+    this.stallWallClockStart = 0;
+    this.stallMilestonesTriggered.clear();
+
+    this.recentEvents = [];
     this.latestSnapshot = null;
   }
 
@@ -200,8 +227,7 @@ export class StallDetector {
     }
   }
 
-  recordMediaEvent(eventName, video = this.video) {
-    const now = typeof performance !== 'undefined' ? performance.now() : Date.now();
+  recordMediaEvent(eventName, video = this.video, now = (typeof performance !== 'undefined' ? performance.now() : Date.now())) {
     const evt = {
       timestamp: new Date().toISOString(),
       timeMs: Number(now.toFixed(1)),
@@ -320,9 +346,14 @@ export class StallDetector {
     const bufRanges = serializeBufferedRanges(video ? video.buffered : null);
     const bufAhead = calculateBufferAhead(video ? video.buffered : null, curTime);
 
+    const mName = this.currentMediaName || (this.currentMediaPath ? this.currentMediaPath.split('/').pop() : '');
+
     return {
       type: 'STALL_SNAPSHOT',
       phase: phase, // 'STALL_BEGIN' | 'STALL_MILESTONE' | 'STALL_RECOVERED'
+      mediaGeneration: this.mediaGeneration,
+      mediaPath: this.currentMediaPath,
+      mediaName: mName,
       timestamp: new Date().toISOString(),
       elapsedMs: typeof extra.elapsedMs === 'number' ? extra.elapsedMs : (typeof extra.stallDurationMs === 'number' ? extra.stallDurationMs : 0),
       stallDurationMs: typeof extra.stallDurationMs === 'number' ? extra.stallDurationMs : (typeof extra.elapsedMs === 'number' ? extra.elapsedMs : 0),
@@ -356,15 +387,18 @@ export class StallDetector {
     };
   }
 
-  getSummary() {
+  getSummary(now = (typeof performance !== 'undefined' ? performance.now() : Date.now())) {
+    const lastRvfcAgeMs = this.lastRvfcAt > 0 ? Math.round(now - this.lastRvfcAt) : null;
     return {
       inStall: this.inStall,
       stallCount: this.stallCount,
       totalStallDurationMs: this.totalStallDurationMs,
-      lastRvfcAt: this.lastRvfcAt,
+      mediaGeneration: this.mediaGeneration,
+      mediaPath: this.currentMediaPath,
+      mediaName: this.currentMediaName,
+      lastRvfcAgeMs: lastRvfcAgeMs,
       lastRvfcMediaTime: this.lastRvfcMediaTime,
-      lastPresentedFrames: this.lastPresentedFrames,
-      latestSnapshot: this.latestSnapshot
+      lastPresentedFrames: this.lastPresentedFrames
     };
   }
 }

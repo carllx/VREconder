@@ -14,7 +14,7 @@ import {
   scanRealVRVideos,
   getCachedVideos
 } from './src/server/cert-helper.mjs';
-import { streamVideo } from './src/media/video-streamer.mjs';
+import { streamVideo, getRecentRangeLifecycles } from './src/media/video-streamer.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -127,9 +127,21 @@ function handleRequest(req, res, isHttps) {
     req.on('end', () => {
       try {
         const item = JSON.parse(body);
+        const isStall = (typeof item.message === 'string' && item.message.startsWith('STALL_')) || (item.data && item.data.type === 'STALL_SNAPSHOT');
+        if (isStall) {
+          const stallData = item.data || {};
+          const mediaPath = stallData.mediaPath || (stallData.mediaState ? stallData.mediaState.mediaPath : null);
+          const rangeSlice = getRecentRangeLifecycles({ sinceMs: 30000, mediaPath: mediaPath, limit: 10 });
+          stallData.serverRangeEvidence = rangeSlice;
+          item.data = stallData;
+        }
         const line = `[${new Date().toISOString()}] [${req.socket.remoteAddress}] [${item.level || 'INFO'}] ${item.message} ${item.data ? JSON.stringify(item.data) : ''}\n`;
         fs.appendFileSync(path.join(__dirname, 'live_client.log'), line);
-        console.log(`[Client Log] ${item.level}: ${item.message}`);
+        if (isStall) {
+          console.warn(`[Stall Evidence Correlated] ${item.message} | Media: ${item.data?.mediaName || '--'} | Attached ${item.data?.serverRangeEvidence?.length || 0} server Range records`);
+        } else {
+          console.log(`[Client Log] ${item.level}: ${item.message}`);
+        }
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ ok: true }));
       } catch (e) {

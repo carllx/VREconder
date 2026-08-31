@@ -9,6 +9,7 @@ import { DiagnosticOverlay } from './render/diagnostic-overlay.js';
 import { MediaController } from './media/playback.js';
 import { CommandModel } from './controls/command-model.js';
 import { GazeEngine } from './controls/gaze-engine.js';
+import { renderStereoUI, isStereoUIVisible } from './controls/stereo-ui.js';
 import { telemetry, perfTelemetry, stallDetector } from './telemetry/telemetry.js';
 import { initAudioContext } from './controls/audio-haptics.js';
 import { profileStorage, computeMediaFingerprint, getEffectiveViewerProfile } from './core/projection-profile.js';
