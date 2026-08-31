@@ -63,13 +63,52 @@ export async function inspectMoovPlacement(filePath) {
   });
 }
 
+function resolveBitDepthFromStream(videoStream) {
+  if (!videoStream) return null;
+  if (videoStream.bits_per_raw_sample) {
+    const rawBps = parseInt(videoStream.bits_per_raw_sample, 10);
+    if (!isNaN(rawBps) && rawBps > 0) {
+      return rawBps;
+    }
+  }
+  const lowerPix = (videoStream.pix_fmt || '').toLowerCase();
+  const lowerProf = (videoStream.profile || '').toLowerCase();
+  if (lowerPix.includes('10') || lowerPix.includes('p010') || lowerProf.includes('main 10') || lowerProf.includes('high 10')) {
+    return 10;
+  }
+  if (['yuv420p', 'yuvj420p', 'nv12', 'nv21', 'yuv422p', 'yuvj422p', 'yuv444p', 'yuvj444p', 'rgb24', 'bgr24', 'rgba', 'bgra', 'gbrp'].includes(lowerPix) && !lowerProf.includes('10')) {
+    return 8;
+  }
+  return null;
+}
+
+function mapVideoStreamFact(v) {
+  if (!v) return null;
+  return {
+    codec: v.codec_name || 'unknown',
+    codecTag: (v.codec_tag_string || '').replace(/[^\x20-\x7E]/g, '').trim(),
+    profile: v.profile || 'unknown',
+    level: v.level ?? -1,
+    pixFmt: v.pix_fmt || 'unknown',
+    bitDepth: resolveBitDepthFromStream(v),
+    width: v.width || 0,
+    height: v.height || 0,
+    rFps: v.r_frame_rate || '',
+    avgFps: v.avg_frame_rate || '',
+    durationSec: parseFloat(v.duration || '0')
+  };
+}
+
 /**
  * Runs ffprobe on a file and extracts structured facts.
+ * Supports job-scoped child process registration and cancellation.
  * 
  * @param {string} filePath 
+ * @param {object} options - { onChildProcess, isCancelled }
  * @returns {Promise<object | null>}
  */
-export async function probeMediaFacts(filePath) {
+export async function probeMediaFacts(filePath, options = {}) {
+  if (options.isCancelled?.()) return null;
   const fp = getMediaFingerprint(filePath);
   if (!fp) return null;
 
@@ -78,6 +117,7 @@ export async function probeMediaFacts(filePath) {
   }
 
   return new Promise((resolve) => {
+    if (options.isCancelled?.()) return resolve(null);
     const args = [
       '-v', 'error',
       '-print_format', 'json',
@@ -87,6 +127,7 @@ export async function probeMediaFacts(filePath) {
     ];
 
     const child = spawn('ffprobe', args, { stdio: ['ignore', 'pipe', 'pipe'] });
+    options.onChildProcess?.(child);
     let stdout = '';
     let stderr = '';
 
@@ -96,6 +137,7 @@ export async function probeMediaFacts(filePath) {
     child.on('error', () => resolve(null));
 
     child.on('close', async (code) => {
+      if (options.isCancelled?.()) return resolve(null);
       if (code !== 0 || !stdout.trim()) {
         return resolve(null);
       }
@@ -105,61 +147,31 @@ export async function probeMediaFacts(filePath) {
         const format = raw.format || {};
         const streams = raw.streams || [];
 
-        const videoStream = streams.find(s => s.codec_type === 'video') || null;
+        const videoStreams = streams.filter(s => s.codec_type === 'video');
         const audioStreams = streams.filter(s => s.codec_type === 'audio');
+        const subtitleStreams = streams.filter(s => s.codec_type === 'subtitle');
 
-        let videoCodec = videoStream ? videoStream.codec_name : 'unknown';
-        let videoTag = videoStream ? (videoStream.codec_tag_string || '').replace(/[^\x20-\x7E]/g, '').trim() : '';
-        let profile = videoStream ? (videoStream.profile || 'unknown') : 'unknown';
-        let level = videoStream ? (videoStream.level ?? -1) : -1;
-        let pixFmt = videoStream ? (videoStream.pix_fmt || 'unknown') : 'unknown';
-        let bitDepth = null;
-        if (videoStream && videoStream.bits_per_raw_sample) {
-          const rawBps = parseInt(videoStream.bits_per_raw_sample, 10);
-          if (!isNaN(rawBps) && rawBps > 0) {
-            bitDepth = rawBps;
-          }
+        const primaryVideo = videoStreams[0] || null;
+        const primaryVideoFact = mapVideoStreamFact(primaryVideo);
+        if (primaryVideoFact && format.duration && !primaryVideoFact.durationSec) {
+          primaryVideoFact.durationSec = parseFloat(format.duration) || 0;
         }
-        if (bitDepth === null) {
-          const lowerPix = pixFmt.toLowerCase();
-          const lowerProf = profile.toLowerCase();
-          if (lowerPix.includes('10') || lowerPix.includes('p010') || lowerProf.includes('main 10') || lowerProf.includes('high 10')) {
-            bitDepth = 10;
-          } else if (['yuv420p', 'yuvj420p', 'nv12', 'nv21', 'yuv422p', 'yuvj422p', 'yuv444p', 'yuvj444p', 'rgb24', 'bgr24', 'rgba', 'bgra', 'gbrp'].includes(lowerPix) && !lowerProf.includes('10')) {
-            bitDepth = 8;
-          }
-        }
-
-        const width = videoStream ? (videoStream.width || 0) : 0;
-        const height = videoStream ? (videoStream.height || 0) : 0;
-        const rFps = videoStream ? (videoStream.r_frame_rate || '') : '';
-        const avgFps = videoStream ? (videoStream.avg_frame_rate || '') : '';
-        const durationSec = parseFloat(format.duration || (videoStream ? videoStream.duration : 0)) || 0;
 
         const moovLocation = await inspectMoovPlacement(filePath);
 
         const facts = {
           fingerprint: fp,
           containerFormat: format.format_name || path.extname(filePath).slice(1),
-          video: videoStream ? {
-            codec: videoCodec,
-            codecTag: videoTag,
-            profile,
-            level,
-            pixFmt,
-            bitDepth,
-            width,
-            height,
-            rFps,
-            avgFps,
-            durationSec
-          } : null,
+          videoCount: videoStreams.length,
+          videoStreams: videoStreams.map(v => mapVideoStreamFact(v)),
+          video: primaryVideoFact,
           audioCount: audioStreams.length,
           audioStreams: audioStreams.map(a => ({
             codec: a.codec_name,
             channels: a.channels,
             sampleRate: a.sample_rate
           })),
+          subtitleCount: subtitleStreams.length,
           moovLocation,
           probedAt: new Date().toISOString()
         };

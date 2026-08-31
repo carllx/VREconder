@@ -58,6 +58,14 @@ export function classifyMedia(filePath, facts) {
     };
   }
 
+  if (facts.videoCount && facts.videoCount > 1) {
+    return {
+      classification: MediaClass.UNSUPPORTED_UNKNOWN_FIX,
+      reason: `Multi-video stream container (${facts.videoCount} video streams) not certified for destructive normalization`,
+      repairCandidate: null
+    };
+  }
+
   const v = facts.video;
   const ext = path.extname(filePath).toLowerCase();
   const codec = (v.codec || '').toLowerCase();

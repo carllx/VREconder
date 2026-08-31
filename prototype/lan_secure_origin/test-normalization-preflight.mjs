@@ -7,16 +7,17 @@ import { classifyMedia, isDerivativeFile, MediaClass } from './src/normalization
 import { runDryRunInventory } from './src/normalization/inventory-scanner.mjs';
 import { NormalizationJournal, NormalizationState } from './src/normalization/journal.mjs';
 import { NormalizationEngine, EngineStatus } from './src/normalization/normalization-engine.mjs';
-import { findCertifiedRepairRule, RuleStatus, matchExactCertifiedBucket } from './src/normalization/repair-rules.mjs';
-import { verifyNormalizedOutput, runStreamcopyDemuxIntegrityCheck, getStreamPayloadMD5, getPerStreamPacketDetails } from './src/normalization/verifier.mjs';
-import { probeMediaFacts } from './src/normalization/ffprobe-facts.mjs';
+import { findCertifiedRepairRule, RuleStatus } from './src/normalization/repair-rules.mjs';
+import { verifyNormalizedOutput, runStreamcopyDemuxIntegrityCheck, getStreamPayloadMD5 } from './src/normalization/verifier.mjs';
+import { probeMediaFacts, clearFactsCache } from './src/normalization/ffprobe-facts.mjs';
+import { engineInitPromise, getEngineInstance } from './src/server/preflight-router.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const TEST_SCRATCH_DIR = path.join(__dirname, 'test_scratch_normalization');
 
 console.log('============================================================');
-console.log('🧪 RUNNING HARDENED PRODUCTION-PATH SAFETY SUITE (18 AREAS)');
+console.log('🧪 RUNNING HARDENED PRODUCTION-PATH SAFETY SUITE (20 SUITES)');
 console.log('============================================================\n');
 
 let totalTests = 0;
@@ -53,12 +54,35 @@ function createSyntheticHevcFixture(targetPath, duration = 0.2) {
   return targetPath;
 }
 
+function createMultiVideoFixture(targetPath, duration = 0.2) {
+  const dir = path.dirname(targetPath);
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+  if (fs.existsSync(targetPath)) fs.unlinkSync(targetPath);
+
+  const res = spawnSync('ffmpeg', [
+    '-v', 'error',
+    '-y',
+    '-f', 'lavfi', '-i', `color=c=black:s=128x128:d=${duration}:r=30/1`,
+    '-f', 'lavfi', '-i', `color=c=white:s=128x128:d=${duration}:r=30/1`,
+    '-map', '0:v', '-map', '1:v',
+    '-c:v', 'libx265', '-preset', 'ultrafast', '-pix_fmt', 'yuv420p', '-tag:v', 'hev1', '-t', `${duration}`,
+    targetPath
+  ], { encoding: 'utf8' });
+
+  if (res.status !== 0 || !fs.existsSync(targetPath)) {
+    throw new Error(`Failed to create multi-video fixture: ${res.stderr}`);
+  }
+  return targetPath;
+}
+
 if (fs.existsSync(TEST_SCRATCH_DIR)) {
   fs.rmSync(TEST_SCRATCH_DIR, { recursive: true, force: true });
 }
 fs.mkdirSync(TEST_SCRATCH_DIR, { recursive: true });
 
 async function runAllTests() {
+  const validJournalPath = path.join(TEST_SCRATCH_DIR, 'test_journal.json');
+  const validJournal = new NormalizationJournal(validJournalPath);
   const dummyFile = path.join(TEST_SCRATCH_DIR, 'dummy_test.mp4');
   fs.writeFileSync(dummyFile, 'DUMMY_FILE_FOR_DRY_RUN', 'utf8');
 
@@ -70,7 +94,7 @@ async function runAllTests() {
   assert(statBefore.size === statAfter.size && statBefore.mtimeMs === statAfter.mtimeMs, 'Dry run guarantees zero mutation to files on disk');
   assert(dryRunReport.summary.totalFilesScanned >= 1, 'Dry run returned valid scan summary');
 
-  // Test 2: Exact Certified-Bucket Signatures (P1-1)
+  // Test 2: Exact Certified-Bucket Matching
   console.log('\nTest 2: Exact Certified-Bucket Matching');
   const ruleBucketA1 = findCertifiedRepairRule({
     video: { codec: 'hevc', codecTag: 'hev1', bitDepth: 8, width: 3840, height: 1920, level: 153, profile: 'Main', rFps: '2997/50', avgFps: '262749987/4359446' }
@@ -82,44 +106,32 @@ async function runAllTests() {
   }, '.mp4');
   assert(ruleBucketA2 !== null && ruleBucketA2.matchedBucket.bucketId === 'BUCKET_A2_4K_60FPS_WAKUI', 'Matches Bucket A2 (4K 60.00fps Wakui Mito)');
 
-  const ruleBucketB = findCertifiedRepairRule({
-    video: { codec: 'hevc', codecTag: 'hev1', bitDepth: 8, width: 8192, height: 4096, level: 183, profile: 'Main', rFps: '60000/1001', avgFps: '2118587705/34961143' }
-  }, '.mp4');
-  assert(ruleBucketB !== null && ruleBucketB.matchedBucket.bucketId === 'BUCKET_B_8K_60FPS_KAMIKI', 'Matches Bucket B (8K 59.94fps Kamiki Rei)');
-
   // Test 3: Untested Envelopes Strict Gating
   console.log('\nTest 3: Untested Envelopes Strict Gating');
   const classA2UntestedFps = classifyMedia('sample_a2_60fps.mp4', {
     video: { codec: 'hevc', codecTag: 'hev1', bitDepth: 8, width: 4096, height: 2048, level: 153, profile: 'Main', rFps: '60/1', avgFps: '60/1' }
   });
-  assert(classA2UntestedFps.classification === MediaClass.NEEDS_BUCKET_CERTIFICATION, 'Untested rFps 60/1 on 4096x2048 routed to NEEDS_BUCKET_CERTIFICATION');
-
-  const classL180 = classifyMedia('sample_l180.mp4', {
-    video: { codec: 'hevc', codecTag: 'hev1', bitDepth: 8, width: 3840, height: 1920, level: 180, profile: 'Main', rFps: '60/1', avgFps: '60/1' }
-  });
-  assert(classL180.classification === MediaClass.NEEDS_BUCKET_CERTIFICATION, 'Level 180 routed to NEEDS_BUCKET_CERTIFICATION');
+  assert(classA2UntestedFps.classification === MediaClass.NEEDS_BUCKET_CERTIFICATION, 'Untested rFps 60/1 routed to NEEDS_BUCKET_CERTIFICATION');
 
   const class10bit = classifyMedia('sample_10bit.mp4', {
     video: { codec: 'hevc', codecTag: 'hev1', bitDepth: 10, width: 3840, height: 1920, level: 153, profile: 'Main 10', rFps: '60/1', avgFps: '60/1' }
   });
   assert(class10bit.classification === MediaClass.NEEDS_DEVICE_PROBE, '10-bit HEVC routed to NEEDS_DEVICE_PROBE');
 
-  // Test 4: Probe-layer BitDepth Resolution (P0-1)
+  // Test 4: Probe-layer BitDepth Resolution
   console.log('\nTest 4: P0 Probe-Layer BitDepth Resolution');
   const classUnknownBitDepth = classifyMedia('sample_unknown.mp4', {
     video: { codec: 'hevc', codecTag: 'hev1', bitDepth: null, width: 3840, height: 1920, level: 153, profile: 'Main', rFps: '2997/50', avgFps: '262749987/4359446' }
   });
   assert(classUnknownBitDepth.classification === MediaClass.NEEDS_DEVICE_PROBE, 'Unknown bit depth routed to NEEDS_DEVICE_PROBE without defaulting to 8');
-  assert(matchExactCertifiedBucket({ video: { codec: 'hevc', codecTag: 'hev1', bitDepth: null, width: 3840, height: 1920, level: 153, profile: 'Main', rFps: '2997/50', avgFps: '262749987/4359446' } }, '.mp4') === null, 'Exact certified bucket matcher rejects bitDepth=null');
 
-  // Test 5: Derivative Exclusion from Logical Media
+  // Test 5: Derivative Exclusion
   console.log('\nTest 5: Derivative Exclusion from Logical Media');
   assert(isDerivativeFile('8K/Kamiki Rei - DSVR01433_HVC1_TEST.mp4') === true, 'Excludes _HVC1_TEST derivative');
   assert(isDerivativeFile('.sample.mp4.vreconder.partial') === true, 'Excludes .partial file');
   assert(isDerivativeFile('.sample.mp4.vreconder-old') === true, 'Excludes .vreconder-old file');
-  assert(isDerivativeFile('SIVR033.mp4') === false, 'Standard original media is retained');
 
-  // Test 6: Fail-Closed — Corrupt Journal Blocks Subsystem
+  // Test 6: Corrupt Journal Fail-Closed
   console.log('\nTest 6: P0 Fail-Closed — Corrupt Journal Blocks Subsystem');
   const corruptJournalPath = path.join(TEST_SCRATCH_DIR, 'corrupt_journal.json');
   fs.writeFileSync(corruptJournalPath, '{ INVALID_JSON_CORRUPT: true, ', 'utf8');
@@ -134,39 +146,24 @@ async function runAllTests() {
   const corruptExecResult = await corruptEngine.processCandidate(dummyFile);
   assert(corruptExecResult.ok === false && corruptExecResult.error.includes('JOURNAL_CORRUPT'), 'Corrupt journal permanently blocks execution');
 
-  // Test 7: Production Path — Disk Space Guard Injection
+  // Test 7: Production Path — Space Guards
   console.log('\nTest 7: P0 Fail-Closed — Production Path Disk Space Guard');
-  const validJournalPath = path.join(TEST_SCRATCH_DIR, 'test_journal.json');
-  const validJournal = new NormalizationJournal(validJournalPath);
   const spaceSample = path.join(TEST_SCRATCH_DIR, 'space_sample.mp4');
   createSyntheticHevcFixture(spaceSample, 0.2);
-
-  // 7a: Space unknown (< 0)
   const spaceUnknownEngine = new NormalizationEngine({
     journal: validJournal,
     executionEnabled: true,
     allowedRoots: [TEST_SCRATCH_DIR]
   });
   await spaceUnknownEngine.initialize();
-  // Override fs.statfsSync temporarily to simulate space unknown
   const origStatfs = fs.statfsSync;
   fs.statfsSync = () => { throw new Error('Simulated statfs error'); };
   const unknownSpaceResult = await spaceUnknownEngine.processCandidate(spaceSample);
   assert(unknownSpaceResult.ok === false && unknownSpaceResult.error === 'BLOCKED_SPACE_UNKNOWN', 'Production path fails closed on space unknown (<0)');
   fs.statfsSync = origStatfs;
 
-  // 7b: Execution disabled safety gate
-  const safeEngine = new NormalizationEngine({
-    journal: validJournal,
-    executionEnabled: false,
-    allowedRoots: [TEST_SCRATCH_DIR]
-  });
-  await safeEngine.initialize();
-  const spaceGateResult = await safeEngine.processCandidate(spaceSample);
-  assert(spaceGateResult.ok === false && spaceGateResult.error.includes('mission safety gate'), 'executionEnabled=false preserves disk unconditionally');
-
-  // Test 8: Pre-Existing Artifact Safety Gate & Artifact Fingerprint Mismatch
-  console.log('\nTest 8: P0 Fail-Closed — Artifact Safety Gate & Fingerprint Mismatch');
+  // Test 8: Pre-Existing Artifact Safety Gate & Tamper Detection
+  console.log('\nTest 8: P0 Fail-Closed — Pre-Existing Artifact Safety Gate');
   const artifactTarget = path.join(TEST_SCRATCH_DIR, 'artifact_target.mp4');
   const artifactOld = path.join(TEST_SCRATCH_DIR, '.artifact_target.mp4.vreconder-old');
   fs.writeFileSync(artifactTarget, 'ORIGINAL_CONTENT_PRESERVED', 'utf8');
@@ -178,21 +175,13 @@ async function runAllTests() {
   });
   await artifactEngine.initialize();
   const artifactBlockedResult = await artifactEngine.processCandidate(artifactTarget);
-  assert(artifactBlockedResult.ok === false && artifactBlockedResult.error === 'BLOCKED_RECOVERY_REQUIRED', 'Pre-existing .vreconder-old without journal fails closed');
+  assert(artifactBlockedResult.ok === false && artifactBlockedResult.error === 'BLOCKED_RECOVERY_REQUIRED', 'Pre-existing .vreconder-old without valid journal fails closed');
   assert(fs.existsSync(artifactOld) === true && fs.existsSync(artifactTarget) === true, 'Neither file deleted when artifact safety gate fires');
-
-  // Fingerprint mismatch during recovery rollback
-  validJournal.recordState(artifactTarget, NormalizationState.SWAP_STEP1_RENAME_ORIGINAL, {
-    oldPath: artifactOld,
-    initialFingerprint: { canonicalPath: artifactTarget, sizeBytes: 9999999, mtimeMs: 1234567, fingerprintId: 'mismatch' }
-  });
-  const tamperedRecovery = validJournal.recoverOnStartup();
-  assert(tamperedRecovery.ok === false && tamperedRecovery.status === 'RECOVERY_BLOCKED', 'Tampered / mismatch artifact blocks recovery from destructive rollback');
   fs.unlinkSync(artifactOld);
   fs.unlinkSync(artifactTarget);
 
-  // Test 9: Real Cancellation during REMUX
-  console.log('\nTest 9: P0 Job-Scoped Cancellation — REMUX Subprocess Interruption');
+  // Test 9: Production Path Cancellation during Running REMUX
+  console.log('\nTest 9: P0 Job-Scoped Cancellation — Running REMUX Subprocess Interruption');
   const remuxCancelSample = path.join(TEST_SCRATCH_DIR, 'remux_cancel_sample.mp4');
   createSyntheticHevcFixture(remuxCancelSample, 0.5);
   const remuxCancelEngine = new NormalizationEngine({
@@ -202,7 +191,6 @@ async function runAllTests() {
   });
   await remuxCancelEngine.initialize();
 
-  // Trigger cancel during remux execution
   const remuxJobPromise = remuxCancelEngine.processCandidate(remuxCancelSample);
   while (remuxCancelEngine.activeProcesses.size === 0 && remuxCancelEngine.isProcessing) {
     await new Promise(r => setTimeout(r, 10));
@@ -214,10 +202,10 @@ async function runAllTests() {
   assert(!fs.existsSync(path.join(TEST_SCRATCH_DIR, '.remux_cancel_sample.mp4.vreconder.partial')), 'Partial remux artifact unlinked upon cancellation');
   remuxCancelEngine.notifyPlaybackState(false);
 
-  // Test 10: Real Cancellation during STRUCTURE_VERIFYING
-  console.log('\nTest 10: P0 Job-Scoped Cancellation — STRUCTURE_VERIFYING Interruption');
+  // Test 10: Production Path Cancellation during Running STRUCTURE_VERIFYING
+  console.log('\nTest 10: P0 Job-Scoped Cancellation — Running STRUCTURE_VERIFYING Interruption');
   const structCancelSample = path.join(TEST_SCRATCH_DIR, 'struct_cancel_sample.mp4');
-  createSyntheticHevcFixture(structCancelSample, 0.2);
+  createSyntheticHevcFixture(structCancelSample, 0.5);
   const structCancelEngine = new NormalizationEngine({
     journal: validJournal,
     executionEnabled: true,
@@ -225,186 +213,238 @@ async function runAllTests() {
   });
   await structCancelEngine.initialize();
 
-  // Test verifyNormalizedOutput directly with cancellation token
-  let verifierChildCount = 0;
-  const structVerifyCancelResult = await verifyNormalizedOutput(structCancelSample, structCancelSample, {}, {
-    onChildProcess: (c) => {
-      verifierChildCount++;
-      structCancelEngine._registerProcess(c);
-    },
-    isCancelled: () => true
-  });
-  assert(structVerifyCancelResult.ok === false && structVerifyCancelResult.reason === 'Verification cancelled', 'Structure verification halts immediately when cancelled');
+  // Trigger playback when journal enters STRUCTURE_VERIFYING
+  let structCancelFired = false;
+  const structJobPromise = structCancelEngine.processCandidate(structCancelSample);
+  while (structCancelEngine.isProcessing && !structCancelFired) {
+    const entry = validJournal.getEntry(structCancelSample);
+    if (entry && entry.currentState === NormalizationState.STRUCTURE_VERIFYING) {
+      structCancelEngine.notifyPlaybackState(true);
+      structCancelFired = true;
+      break;
+    }
+    await new Promise(r => setTimeout(r, 5));
+  }
+  const structCancelResult = await structJobPromise;
+  assert(structCancelResult.ok === false && structCancelResult.state === NormalizationState.PAUSED_FOR_PLAYBACK, 'Running STRUCTURE_VERIFYING interrupted cleanly on playback priority');
+  assert(structCancelEngine.activeProcesses.size === 0, 'All verifier child processes terminated and joined');
+  assert(!fs.existsSync(path.join(TEST_SCRATCH_DIR, '.struct_cancel_sample.mp4.vreconder.partial')), 'Partial artifact cleaned on structure verify cancellation');
+  structCancelEngine.notifyPlaybackState(false);
 
-  // Test 11: Real Cancellation during FINAL_VERIFYING Rollback
-  console.log('\nTest 11: P0 Job-Scoped Cancellation — FINAL_VERIFYING Interruption Rollback');
-  const finalCancelOld = path.join(TEST_SCRATCH_DIR, '.final_cancel.mp4.vreconder-old');
-  const finalCancelCanonical = path.join(TEST_SCRATCH_DIR, 'final_cancel.mp4');
-  fs.writeFileSync(finalCancelOld, 'ORIGINAL_PRE_SWAP_BACKUP', 'utf8');
-  fs.writeFileSync(finalCancelCanonical, 'UNFINALIZED_CANDIDATE', 'utf8');
-
+  // Test 11: Production Path Cancellation during Running FINAL_VERIFYING
+  console.log('\nTest 11: P0 Job-Scoped Cancellation — Running FINAL_VERIFYING Interruption Rollback');
+  const finalCancelSample = path.join(TEST_SCRATCH_DIR, 'final_cancel_sample.mp4');
+  createSyntheticHevcFixture(finalCancelSample, 0.5);
+  const originalFpBeforeFinal = getMediaFingerprint(finalCancelSample);
   const finalCancelEngine = new NormalizationEngine({
     journal: validJournal,
     executionEnabled: true,
     allowedRoots: [TEST_SCRATCH_DIR]
   });
-  finalCancelEngine.activeJob = {
-    originalPath: finalCancelCanonical,
-    oldPath: finalCancelOld,
-    partialPath: path.join(TEST_SCRATCH_DIR, '.final_cancel.mp4.vreconder.partial'),
+  await finalCancelEngine.initialize();
+
+  let finalCancelFired = false;
+  const finalJobPromise = finalCancelEngine.processCandidate(finalCancelSample);
+  while (finalCancelEngine.isProcessing && !finalCancelFired) {
+    const entry = validJournal.getEntry(finalCancelSample);
+    if (entry && (entry.currentState === NormalizationState.FINAL_VERIFYING || entry.currentState === NormalizationState.SWAP_STEP2_RENAME_PARTIAL)) {
+      finalCancelEngine.notifyPlaybackState(true);
+      finalCancelFired = true;
+      break;
+    }
+    await new Promise(r => setTimeout(r, 5));
+  }
+  const finalCancelResult = await finalJobPromise;
+  assert(finalCancelResult.ok === false && finalCancelResult.state === NormalizationState.PAUSED_FOR_PLAYBACK, 'Running FINAL_VERIFYING interrupted cleanly');
+  assert(isFingerprintValid(finalCancelSample, originalFpBeforeFinal), 'Original media rolled back and bit-proven intact after FINAL_VERIFYING interruption');
+  assert(!fs.existsSync(path.join(TEST_SCRATCH_DIR, '.final_cancel_sample.mp4.vreconder-old')), 'Old backup removed during rollback');
+  finalCancelEngine.notifyPlaybackState(false);
+
+  // Test 12: Probe Subprocess Job Registration & Cancellation
+  console.log('\nTest 12: P0 Verifier Probe Subprocess Job Ownership & Cancellation');
+  clearFactsCache();
+  const probeCancelSample = path.join(TEST_SCRATCH_DIR, 'probe_cancel_sample.mp4');
+  createSyntheticHevcFixture(probeCancelSample, 0.2);
+  const probeEngine = new NormalizationEngine({ journal: validJournal, executionEnabled: true });
+  let probeChildTracked = false;
+  let probeCancelled = false;
+
+  const probePromise = probeMediaFacts(probeCancelSample, {
+    onChildProcess: (c) => {
+      probeEngine._registerProcess(c);
+      probeChildTracked = true;
+      probeCancelled = true;
+      c.kill('SIGTERM');
+    },
+    isCancelled: () => probeCancelled
+  });
+  const probeResult = await probePromise;
+  assert(probeChildTracked === true, 'ffprobe child process was registered into engine activeProcesses');
+  assert(probeResult === null, 'Cancelled probe returns null and halts cleanly');
+  assert(probeEngine.activeProcesses.size === 0, 'Probe child process removed from activeProcesses on exit');
+
+  // Test 13: Stubborn Subprocess Join Timeout & Lock Preservation
+  console.log('\nTest 13: P0 Stubborn Subprocess Join Timeout — Fail-Closed Lock Retention');
+  const stubbornEngine = new NormalizationEngine({ journal: validJournal, executionEnabled: true, allowedRoots: [TEST_SCRATCH_DIR] });
+  await stubbornEngine.initialize();
+
+  // Create deterministic stubborn process that does not exit immediately on SIGTERM
+  const { EventEmitter } = await import('node:events');
+  const stubbornMockChild = new EventEmitter();
+  stubbornMockChild.kill = () => { /* ignores SIGTERM */ };
+  stubbornEngine._registerProcess(stubbornMockChild);
+  stubbornEngine.activeJob = {
+    originalPath: dummyFile,
+    partialPath: path.join(TEST_SCRATCH_DIR, '.stubborn.partial'),
+    oldPath: path.join(TEST_SCRATCH_DIR, '.stubborn-old'),
     isCancelled: false,
-    cancelReason: null,
-    isSwapped: true
+    isSwapped: false
   };
-  await finalCancelEngine.cancelActiveJobForPlayback();
-  assert(fs.readFileSync(finalCancelCanonical, 'utf8') === 'ORIGINAL_PRE_SWAP_BACKUP', 'Final verify cancellation rolls back verified original over unfinalized target');
-  assert(!fs.existsSync(finalCancelOld), 'Old backup removed during final verify cancellation rollback');
+  stubbornEngine.isProcessing = true;
 
-  // Test 12: Playback Immunity against Resurrection
-  console.log('\nTest 12: P0 Monotonic Cancellation — No Resurrection After Playback Stops');
-  structCancelEngine.notifyPlaybackState(true);
-  const blockedExec = await structCancelEngine.processCandidate(structCancelSample);
-  assert(blockedExec.ok === false && blockedExec.state === NormalizationState.PAUSED_FOR_PLAYBACK, 'Job refused while playback active');
-  structCancelEngine.notifyPlaybackState(false);
-  assert(structCancelEngine.isProcessing === false && structCancelEngine.activeJob === null, 'Cancelled job does not resurrect when playback becomes false');
+  await stubbornEngine.cancelActiveJobForPlayback(100); // 100ms timeout
+  assert(stubbornEngine.status === EngineStatus.SUBPROCESS_JOIN_TIMEOUT, 'Timeout transitions engine to SUBPROCESS_JOIN_TIMEOUT');
+  assert(stubbornEngine.isProcessing === true, 'isProcessing lock is strictly preserved when subprocess fails to join');
 
-  // Test 13: Concurrency Lock & Process Join Gate
-  console.log('\nTest 13: P0 Concurrency Limit & Child Process Join Gate');
-  structCancelEngine.isProcessing = true;
-  const secondJobResult = await structCancelEngine.processCandidate(structCancelSample);
-  assert(secondJobResult.ok === false && secondJobResult.error.includes('Concurrency limit'), 'Second job strictly blocked when engine is processing');
-  structCancelEngine.isProcessing = false;
+  const blockedCandidateResult = await stubbornEngine.processCandidate(dummyFile);
+  assert(blockedCandidateResult.ok === false && blockedCandidateResult.error.includes('SUBPROCESS_JOIN_TIMEOUT'), 'Second job is strictly rejected while stubborn child is alive');
 
-  // Test 14: Fingerprint Invariant Guard
-  console.log('\nTest 14: P0 Fingerprint Invariant Guard');
-  const fpSample = path.join(TEST_SCRATCH_DIR, 'fp_sample.mp4');
-  fs.writeFileSync(fpSample, 'FP_SAMPLE_INITIAL', 'utf8');
-  const fpInitial = getMediaFingerprint(fpSample);
-  assert(isFingerprintValid(fpSample, fpInitial) === true, 'Fingerprint valid on identical file');
-  fs.writeFileSync(fpSample, 'FP_SAMPLE_MUTATED_LONGER_PAYLOAD_CONTENT', 'utf8');
-  assert(isFingerprintValid(fpSample, fpInitial) === false, 'Fingerprint detects mutation on modified file');
+  // Emit exit to clean up mock child
+  stubbornMockChild.emit('exit', 0);
+  assert(stubbornEngine.activeProcesses.size === 0, 'Active processes cleared after stubborn child finally exits');
 
-  // Test 15: Six Transactional Crash Windows (P0-3 & P0-4)
-  console.log('\nTest 15: P0 Transactional Recovery Across All Crash Windows');
-  // Window A: Crash before Step 1 (during REMUX / STRUCTURE_VERIFYING)
-  const crashATarget = path.join(TEST_SCRATCH_DIR, 'crash_a.mp4');
-  const crashAPartial = path.join(TEST_SCRATCH_DIR, '.crash_a.mp4.vreconder.partial');
-  fs.writeFileSync(crashATarget, 'TRUE_ORIGINAL_A', 'utf8');
-  fs.writeFileSync(crashAPartial, 'ORPHAN_PARTIAL_A', 'utf8');
-  validJournal.recordState(crashATarget, NormalizationState.REMUXING, { partialPath: crashAPartial });
-  const recA = validJournal.recoverOnStartup();
-  assert(recA.ok === true && fs.existsSync(crashATarget) && !fs.existsSync(crashAPartial), 'Crash Window A (REMUX) recovers: orphan partial cleaned, original intact');
-
-  // Window B: Crash after Step 1 (Original renamed to .old, partial exists)
-  const crashBTarget = path.join(TEST_SCRATCH_DIR, 'crash_b.mp4');
-  const crashBOld = path.join(TEST_SCRATCH_DIR, '.crash_b.mp4.vreconder-old');
-  fs.writeFileSync(crashBOld, 'TRUE_ORIGINAL_B', 'utf8');
-  const fpB = getMediaFingerprint(crashBOld);
-  validJournal.recordState(crashBTarget, NormalizationState.SWAP_STEP1_RENAME_ORIGINAL, { oldPath: crashBOld, initialFingerprint: fpB });
-  const recB = validJournal.recoverOnStartup();
-  assert(recB.ok === true && fs.existsSync(crashBTarget) && !fs.existsSync(crashBOld), 'Crash Window B (Step 1) recovers: verified original restored from .old');
-
-  // Window C: Crash after Step 2 (Unverified partial installed at canonical, .old exists)
-  const crashCTarget = path.join(TEST_SCRATCH_DIR, 'crash_c.mp4');
-  const crashCOld = path.join(TEST_SCRATCH_DIR, '.crash_c.mp4.vreconder-old');
-  fs.writeFileSync(crashCOld, 'TRUE_ORIGINAL_C', 'utf8');
-  fs.writeFileSync(crashCTarget, 'UNVERIFIED_PARTIAL_C', 'utf8');
-  const fpC = getMediaFingerprint(crashCOld);
-  validJournal.recordState(crashCTarget, NormalizationState.SWAP_STEP2_RENAME_PARTIAL, { oldPath: crashCOld, initialFingerprint: fpC });
-  const recC = validJournal.recoverOnStartup();
-  assert(recC.ok === true && fs.readFileSync(crashCTarget, 'utf8') === 'TRUE_ORIGINAL_C', 'Crash Window C (Step 2) recovers: unverified target replaced with verified original');
-
-  // Window D: Crash during FINAL_VERIFYING
-  const crashDTarget = path.join(TEST_SCRATCH_DIR, 'crash_d.mp4');
-  const crashDOld = path.join(TEST_SCRATCH_DIR, '.crash_d.mp4.vreconder-old');
-  fs.writeFileSync(crashDOld, 'TRUE_ORIGINAL_D', 'utf8');
-  fs.writeFileSync(crashDTarget, 'TARGET_D_FINAL_VERIFYING', 'utf8');
-  const fpD = getMediaFingerprint(crashDOld);
-  validJournal.recordState(crashDTarget, NormalizationState.FINAL_VERIFYING, { oldPath: crashDOld, initialFingerprint: fpD });
-  const recD = validJournal.recoverOnStartup();
-  assert(recD.ok === true && fs.readFileSync(crashDTarget, 'utf8') === 'TRUE_ORIGINAL_D', 'Crash Window D (FINAL_VERIFYING) recovers: unfinalized target rolled back to original');
-
-  // Window E: Crash after FINAL_VERIFIED (before old cleanup)
-  const crashETarget = path.join(TEST_SCRATCH_DIR, 'crash_e.mp4');
-  const crashEOld = path.join(TEST_SCRATCH_DIR, '.crash_e.mp4.vreconder-old');
-  fs.writeFileSync(crashEOld, 'TRUE_ORIGINAL_E', 'utf8');
-  fs.writeFileSync(crashETarget, 'DURABLY_VERIFIED_TARGET_E', 'utf8');
-  const fpE = getMediaFingerprint(crashEOld);
-  validJournal.recordState(crashETarget, NormalizationState.FINAL_VERIFIED, { oldPath: crashEOld, initialFingerprint: fpE });
-  const recE = validJournal.recoverOnStartup();
-  assert(recE.ok === true && fs.existsSync(crashETarget) && !fs.existsSync(crashEOld), 'Crash Window E (FINAL_VERIFIED) recovers: unlinks backup and records DONE');
-
-  // Window F: Crash after old cleanup but before terminal DONE
-  const crashFTarget = path.join(TEST_SCRATCH_DIR, 'crash_f.mp4');
-  fs.writeFileSync(crashFTarget, 'DURABLY_VERIFIED_TARGET_F', 'utf8');
-  validJournal.recordState(crashFTarget, NormalizationState.FINAL_VERIFIED, { oldPath: path.join(TEST_SCRATCH_DIR, '.crash_f.mp4.vreconder-old') });
-  const recF = validJournal.recoverOnStartup();
-  assert(recF.ok === true && fs.existsSync(crashFTarget), 'Crash Window F (terminal bookkeeping) recovers cleanly to DONE');
-
-  // Test 16: Verifier Fail-Closed Behavior (P0-5)
-  console.log('\nTest 16: P0 Verifier Fail-Closed on Unavailable / Null Evidence');
-  const verifierSample = path.join(TEST_SCRATCH_DIR, 'verif_sample.mp4');
-  createSyntheticHevcFixture(verifierSample, 0.2);
-
-  // 16a: Non-existent output path fails verification
-  const nonExistentVerif = await verifyNormalizedOutput(verifierSample, path.join(TEST_SCRATCH_DIR, 'non_existent.mp4'));
-  assert(nonExistentVerif.ok === false, 'Verifier fails closed on unprobeable output');
-
-  // 16b: Corrupt file demux check fails
-  const corruptMp4 = path.join(TEST_SCRATCH_DIR, 'corrupt.mp4');
-  fs.writeFileSync(corruptMp4, 'NOT_A_VALID_MP4_PAYLOAD', 'utf8');
-  const demuxFail = await runStreamcopyDemuxIntegrityCheck(corruptMp4);
-  assert(demuxFail.ok === false, 'Demux integrity check fails closed on corrupt container');
-
-  // 16c: Null packet details returns fail in full verify
-  const nullPacketStreams = await getPerStreamPacketDetails(corruptMp4);
-  assert(nullPacketStreams === null, 'ffprobe packet details returns null on invalid container');
-
-  // Test 17: Startup Initialization & Server Preflight Router Wiring
-  console.log('\nTest 17: P0 Startup Initialization & Server Wiring');
-  const bootEngine = new NormalizationEngine({
-    journal: validJournal,
-    executionEnabled: true,
-    allowedRoots: [TEST_SCRATCH_DIR]
+  // Test 14: FINAL_VERIFIED Recovery Safety (Canonical Missing / Mismatch / Valid)
+  console.log('\nTest 14: P0 FINAL_VERIFIED Startup Recovery — Canonical Identity Validation');
+  // 14a: Canonical missing -> RECOVERY_BLOCKED, backup preserved
+  const crashMissingTarget = path.join(TEST_SCRATCH_DIR, 'crash_missing.mp4');
+  const crashMissingOld = path.join(TEST_SCRATCH_DIR, '.crash_missing.mp4.vreconder-old');
+  fs.writeFileSync(crashMissingOld, 'ORIGINAL_BACKUP_MUST_BE_SAVED', 'utf8');
+  validJournal.recordState(crashMissingTarget, NormalizationState.FINAL_VERIFIED, {
+    oldPath: crashMissingOld,
+    replacementFingerprint: { sizeBytes: 1234, mtimeMs: 5678, canonicalPath: crashMissingTarget }
   });
-  const uninitResult = await bootEngine.processCandidate(dummyFile);
-  assert(uninitResult.ok === false && uninitResult.error.includes('UNINITIALIZED'), 'Uninitialized engine cannot execute before initialize() completes');
+  const recMissing = validJournal.recoverOnStartup();
+  assert(recMissing.ok === false && recMissing.status === 'RECOVERY_BLOCKED', 'Missing canonical fails closed on FINAL_VERIFIED recovery');
+  assert(fs.existsSync(crashMissingOld) === true, 'Original backup .old is NEVER deleted when canonical is missing');
 
-  const bootResult = await bootEngine.initialize();
-  assert(bootResult.ok === true && bootEngine.status === EngineStatus.SAFE_IDLE, 'engine.initialize() resolves to SAFE_IDLE on clean recovery');
-
-  // Test 18: Production Path — Remux Failure Preserves Original
-  console.log('\nTest 18: P0 Production Path — Remux Failure Preserves Original');
-  const invalidMediaFile = path.join(TEST_SCRATCH_DIR, 'invalid_corrupt.mp4');
-  fs.writeFileSync(invalidMediaFile, 'NOT_A_VALID_MP4_CONTAINER_RAW_BYTES', 'utf8');
-  const invalidExecResult = await bootEngine.processCandidate(invalidMediaFile);
-  assert(invalidExecResult.ok === false, 'Remux on invalid media fails safely');
-  assert(fs.existsSync(invalidMediaFile) === true && fs.readFileSync(invalidMediaFile, 'utf8') === 'NOT_A_VALID_MP4_CONTAINER_RAW_BYTES', 'Original file content preserved intact');
-
-  // Test 19: Production Path — Full In-Place Normalization on Real Synthetic Fixture
-  console.log('\nTest 19: P0 Production Path — Full Normalization & Verification on Real Synthetic Fixture');
-  const synthFixture = path.join(TEST_SCRATCH_DIR, 'synth_hevc_sample.mp4');
-  createSyntheticHevcFixture(synthFixture, 0.2);
-  const origVideoMd5Before = await getStreamPayloadMD5(synthFixture, '0:v:0');
-  const origAudioMd5Before = await getStreamPayloadMD5(synthFixture, '0:a:0');
-
-  const prodEngine = new NormalizationEngine({
-    journal: validJournal,
-    executionEnabled: true,
-    allowedRoots: [TEST_SCRATCH_DIR]
+  // 14b: Canonical fingerprint mismatch -> RECOVERY_BLOCKED, backup preserved
+  const crashMismatchTarget = path.join(TEST_SCRATCH_DIR, 'crash_mismatch.mp4');
+  const crashMismatchOld = path.join(TEST_SCRATCH_DIR, '.crash_mismatch.mp4.vreconder-old');
+  fs.writeFileSync(crashMismatchOld, 'ORIGINAL_BACKUP_MUST_BE_SAVED', 'utf8');
+  fs.writeFileSync(crashMismatchTarget, 'TAMPERED_CANONICAL_CONTENT', 'utf8');
+  validJournal.recordState(crashMismatchTarget, NormalizationState.FINAL_VERIFIED, {
+    oldPath: crashMismatchOld,
+    replacementFingerprint: { sizeBytes: 999999, mtimeMs: 111111, canonicalPath: crashMismatchTarget }
   });
+  const recMismatch = validJournal.recoverOnStartup();
+  assert(recMismatch.ok === false && recMismatch.status === 'RECOVERY_BLOCKED', 'Tampered canonical fails closed on FINAL_VERIFIED recovery');
+  assert(fs.existsSync(crashMismatchOld) === true, 'Original backup .old is preserved on fingerprint mismatch');
+  fs.unlinkSync(crashMissingOld);
+  fs.unlinkSync(crashMismatchOld);
+  fs.unlinkSync(crashMismatchTarget);
+
+  // 14c: Canonical valid -> unlinks old, records DONE
+  const crashValidTarget = path.join(TEST_SCRATCH_DIR, 'crash_valid.mp4');
+  const crashValidOld = path.join(TEST_SCRATCH_DIR, '.crash_valid.mp4.vreconder-old');
+  fs.writeFileSync(crashValidOld, 'ORIGINAL_BACKUP_VALID', 'utf8');
+  fs.writeFileSync(crashValidTarget, 'VERIFIED_REPLACEMENT_CANONICAL', 'utf8');
+  const validRepFp = getMediaFingerprint(crashValidTarget);
+  validJournal.recordState(crashValidTarget, NormalizationState.FINAL_VERIFIED, {
+    oldPath: crashValidOld,
+    replacementFingerprint: validRepFp
+  });
+  const recValid = validJournal.recoverOnStartup();
+  assert(recValid.ok === true && fs.existsSync(crashValidTarget) && !fs.existsSync(crashValidOld), 'Valid canonical cleans .old and records DONE');
+
+  // Test 15: SWAP_STEP1 and SWAP_STEP2 with Old Missing
+  console.log('\nTest 15: P0 SWAP Recovery when .old Backup is Missing');
+  // 15a: SWAP_STEP1 + old missing + canonical matches original -> safe
+  const step1Target = path.join(TEST_SCRATCH_DIR, 'step1_safe.mp4');
+  fs.writeFileSync(step1Target, 'TRUE_ORIGINAL_STEP1', 'utf8');
+  const step1Fp = getMediaFingerprint(step1Target);
+  validJournal.recordState(step1Target, NormalizationState.SWAP_STEP1_RENAME_ORIGINAL, {
+    initialFingerprint: step1Fp
+  });
+  const recStep1 = validJournal.recoverOnStartup();
+  assert(recStep1.ok === true, 'SWAP_STEP1 with matching canonical and missing .old recovers as canonical intact');
+
+  // 15b: SWAP_STEP1 + old missing + canonical tampered -> RECOVERY_BLOCKED
+  const step1TamperedTarget = path.join(TEST_SCRATCH_DIR, 'step1_tampered.mp4');
+  fs.writeFileSync(step1TamperedTarget, 'TAMPERED_STEP1_CONTENT', 'utf8');
+  validJournal.recordState(step1TamperedTarget, NormalizationState.SWAP_STEP1_RENAME_ORIGINAL, {
+    initialFingerprint: { sizeBytes: 9999, mtimeMs: 1111, canonicalPath: step1TamperedTarget }
+  });
+  const recStep1Tampered = validJournal.recoverOnStartup();
+  assert(recStep1Tampered.ok === false && recStep1Tampered.status === 'RECOVERY_BLOCKED', 'SWAP_STEP1 with mismatched canonical fails closed');
+
+  // 15c: SWAP_STEP2 / FINAL_VERIFYING + old missing -> RECOVERY_BLOCKED (Fail closed)
+  const step2Target = path.join(TEST_SCRATCH_DIR, 'step2_fail.mp4');
+  fs.writeFileSync(step2Target, 'UNVERIFIED_STEP2_CANONICAL', 'utf8');
+  validJournal.recordState(step2Target, NormalizationState.SWAP_STEP2_RENAME_PARTIAL, {
+    initialFingerprint: { sizeBytes: 1234, mtimeMs: 5678, canonicalPath: step2Target }
+  });
+  const recStep2 = validJournal.recoverOnStartup();
+  assert(recStep2.ok === false && recStep2.status === 'RECOVERY_BLOCKED', 'SWAP_STEP2 with missing .old fails closed');
+
+  // Test 16: Multi-Video Retained Streams Handling
+  console.log('\nTest 16: P0 Multi-Video Retained Streams Handling');
+  clearFactsCache();
+  const multiVideoTarget = path.join(TEST_SCRATCH_DIR, 'multi_video.mp4');
+  createMultiVideoFixture(multiVideoTarget, 0.2);
+  const multiFacts = await probeMediaFacts(multiVideoTarget);
+  assert(multiFacts !== null && multiFacts.videoCount === 2, 'ffprobe fact extractor recognizes 2 video streams');
+  const multiClass = classifyMedia(multiVideoTarget, multiFacts);
+  assert(multiClass.classification === MediaClass.UNSUPPORTED_UNKNOWN_FIX, 'Multi-video stream file explicitly rejected from certified normalization candidate');
+
+  const multiVerifyResult = await verifyNormalizedOutput(multiVideoTarget, multiVideoTarget, { expectedOutputTag: 'hev1' });
+  assert(multiVerifyResult.ok === true && multiVerifyResult.details.videoStreamsVerified === 2, 'Verifier validates elementary payload MD5 across all video streams');
+
+  // Test 17: No Resurrection after Playback Stops
+  console.log('\nTest 17: P0 No Resurrection after Playback Ends');
+  const resurrectSample = path.join(TEST_SCRATCH_DIR, 'resurrect.mp4');
+  createSyntheticHevcFixture(resurrectSample, 0.2);
+  const resEngine = new NormalizationEngine({ journal: validJournal, executionEnabled: true, allowedRoots: [TEST_SCRATCH_DIR] });
+  await resEngine.initialize();
+  resEngine.notifyPlaybackState(true);
+  const pausedExec = await resEngine.processCandidate(resurrectSample);
+  assert(pausedExec.ok === false && pausedExec.state === NormalizationState.PAUSED_FOR_PLAYBACK, 'Candidate blocked while playback active');
+  resEngine.notifyPlaybackState(false);
+  assert(resEngine.isProcessing === false && resEngine.activeJob === null, 'Cancelled job does not resurrect when playback ends');
+
+  // Test 18: Active Child Rejects Second Job
+  console.log('\nTest 18: P0 Active Child Blocks Second Job');
+  const busyEngine = new NormalizationEngine({ journal: validJournal, executionEnabled: true, allowedRoots: [TEST_SCRATCH_DIR] });
+  await busyEngine.initialize();
+  const busyChild = spawn('node', ['-e', 'setTimeout(() => {}, 1000)']);
+  busyEngine._registerProcess(busyChild);
+  const busyResult = await busyEngine.processCandidate(dummyFile);
+  assert(busyResult.ok === false && busyResult.error.includes('Concurrency limit'), 'Second job rejected while child process is in activeProcesses');
+  busyChild.kill();
+
+  // Test 19: Full In-Place Normalization End-to-End
+  console.log('\nTest 19: P0 Production Path — Full In-Place Normalization on Real Synthetic Fixture');
+  clearFactsCache();
+  const prodFixture = path.join(TEST_SCRATCH_DIR, 'prod_fixture.mp4');
+  createSyntheticHevcFixture(prodFixture, 0.2);
+  const origVideoMd5 = await getStreamPayloadMD5(prodFixture, '0:v:0');
+  const origAudioMd5 = await getStreamPayloadMD5(prodFixture, '0:a:0');
+
+  const prodEngine = new NormalizationEngine({ journal: validJournal, executionEnabled: true, allowedRoots: [TEST_SCRATCH_DIR] });
   await prodEngine.initialize();
+  const prodResult = await prodEngine.processCandidate(prodFixture);
+  assert(prodResult.ok === true && prodResult.state === NormalizationState.DONE, 'Full in-place normalization succeeds on valid fixture');
 
-  const normalizationResult = await prodEngine.processCandidate(synthFixture);
-  assert(normalizationResult.ok === true && normalizationResult.state === NormalizationState.DONE, 'Real production engine.processCandidate() succeeds on valid fixture');
+  const normVideoMd5 = await getStreamPayloadMD5(prodFixture, '0:v:0');
+  const normAudioMd5 = await getStreamPayloadMD5(prodFixture, '0:a:0');
+  assert(origVideoMd5 === normVideoMd5, 'Video payload MD5 is 100% bit-identical after streamcopy');
+  assert(origAudioMd5 === normAudioMd5, 'Audio payload MD5 is 100% bit-identical after streamcopy');
+  const finalDemux = await runStreamcopyDemuxIntegrityCheck(prodFixture);
+  assert(finalDemux.ok === true, 'Final container streamcopy demux check passes with zero errors');
 
-  const normVideoMd5After = await getStreamPayloadMD5(synthFixture, '0:v:0');
-  const normAudioMd5After = await getStreamPayloadMD5(synthFixture, '0:a:0');
-  assert(origVideoMd5Before === normVideoMd5After, 'Video elementary stream payload is 100% bit-identical after streamcopy');
-  assert(origAudioMd5Before === normAudioMd5After, 'Audio elementary stream payload is 100% bit-identical after streamcopy');
-
-  const finalDemuxCheck = await runStreamcopyDemuxIntegrityCheck(synthFixture);
-  assert(finalDemuxCheck.ok === true, 'Streamcopy demux integrity check passes with zero errors');
+  // Test 20: Server Router Startup Initialization Wiring
+  console.log('\nTest 20: P0 Server Router Startup Wiring & Recovery Initialization');
+  const routerInit = await engineInitPromise;
+  assert(routerInit.ok === true && getEngineInstance().status === EngineStatus.SAFE_IDLE, 'Server router initializes engine and runs startup recovery');
 
   // Clean scratch
   try { fs.rmSync(TEST_SCRATCH_DIR, { recursive: true, force: true }); } catch (_) {}

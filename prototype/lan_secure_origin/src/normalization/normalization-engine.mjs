@@ -15,7 +15,8 @@ export const EngineStatus = {
   CANCEL_REQUESTED: 'CANCEL_REQUESTED',
   PAUSED_FOR_PLAYBACK: 'PAUSED_FOR_PLAYBACK',
   JOURNAL_CORRUPT: 'JOURNAL_CORRUPT',
-  RECOVERY_BLOCKED: 'RECOVERY_BLOCKED'
+  RECOVERY_BLOCKED: 'RECOVERY_BLOCKED',
+  SUBPROCESS_JOIN_TIMEOUT: 'SUBPROCESS_JOIN_TIMEOUT'
 };
 
 export class NormalizationEngine {
@@ -44,11 +45,12 @@ export class NormalizationEngine {
   }
 
   async _waitForActiveProcesses(timeoutMs = 10000) {
-    if (this.activeProcesses.size === 0) return;
+    if (this.activeProcesses.size === 0) return true;
     const start = Date.now();
     while (this.activeProcesses.size > 0 && Date.now() - start < timeoutMs) {
       await new Promise(r => setTimeout(r, 20));
     }
+    return this.activeProcesses.size === 0;
   }
 
   /**
@@ -87,9 +89,10 @@ export class NormalizationEngine {
    * Monotonic job-level cancellation.
    * Waits asynchronously until all active child processes exit before releasing locks.
    * 
+   * @param {number} timeoutMs
    * @returns {Promise<void>}
    */
-  async cancelActiveJobForPlayback() {
+  async cancelActiveJobForPlayback(timeoutMs = 10000) {
     if (!this.activeJob) return;
 
     const job = this.activeJob;
@@ -97,7 +100,7 @@ export class NormalizationEngine {
     job.cancelReason = 'PLAYBACK_ACTIVE';
     this.status = EngineStatus.CANCEL_REQUESTED;
 
-    // Terminate all active processes (remux and verification subprocesses)
+    // Terminate all active processes (remux, verification, probes)
     for (const proc of this.activeProcesses) {
       try {
         proc.kill('SIGTERM');
@@ -105,9 +108,16 @@ export class NormalizationEngine {
     }
 
     // Await complete join of all subprocesses
-    await this._waitForActiveProcesses();
+    const joined = await this._waitForActiveProcesses(timeoutMs);
+    if (!joined) {
+      console.error('[NormalizationEngine] FATAL: Child processes failed to exit within timeout during cancellation.');
+      this.status = EngineStatus.SUBPROCESS_JOIN_TIMEOUT;
+      // Do NOT rollback or cleanup files while children might still be writing!
+      // Do NOT release isProcessing lock or activeJob!
+      return;
+    }
 
-    // Rollback or clean partial safely
+    // Rollback or clean partial safely only after all children have exited
     if (job.isSwapped && fs.existsSync(job.oldPath)) {
       try {
         if (fs.existsSync(job.originalPath)) fs.unlinkSync(job.originalPath);
@@ -139,7 +149,8 @@ export class NormalizationEngine {
     if (
       this.status === EngineStatus.UNINITIALIZED ||
       this.status === EngineStatus.JOURNAL_CORRUPT ||
-      this.status === EngineStatus.RECOVERY_BLOCKED
+      this.status === EngineStatus.RECOVERY_BLOCKED ||
+      this.status === EngineStatus.SUBPROCESS_JOIN_TIMEOUT
     ) {
       return {
         ok: false,
@@ -251,8 +262,17 @@ export class NormalizationEngine {
       return { ok: false, state: NormalizationState.FAILED_SAFE, error: 'BLOCKED_NO_SPACE' };
     }
 
-    // Probing facts and matching certified rule
-    const facts = await probeMediaFacts(canonical);
+    // Probing facts and matching certified rule with full job-scoped child process tracking
+    const facts = await probeMediaFacts(canonical, {
+      onChildProcess: (c) => this._registerProcess(c),
+      isCancelled: () => this.isPlaybackActive
+    });
+    if (this.isPlaybackActive) {
+      this.isProcessing = false;
+      this.status = EngineStatus.PAUSED_FOR_PLAYBACK;
+      return { ok: false, state: NormalizationState.PAUSED_FOR_PLAYBACK, error: 'Cancelled for playback during probe' };
+    }
+
     const rule = findRepairCandidate(facts, ext);
     if (!rule) {
       this.isProcessing = false;
@@ -439,10 +459,12 @@ export class NormalizationEngine {
       return { ok: false, state: NormalizationState.FAILED_SAFE, error: finalVerify.reason };
     }
 
-    // Phase 8: FINAL_VERIFIED — Durable commit point BEFORE unlinking oldPath
+    // Phase 8: FINAL_VERIFIED — Record validated canonical replacement identity BEFORE unlinking oldPath
+    const replacementFingerprint = getMediaFingerprint(canonical);
     this.journal.recordState(canonical, NormalizationState.FINAL_VERIFIED, {
       finalVerifiedAt: new Date().toISOString(),
-      initialFingerprint
+      initialFingerprint,
+      replacementFingerprint
     });
 
     // Check cancellation once more
@@ -454,7 +476,24 @@ export class NormalizationEngine {
       return { ok: false, state: NormalizationState.PAUSED_FOR_PLAYBACK, error: 'Cancelled for playback after final verification' };
     }
 
-    // Phase 9: DONE — Unlink old backup and record terminal completion
+    // Phase 9: DONE — Unlink old backup only if canonical matches verified replacement identity
+    const currentReplacementFp = getMediaFingerprint(canonical);
+    if (
+      !currentReplacementFp ||
+      !replacementFingerprint ||
+      currentReplacementFp.sizeBytes !== replacementFingerprint.sizeBytes ||
+      currentReplacementFp.mtimeMs !== replacementFingerprint.mtimeMs
+    ) {
+      console.error('[NormalizationEngine] Replacement fingerprint mismatch before unlinking old backup. Preserving backup.');
+      this.journal.recordState(canonical, NormalizationState.FAILED_SAFE, {
+        error: 'REPLACEMENT_TAMPERED_BEFORE_BACKUP_CLEANUP'
+      });
+      this.activeJob = null;
+      this.isProcessing = false;
+      this.status = EngineStatus.SAFE_IDLE;
+      return { ok: false, state: NormalizationState.FAILED_SAFE, error: 'REPLACEMENT_TAMPERED_BEFORE_BACKUP_CLEANUP' };
+    }
+
     try {
       if (fs.existsSync(oldPath)) {
         fs.unlinkSync(oldPath);
@@ -473,7 +512,17 @@ export class NormalizationEngine {
     return { ok: true, state: NormalizationState.DONE };
   }
 
-  _handleJobCancellation(job) {
+  async _handleJobCancellation(job, timeoutMs = 10000) {
+    for (const proc of this.activeProcesses) {
+      try { proc.kill('SIGTERM'); } catch (_) {}
+    }
+    const joined = await this._waitForActiveProcesses(timeoutMs);
+    if (!joined) {
+      console.error('[NormalizationEngine] FATAL: Subprocess join timeout during job cancellation.');
+      this.status = EngineStatus.SUBPROCESS_JOIN_TIMEOUT;
+      return { ok: false, state: NormalizationState.FAILED_SAFE, error: 'SUBPROCESS_JOIN_TIMEOUT' };
+    }
+
     if (job.isSwapped && fs.existsSync(job.oldPath)) {
       try {
         if (fs.existsSync(job.originalPath)) fs.unlinkSync(job.originalPath);

@@ -108,6 +108,7 @@ export const CERTIFIED_REPAIR_RULES = [
  */
 export function matchExactCertifiedBucket(facts, ext) {
   if (!facts || !facts.video) return null;
+  if (facts.videoCount && facts.videoCount > 1) return null;
   const v = facts.video;
   const extLower = (ext || '').toLowerCase();
   if (extLower !== '.mp4') return null;

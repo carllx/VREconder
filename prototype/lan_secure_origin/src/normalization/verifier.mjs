@@ -142,7 +142,7 @@ export async function verifyNormalizedOutput(originalPath, outputPath, expectedR
     return { ok: false, reason: 'Verification cancelled', details: {} };
   }
 
-  const origFacts = await probeMediaFacts(originalPath);
+  const origFacts = await probeMediaFacts(originalPath, options);
   if (!origFacts || !origFacts.video) {
     return { ok: false, reason: 'Original media cannot be probed', details: {} };
   }
@@ -151,35 +151,46 @@ export async function verifyNormalizedOutput(originalPath, outputPath, expectedR
     return { ok: false, reason: 'Verification cancelled', details: {} };
   }
 
-  const outFacts = await probeMediaFacts(outputPath);
+  const outFacts = await probeMediaFacts(outputPath, options);
   if (!outFacts || !outFacts.video) {
     return { ok: false, reason: 'Output media cannot be probed by ffprobe', details: {} };
   }
 
-  const oV = origFacts.video;
-  const nV = outFacts.video;
+  // 1. Video Invariants (Check ALL video streams)
+  const origVideoCount = origFacts.videoCount || 1;
+  const outVideoCount = outFacts.videoCount || 1;
+  if (origVideoCount !== outVideoCount) {
+    return { ok: false, reason: `Video stream count mismatch: ${origVideoCount} vs ${outVideoCount}`, details: {} };
+  }
 
-  // 1. Video Invariants
-  if (oV.codec !== nV.codec) {
-    return { ok: false, reason: `Video codec mismatch: ${oV.codec} vs ${nV.codec}`, details: { oV, nV } };
-  }
-  if (oV.width !== nV.width || oV.height !== nV.height) {
-    return { ok: false, reason: `Dimensions mismatch: ${oV.width}x${oV.height} vs ${nV.width}x${nV.height}`, details: { oV, nV } };
-  }
-  if (oV.profile !== nV.profile) {
-    return { ok: false, reason: `Video profile mismatch: ${oV.profile} vs ${nV.profile}`, details: { oV, nV } };
-  }
-  if (oV.level !== nV.level) {
-    return { ok: false, reason: `Video level mismatch: ${oV.level} vs ${nV.level}`, details: { oV, nV } };
-  }
-  if (oV.pixFmt !== nV.pixFmt || oV.bitDepth !== nV.bitDepth) {
-    return { ok: false, reason: `Pixel format / bit depth mismatch: ${oV.pixFmt}/${oV.bitDepth} vs ${nV.pixFmt}/${nV.bitDepth}`, details: { oV, nV } };
-  }
-  if (oV.rFps !== nV.rFps || oV.avgFps !== nV.avgFps) {
-    return { ok: false, reason: `Frame rate mismatch: rFps ${oV.rFps}/avgFps ${oV.avgFps} vs rFps ${nV.rFps}/avgFps ${nV.avgFps}`, details: { oV, nV } };
-  }
-  if (Math.abs(oV.durationSec - nV.durationSec) > 0.5) {
-    return { ok: false, reason: `Duration divergence: ${oV.durationSec}s vs ${nV.durationSec}s`, details: { oV, nV } };
+  for (let vIdx = 0; vIdx < origVideoCount; vIdx++) {
+    const oV = (origFacts.videoStreams && origFacts.videoStreams[vIdx]) || origFacts.video;
+    const nV = (outFacts.videoStreams && outFacts.videoStreams[vIdx]) || outFacts.video;
+
+    if (!nV) {
+      return { ok: false, reason: `Output video stream [${vIdx}] is missing`, details: { oV, nV } };
+    }
+    if (oV.codec !== nV.codec) {
+      return { ok: false, reason: `Video [${vIdx}] codec mismatch: ${oV.codec} vs ${nV.codec}`, details: { oV, nV } };
+    }
+    if (oV.width !== nV.width || oV.height !== nV.height) {
+      return { ok: false, reason: `Video [${vIdx}] dimensions mismatch: ${oV.width}x${oV.height} vs ${nV.width}x${nV.height}`, details: { oV, nV } };
+    }
+    if (oV.profile !== nV.profile) {
+      return { ok: false, reason: `Video [${vIdx}] profile mismatch: ${oV.profile} vs ${nV.profile}`, details: { oV, nV } };
+    }
+    if (oV.level !== nV.level) {
+      return { ok: false, reason: `Video [${vIdx}] level mismatch: ${oV.level} vs ${nV.level}`, details: { oV, nV } };
+    }
+    if (oV.pixFmt !== nV.pixFmt || oV.bitDepth !== nV.bitDepth) {
+      return { ok: false, reason: `Video [${vIdx}] pixel format / bit depth mismatch: ${oV.pixFmt}/${oV.bitDepth} vs ${nV.pixFmt}/${nV.bitDepth}`, details: { oV, nV } };
+    }
+    if (oV.rFps !== nV.rFps || oV.avgFps !== nV.avgFps) {
+      return { ok: false, reason: `Video [${vIdx}] frame rate mismatch: rFps ${oV.rFps}/avgFps ${oV.avgFps} vs rFps ${nV.rFps}/avgFps ${nV.avgFps}`, details: { oV, nV } };
+    }
+    if (Math.abs(oV.durationSec - nV.durationSec) > 0.5) {
+      return { ok: false, reason: `Video [${vIdx}] duration divergence: ${oV.durationSec}s vs ${nV.durationSec}s`, details: { oV, nV } };
+    }
   }
 
   // 2. Audio Invariants (Check all audio streams)
@@ -196,8 +207,9 @@ export async function verifyNormalizedOutput(originalPath, outputPath, expectedR
 
   // 3. Expected Target Tag Validation (hev1 -> hvc1 is the explicitly authorized mutation)
   const expectedTag = expectedRule.expectedOutputTag || 'hvc1';
-  if ((nV.codecTag || '').toLowerCase() !== expectedTag.toLowerCase()) {
-    return { ok: false, reason: `Target tag requirement not met: expected ${expectedTag}, got ${nV.codecTag}`, details: { nV } };
+  const primaryOutVideo = (outFacts.videoStreams && outFacts.videoStreams[0]) || outFacts.video;
+  if ((primaryOutVideo.codecTag || '').toLowerCase() !== expectedTag.toLowerCase()) {
+    return { ok: false, reason: `Target tag requirement not met: expected ${expectedTag}, got ${primaryOutVideo.codecTag}`, details: { primaryOutVideo } };
   }
 
   if (options.isCancelled?.()) {
@@ -242,14 +254,19 @@ export async function verifyNormalizedOutput(originalPath, outputPath, expectedR
   }
 
   // 6. Per-Stream Elementary Payload MD5 Equality across all retained streams (P0-5 Fail-Closed)
-  // Video payload hash check
-  const origVideoMd5 = await getStreamPayloadMD5(originalPath, '0:v:0', options);
-  const outVideoMd5 = await getStreamPayloadMD5(outputPath, '0:v:0', options);
-  if (!origVideoMd5 || !outVideoMd5) {
-    return { ok: false, reason: 'Video stream payload MD5 could not be computed (returned null)', details: {} };
-  }
-  if (origVideoMd5 !== outVideoMd5) {
-    return { ok: false, reason: `Video elementary stream payload MD5 mismatch: ${origVideoMd5} vs ${outVideoMd5}`, details: {} };
+  // Video payload hash check for all video streams
+  for (let vIdx = 0; vIdx < origVideoCount; vIdx++) {
+    if (options.isCancelled?.()) {
+      return { ok: false, reason: 'Verification cancelled', details: {} };
+    }
+    const origVideoMd5 = await getStreamPayloadMD5(originalPath, `0:v:${vIdx}`, options);
+    const outVideoMd5 = await getStreamPayloadMD5(outputPath, `0:v:${vIdx}`, options);
+    if (!origVideoMd5 || !outVideoMd5) {
+      return { ok: false, reason: `Video stream [${vIdx}] payload MD5 could not be computed (returned null)`, details: {} };
+    }
+    if (origVideoMd5 !== outVideoMd5) {
+      return { ok: false, reason: `Video stream [${vIdx}] elementary payload MD5 mismatch: ${origVideoMd5} vs ${outVideoMd5}`, details: {} };
+    }
   }
 
   // Audio payload hash check for all audio streams
@@ -289,9 +306,9 @@ export async function verifyNormalizedOutput(originalPath, outputPath, expectedR
     details: {
       originalFingerprint: origFacts.fingerprint,
       outputFingerprint: outFacts.fingerprint,
-      codecTag: nV.codecTag,
+      codecTag: primaryOutVideo.codecTag,
       demuxChecked: true,
-      videoMd5Matched: origVideoMd5 === outVideoMd5,
+      videoStreamsVerified: origVideoCount,
       audioStreamsVerified: origFacts.audioCount,
       allRetainedStreamsVerified: origStreams.length
     }
