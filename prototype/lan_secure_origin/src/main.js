@@ -9,8 +9,7 @@ import { DiagnosticOverlay } from './render/diagnostic-overlay.js';
 import { MediaController } from './media/playback.js';
 import { CommandModel } from './controls/command-model.js';
 import { GazeEngine } from './controls/gaze-engine.js';
-import { renderStereoUI, isStereoUIVisible } from './controls/stereo-ui.js';
-import { telemetry, perfTelemetry } from './telemetry/telemetry.js';
+import { telemetry, perfTelemetry, stallDetector } from './telemetry/telemetry.js';
 import { initAudioContext } from './controls/audio-haptics.js';
 import { profileStorage, computeMediaFingerprint, getEffectiveViewerProfile } from './core/projection-profile.js';
 import { CalibrationUI } from './controls/calibration-ui.js';
@@ -25,6 +24,16 @@ export function remoteLog(level, message, data = null) {
   }).catch(() => {});
 }
 setRemoteLogFunction(remoteLog);
+
+// Stall Telemetry Snapshot Subscriber
+stallDetector.onSnapshot((snap) => {
+  const phase = snap.phase;
+  const dur = snap.stallDurationMs || snap.elapsedMs || 0;
+  const rVFCInfo = snap.rvfc ? `rVFC(mediaTime:${snap.rvfc.lastRvfcMediaTime}, frames:${snap.rvfc.lastPresentedFrames})` : '--';
+  const bufInfo = snap.mediaState ? `Ready:${snap.mediaState.readyState} Net:${snap.mediaState.networkState} BufAhead:${snap.mediaState.bufferAheadSec}s CurTime:${snap.mediaState.currentTime}s` : '--';
+  console.warn(`[STALL ${phase}] dur:${dur}ms | ${rVFCInfo} | ${bufInfo}`);
+  remoteLog('WARN', `STALL_${phase}`, snap);
+});
 
 function showError(msg) {
   const banner = document.getElementById('errorBanner');
@@ -345,6 +354,8 @@ let lastFrameTime = performance.now();
 function renderLoop(now) {
   requestAnimationFrame(renderLoop);
 
+  stallDetector.checkStall(now, video);
+
   perfTelemetry.recordRaf();
   const dt = now - lastFrameTime;
   lastFrameTime = now;
@@ -474,6 +485,7 @@ setInterval(() => {
     videoPaused: !!video.paused,
     currentTime: video.currentTime || 0,
     duration: video.duration || 0,
+    stall: stallDetector.getSummary(),
     mediaList: (state.videoList || []).map(v => ({ relPath: v.relPath, name: v.name, sizeGB: v.sizeGB })),
     controllerInput: controllerProbe.getTelemetryData()
   };

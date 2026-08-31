@@ -1,8 +1,6 @@
-// ==========================================
-// UX Interaction Telemetry Engine
-// ==========================================
 import { state, showFeedbackToast } from '../core/state.js';
 import { playAudioFeedback, triggerHaptic } from '../controls/audio-haptics.js';
+import { stallDetector } from './stall-detector.js';
 
 export class TelemetryEngine {
   constructor() {
@@ -355,7 +353,8 @@ export class PerformanceTelemetry {
         glError: glErrStr,
         contextLostCount: this.glContextLostCount,
         contextRestoredCount: this.glContextRestoredCount
-      }
+      },
+      stall: stallDetector.getSummary()
     };
 
     this.windowStart = now;
@@ -374,4 +373,5 @@ export class PerformanceTelemetry {
 
 export const telemetry = new TelemetryEngine();
 export const perfTelemetry = new PerformanceTelemetry();
+export { stallDetector };
 

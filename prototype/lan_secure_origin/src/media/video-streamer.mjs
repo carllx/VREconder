@@ -1,4 +1,18 @@
 import fs from 'node:fs';
+import path from 'node:path';
+
+let rangeRequestSeq = 0;
+const recentRangeLifecycles = [];
+const MAX_RANGE_HISTORY = 100;
+
+export function getRecentRangeLifecycles() {
+  return recentRangeLifecycles;
+}
+
+export function resetRangeLifecycles() {
+  recentRangeLifecycles.length = 0;
+  rangeRequestSeq = 0;
+}
 
 export function parseByteRange(rangeHeader, fileSize) {
   if (!rangeHeader || typeof rangeHeader !== 'string') {
@@ -36,15 +50,30 @@ export function parseByteRange(rangeHeader, fileSize) {
 }
 
 export function streamVideo(req, res, filePath) {
+  const reqId = ++rangeRequestSeq;
+  const startTime = Date.now();
+  const rawRange = req.headers ? (req.headers.range || null) : null;
+  const mediaName = filePath ? path.basename(filePath) : '--';
+
   if (!fs.existsSync(filePath)) {
     res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
     res.end('Video file not found: ' + filePath);
+    const endRecord = {
+      event: 'RANGE_FINISH',
+      requestId: reqId,
+      timestamp: new Date().toISOString(),
+      durationMs: 0,
+      outcome: 'not_found',
+      responseStatus: 404,
+      contentRange: null,
+      contentLength: 0
+    };
+    recentRangeLifecycles.push(endRecord);
     return;
   }
 
   const stat = fs.statSync(filePath);
   const fileSize = stat.size;
-  const rawRange = req.headers.range || null;
 
   if (req.method === 'HEAD') {
     res.writeHead(200, {
@@ -54,18 +83,41 @@ export function streamVideo(req, res, filePath) {
       'Access-Control-Allow-Origin': '*'
     });
     res.end();
+    const endRecord = {
+      event: 'RANGE_FINISH',
+      requestId: reqId,
+      timestamp: new Date().toISOString(),
+      durationMs: Date.now() - startTime,
+      outcome: 'head',
+      responseStatus: 200,
+      contentRange: null,
+      contentLength: fileSize
+    };
+    recentRangeLifecycles.push(endRecord);
     return;
   }
 
   const rangeParsed = parseByteRange(rawRange, fileSize);
 
   if (rangeParsed.type === 'multiple' || rangeParsed.type === 'invalid' || rangeParsed.type === 'unsatisfiable') {
+    const rangeHeaderVal = `bytes */${fileSize}`;
     res.writeHead(416, {
-      'Content-Range': `bytes */${fileSize}`,
+      'Content-Range': rangeHeaderVal,
       'Content-Type': 'video/mp4',
       'Access-Control-Allow-Origin': '*'
     });
     res.end();
+    const endRecord = {
+      event: 'RANGE_FINISH',
+      requestId: reqId,
+      timestamp: new Date().toISOString(),
+      durationMs: Date.now() - startTime,
+      outcome: 'unsatisfiable',
+      responseStatus: 416,
+      contentRange: rangeHeaderVal,
+      contentLength: 0
+    };
+    recentRangeLifecycles.push(endRecord);
     return;
   }
 
@@ -90,20 +142,42 @@ export function streamVideo(req, res, filePath) {
     headers['Content-Length'] = fileSize;
   }
 
+  console.log(`[RANGE_START #${reqId}] ${mediaName} | Range:${rawRange || 'none'} (${readStart}-${readEnd}) | Status:${statusCode} | Len:${headers['Content-Length']}`);
+
   res.writeHead(statusCode, headers);
 
   const fileStream = fs.createReadStream(filePath, { start: readStart, end: readEnd });
 
-  const cleanup = () => {
+  let finalized = false;
+  const finalize = (outcome) => {
+    if (finalized) return;
+    finalized = true;
     if (!fileStream.destroyed) {
       fileStream.destroy();
     }
+    const durationMs = Date.now() - startTime;
+    const endEventName = outcome === 'finish' ? 'RANGE_FINISH' : (outcome === 'aborted' ? 'RANGE_ABORT' : 'RANGE_CLOSE');
+    const endRecord = {
+      event: endEventName,
+      requestId: reqId,
+      timestamp: new Date().toISOString(),
+      durationMs,
+      outcome, // 'finish' | 'close' | 'aborted' | 'error'
+      responseStatus: statusCode,
+      contentRange: headers['Content-Range'] || null,
+      contentLength: headers['Content-Length']
+    };
+    recentRangeLifecycles.push(endRecord);
+    if (recentRangeLifecycles.length > MAX_RANGE_HISTORY) {
+      recentRangeLifecycles.shift();
+    }
+    console.log(`[${endEventName} #${reqId}] outcome:${outcome} | dur:${durationMs}ms | Status:${statusCode} | Range:${headers['Content-Range'] || '--'}`);
   };
 
-  fileStream.on('error', cleanup);
-  res.on('close', cleanup);
-  res.on('finish', cleanup);
-  req.on('aborted', cleanup);
+  fileStream.on('error', () => finalize('error'));
+  res.on('finish', () => finalize('finish'));
+  res.on('close', () => finalize('close'));
+  req.on('aborted', () => finalize('aborted'));
 
   fileStream.pipe(res);
 }

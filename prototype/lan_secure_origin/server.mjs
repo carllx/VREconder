@@ -193,6 +193,7 @@ function handleRequest(req, res, isHttps) {
               const mName = payload.mediaName || (payload.mediaPath ? payload.mediaPath.split('/').pop() : '--');
               const dDrop = (typeof q.windowDeltaDropped !== 'undefined') ? q.windowDeltaDropped : '--';
               const dTot = (typeof q.windowDeltaTotal !== 'undefined') ? q.windowDeltaTotal : '--';
+              const dRate = (typeof q.windowDropRate !== 'undefined') ? q.windowDropRate + '%' : '--';
               const uiInfo = payload.uiState ? ` UI[vis:${payload.uiState.isStereoUIVisible?'Y':'N'} menu:${payload.uiState.menuOpen?'Y':'N'} toast:${payload.uiState.toastActive?'Y':'N'}]` : '';
               const curTimeStr = (typeof pb.currentTime !== 'undefined') ? ` CurTime:${pb.currentTime}s` : '';
               const pausedStr = (typeof pb.paused !== 'undefined') ? ` Paused:${pb.paused ? 1 : 0}` : '';

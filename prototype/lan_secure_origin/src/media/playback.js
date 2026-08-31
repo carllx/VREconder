@@ -3,6 +3,7 @@
 // ==========================================
 import { state } from '../core/state.js';
 import { perfTelemetry } from '../telemetry/telemetry.js';
+import { stallDetector } from '../telemetry/stall-detector.js';
 
 export class MediaController {
   constructor(videoElement, videoSelectElement) {
@@ -15,23 +16,29 @@ export class MediaController {
   }
 
   initListeners() {
-    const onFrame = () => {
+    if (this.video) {
+      stallDetector.attachVideo(this.video);
+    }
+
+    const onFrame = (now, metadata) => {
       this.videoFrameNeedsUpload = true;
       perfTelemetry.recordRvfc();
+      stallDetector.recordRvfc(now, metadata);
       if (!state.firstFrameTimings.firstFrameDecodedAt && state.firstFrameTimings.selectedAt) {
         state.firstFrameTimings.firstFrameDecodedAt = performance.now();
         state.firstFrameTimings.statusText = 'Decoded Frame Arrived';
       }
-      if (this.video.requestVideoFrameCallback) {
+      if (this.video && this.video.requestVideoFrameCallback) {
         this.video.requestVideoFrameCallback(onFrame);
       }
     };
 
-    if (this.video.requestVideoFrameCallback) {
+    if (this.video && this.video.requestVideoFrameCallback) {
       this.video.requestVideoFrameCallback(onFrame);
-    } else {
+    } else if (this.video) {
       this.video.addEventListener('timeupdate', () => {
         this.videoFrameNeedsUpload = true;
+        stallDetector.recordRvfc(performance.now(), null);
         if (!state.firstFrameTimings.firstFrameDecodedAt && state.firstFrameTimings.selectedAt) {
           state.firstFrameTimings.firstFrameDecodedAt = performance.now();
           state.firstFrameTimings.statusText = 'Decoded Frame Arrived';
