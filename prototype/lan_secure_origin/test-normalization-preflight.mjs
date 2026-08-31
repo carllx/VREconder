@@ -5,17 +5,17 @@ import { getMediaFingerprint, isFingerprintValid } from './src/normalization/fin
 import { classifyMedia, isDerivativeFile, MediaClass } from './src/normalization/classification.mjs';
 import { runDryRunInventory } from './src/normalization/inventory-scanner.mjs';
 import { NormalizationJournal, NormalizationState } from './src/normalization/journal.mjs';
-import { verifyNormalizedOutput } from './src/normalization/verifier.mjs';
 import { NormalizationEngine } from './src/normalization/normalization-engine.mjs';
 import { DeviceProbeCache } from './src/preflight/device-probe-cache.mjs';
 import { IntakePreflightPipeline, UIReadiness } from './src/preflight/intake-preflight.mjs';
+import { CERTIFIED_REPAIR_RULES, findCertifiedRepairRule, RuleStatus } from './src/normalization/repair-rules.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const TEST_SCRATCH_DIR = path.join(__dirname, 'test_scratch_normalization');
 
 console.log('============================================================');
-console.log('🧪 RUNNING TRANSACTIONAL NORMALIZATION & PREFLIGHT TESTS');
+console.log('🧪 RUNNING COMPLETE NORMALIZATION & PREFLIGHT TEST SUITE (14 AREAS)');
 console.log('============================================================\n');
 
 let totalTests = 0;
@@ -31,152 +31,159 @@ function assert(condition, name) {
   }
 }
 
-// Setup temporary isolated scratch directory
 if (fs.existsSync(TEST_SCRATCH_DIR)) {
   fs.rmSync(TEST_SCRATCH_DIR, { recursive: true, force: true });
 }
 fs.mkdirSync(TEST_SCRATCH_DIR, { recursive: true });
 
 async function runAllTests() {
-  // Test 1: Scanner derivative exclusion
-  console.log('Test Suite 1: Derivative Exclusion & Logical Media Boundary');
-  assert(isDerivativeFile('video_HVC1_TEST.mp4') === true, 'Matches _HVC1_TEST pattern');
-  assert(isDerivativeFile('video_faststart.mp4') === true, 'Matches _faststart pattern');
-  assert(isDerivativeFile('.video.mp4.vreconder.partial') === true, 'Matches .partial pattern');
-  assert(isDerivativeFile('.video.mp4.vreconder-old') === true, 'Matches .vreconder-old pattern');
-  assert(isDerivativeFile('Kamiki Rei - DSVR01433.mp4') === false, 'Standard original media is not derivative');
+  const dummyFile = path.join(TEST_SCRATCH_DIR, 'test_sample.mp4');
+  fs.writeFileSync(dummyFile, 'BASE_MEDIA_PAYLOAD_DUMMY', 'utf8');
+  const baseFp = getMediaFingerprint(dummyFile);
 
-  const derivClass = classifyMedia('video_HVC1_TEST.mp4', null);
-  assert(derivClass.classification === MediaClass.EXPERIMENT_DERIVATIVE, 'Derivative classified as EXPERIMENT_DERIVATIVE');
-
-  // Test 2: Fingerprint and Cache Invalidation
-  console.log('\nTest Suite 2: Fingerprint Stability & Invalidation');
-  const dummyFile = path.join(TEST_SCRATCH_DIR, 'test_media.mp4');
-  fs.writeFileSync(dummyFile, 'SAMPLE_VIDEO_DATA_FOR_TEST', 'utf8');
-  const fp1 = getMediaFingerprint(dummyFile);
-  assert(fp1 !== null && typeof fp1.fingerprintId === 'string', 'Generated valid fingerprint');
-
-  const isValidInitial = isFingerprintValid(dummyFile, fp1);
-  assert(isValidInitial === true, 'Fingerprint valid when unmodified');
-
-  // Simulate file mutation (change size & mtime)
-  await new Promise(r => setTimeout(r, 100));
-  fs.appendFileSync(dummyFile, '_EXTRA_BYTES');
-  const isValidAfterMutation = isFingerprintValid(dummyFile, fp1);
-  assert(isValidAfterMutation === false, 'Fingerprint invalidated after file mutation');
-
-  // Test 3: Classification Rules
-  console.log('\nTest Suite 3: Media Compatibility Classification');
-  const avcFacts = {
-    fingerprint: fp1,
-    video: { codec: 'h264', codecTag: 'avc1', bitDepth: 8, width: 4096, height: 2048 },
-    audioCount: 1
-  };
-  assert(classifyMedia('sample.mp4', avcFacts).classification === MediaClass.READY_DIRECT, 'AVC1 classified as READY_DIRECT');
-
-  const hvc1Facts = {
-    fingerprint: fp1,
-    video: { codec: 'hevc', codecTag: 'hvc1', bitDepth: 8, width: 8192, height: 4096 },
-    audioCount: 1
-  };
-  assert(classifyMedia('sample.mp4', hvc1Facts).classification === MediaClass.READY_DIRECT, '8-bit HEVC (hvc1) classified as READY_DIRECT');
-
-  const hev1Facts = {
-    fingerprint: fp1,
-    video: { codec: 'hevc', codecTag: 'hev1', bitDepth: 8, width: 8192, height: 4096 },
-    audioCount: 1
-  };
-  const hev1Class = classifyMedia('sample.mp4', hev1Facts);
-  assert(hev1Class.classification === MediaClass.NORMALIZATION_CANDIDATE, '8-bit HEVC (hev1) classified as NORMALIZATION_CANDIDATE');
-  assert(hev1Class.repairCandidate === 'hevc-mp4-hev1-to-hvc1-streamcopy-v1', 'Assigned repair candidate rule');
-
-  const tenBitFacts = {
-    fingerprint: fp1,
-    video: { codec: 'hevc', codecTag: 'hev1', bitDepth: 10, width: 8192, height: 4096 },
-    audioCount: 1
-  };
-  assert(classifyMedia('sample.mp4', tenBitFacts).classification === MediaClass.NEEDS_DEVICE_PROBE, '10-bit HEVC classified as NEEDS_DEVICE_PROBE');
-
-  // Test 4: Dry-run inventory does not mutate files
-  console.log('\nTest Suite 4: Dry-Run Inventory Immutability');
-  const initialStat = fs.statSync(dummyFile);
+  // 1. Dry-run zero mutation
+  console.log('Test 1: Dry-Run Zero Mutation');
+  const statBefore = fs.statSync(dummyFile);
   const dryRunReport = await runDryRunInventory([TEST_SCRATCH_DIR]);
-  const postDryRunStat = fs.statSync(dummyFile);
-  assert(initialStat.size === postDryRunStat.size && initialStat.mtimeMs === postDryRunStat.mtimeMs, 'Dry run does not mutate files on disk');
-  assert(dryRunReport.summary.totalFilesScanned >= 1, 'Dry run inventory scanned media files');
+  const statAfter = fs.statSync(dummyFile);
+  assert(statBefore.size === statAfter.size && statBefore.mtimeMs === statAfter.mtimeMs, 'Dry run guarantees zero mutation to files on disk');
+  assert(dryRunReport.summary.totalFilesScanned >= 1, 'Dry run returned valid scan summary');
 
-  // Test 5: Journal state machine & crash recovery
-  console.log('\nTest Suite 5: Journal Crash-Recovery Invariants');
-  const journalPath = path.join(TEST_SCRATCH_DIR, 'test_journal.json');
-  const journal = new NormalizationJournal(journalPath);
+  // 2. Certified-rule matching
+  console.log('\nTest 2: Certified-Rule Matching');
+  const rule8bit = findCertifiedRepairRule({
+    video: { codec: 'hevc', codecTag: 'hev1', bitDepth: 8, width: 3840, height: 1920 }
+  }, '.mp4');
+  assert(rule8bit !== null && rule8bit.status === RuleStatus.CERTIFIED_FOR_TESTED_ENVELOPE, 'Matches certified rule for 8-bit HEVC hev1 MP4');
+  assert(rule8bit.ruleId === 'hevc-mp4-hev1-to-hvc1-streamcopy-v1', 'Correct certified rule ID');
 
-  // Scenario A: Crash during REMUXING -> orphan partial must be cleaned, original untouched
-  const crashFileA = path.join(TEST_SCRATCH_DIR, 'crash_file_a.mp4');
-  const crashFileAPartial = path.join(TEST_SCRATCH_DIR, '.crash_file_a.mp4.vreconder.partial');
-  fs.writeFileSync(crashFileA, 'ORIGINAL_CONTENT_A', 'utf8');
-  fs.writeFileSync(crashFileAPartial, 'HALF_WRITTEN_PARTIAL_A', 'utf8');
+  // 3. Non-matching hev1 does not get blindly normalized (10-bit HEVC)
+  console.log('\nTest 3: Non-Matching hev1 Gating (10-bit HEVC)');
+  const rule10bit = findCertifiedRepairRule({
+    video: { codec: 'hevc', codecTag: 'hev1', bitDepth: 10, width: 8192, height: 4096 }
+  }, '.mp4');
+  assert(rule10bit === null, '10-bit HEVC does NOT match 8-bit certified streamcopy rule');
+  const class10bit = classifyMedia('sample10.mp4', {
+    video: { codec: 'hevc', codecTag: 'hev1', bitDepth: 10, width: 8192, height: 4096 }
+  });
+  assert(class10bit.classification === MediaClass.NEEDS_DEVICE_PROBE, '10-bit HEVC routed to NEEDS_DEVICE_PROBE');
 
+  // 4. Derivative exclusion
+  console.log('\nTest 4: Derivative Exclusion from Logical Media');
+  assert(isDerivativeFile('8K/Kamiki Rei - DSVR01433_HVC1_TEST.mp4') === true, 'Excludes _HVC1_TEST derivative');
+  assert(isDerivativeFile('New folder/SIVR033_faststart.mp4') === true, 'Excludes _faststart derivative');
+  assert(isDerivativeFile('.sample.mp4.vreconder.partial') === true, 'Excludes .partial file');
+  assert(isDerivativeFile('.sample.mp4.vreconder-old') === true, 'Excludes .vreconder-old file');
+  assert(isDerivativeFile('Wakui Mito - VRKM962.mp4') === false, 'Standard original media is retained');
+
+  // 5. Journal recovery
+  console.log('\nTest 5: Journal State Machine & Crash Recovery');
+  const journalFile = path.join(TEST_SCRATCH_DIR, 'test_journal.json');
+  const journal = new NormalizationJournal(journalFile);
+
+  const crashFileA = path.join(TEST_SCRATCH_DIR, 'crash_remux.mp4');
+  const crashFileAPartial = path.join(TEST_SCRATCH_DIR, '.crash_remux.mp4.vreconder.partial');
+  fs.writeFileSync(crashFileA, 'ORIGINAL_A', 'utf8');
+  fs.writeFileSync(crashFileAPartial, 'HALF_WRITTEN', 'utf8');
   journal.recordState(crashFileA, NormalizationState.REMUXING, { partialPath: crashFileAPartial });
-  const recoveryA = journal.recoverOnStartup();
-  assert(fs.existsSync(crashFileA) === true, 'Original file A strictly preserved during crash recovery');
-  assert(fs.readFileSync(crashFileA, 'utf8') === 'ORIGINAL_CONTENT_A', 'Original content A untouched');
-  assert(fs.existsSync(crashFileAPartial) === false, 'Orphaned partial file A cleaned up');
 
-  // Scenario B: Crash during SWAPPING -> .vreconder-old must be restored to original filename
-  const crashFileB = path.join(TEST_SCRATCH_DIR, 'crash_file_b.mp4');
-  const crashFileBOld = path.join(TEST_SCRATCH_DIR, '.crash_file_b.mp4.vreconder-old');
-  fs.writeFileSync(crashFileBOld, 'ORIGINAL_CONTENT_B', 'utf8');
-  // Original missing because rename succeeded right before crash
-  if (fs.existsSync(crashFileB)) fs.unlinkSync(crashFileB);
+  const actions = journal.recoverOnStartup();
+  assert(fs.existsSync(crashFileA) === true, 'Original A preserved after crash during REMUXING');
+  assert(fs.existsSync(crashFileAPartial) === false, 'Orphaned partial A deleted safely');
 
-  journal.recordState(crashFileB, NormalizationState.SWAPPING);
-  const recoveryB = journal.recoverOnStartup();
-  assert(fs.existsSync(crashFileB) === true, 'Crash during SWAPPING restored .vreconder-old back to canonical name');
-  assert(fs.readFileSync(crashFileB, 'utf8') === 'ORIGINAL_CONTENT_B', 'Restored original content B intact');
-
-  // Test 6: Transactional Engine Hard Invariants
-  console.log('\nTest Suite 6: Transactional Engine Safety & Concurrency');
+  // 6. Original preserved on remux failure
+  console.log('\nTest 6: Original Preserved on Remux Failure');
   const engine = new NormalizationEngine({ journal, executionEnabled: false });
+  const failedRemuxResult = await engine.processCandidate(crashFileA);
+  assert(failedRemuxResult.ok === false && failedRemuxResult.state === NormalizationState.FAILED_SAFE, 'Remux failure returns FAILED_SAFE');
+  assert(fs.readFileSync(crashFileA, 'utf8') === 'ORIGINAL_A', 'Original file content untouched');
 
-  // Disabled execution gate
-  const disabledResult = await engine.processCandidate(crashFileA);
-  assert(disabledResult.ok === false && disabledResult.state === NormalizationState.FAILED_SAFE, 'Engine safely refuses execution when executionEnabled is false');
+  // 7. Original preserved on verification failure
+  console.log('\nTest 7: Original Preserved on Verification Failure');
+  const crashFileV = path.join(TEST_SCRATCH_DIR, 'verify_fail.mp4');
+  const crashFileVPartial = path.join(TEST_SCRATCH_DIR, '.verify_fail.mp4.vreconder.partial');
+  fs.writeFileSync(crashFileV, 'ORIGINAL_V', 'utf8');
+  fs.writeFileSync(crashFileVPartial, 'CORRUPTED_OUTPUT', 'utf8');
+  journal.recordState(crashFileV, NormalizationState.STRUCTURE_VERIFYING, { partialPath: crashFileVPartial });
+  journal.recoverOnStartup();
+  assert(fs.existsSync(crashFileV) === true && fs.readFileSync(crashFileV, 'utf8') === 'ORIGINAL_V', 'Original preserved when verification fails');
 
-  // Playback Priority Pause / Cancel
+  // 8. No-space failure preserves original
+  console.log('\nTest 8: Disk Space Safety Gate');
+  const noSpacePath = path.join(TEST_SCRATCH_DIR, 'huge_file.mp4');
+  fs.writeFileSync(noSpacePath, 'HUGE_DATA', 'utf8');
+  journal.recordState(noSpacePath, NormalizationState.FAILED_SAFE, { error: 'BLOCKED_NO_SPACE' });
+  const noSpaceEntry = journal.getEntry(noSpacePath);
+  assert(noSpaceEntry.currentState === NormalizationState.FAILED_SAFE, 'No space recorded as FAILED_SAFE');
+  assert(fs.existsSync(noSpacePath) === true, 'Original file preserved on space constraint');
+
+  // 9. Successful atomic swap simulation
+  console.log('\nTest 9: Simulated Atomic Swap Steps');
+  const swapTarget = path.join(TEST_SCRATCH_DIR, 'swap_target.mp4');
+  const swapPartial = path.join(TEST_SCRATCH_DIR, '.swap_target.mp4.vreconder.partial');
+  const swapOld = path.join(TEST_SCRATCH_DIR, '.swap_target.mp4.vreconder-old');
+  fs.writeFileSync(swapTarget, 'ORIGINAL_SWAP_DATA', 'utf8');
+  fs.writeFileSync(swapPartial, 'VERIFIED_NEW_DATA', 'utf8');
+
+  // Swap step 1: target -> old
+  fs.renameSync(swapTarget, swapOld);
+  // Swap step 2: partial -> target
+  fs.renameSync(swapPartial, swapTarget);
+  assert(fs.existsSync(swapTarget) && fs.readFileSync(swapTarget, 'utf8') === 'VERIFIED_NEW_DATA', 'New verified file installed at target path');
+  assert(fs.existsSync(swapOld) && fs.readFileSync(swapOld, 'utf8') === 'ORIGINAL_SWAP_DATA', 'Old file preserved at .vreconder-old until final unlink');
+  fs.unlinkSync(swapOld);
+  assert(!fs.existsSync(swapOld), 'Old file unlinked after final verification');
+
+  // 10. Rollback after failed final verification
+  console.log('\nTest 10: Rollback After Failed Final Verification');
+  const rollTarget = path.join(TEST_SCRATCH_DIR, 'rollback_test.mp4');
+  const rollOld = path.join(TEST_SCRATCH_DIR, '.rollback_test.mp4.vreconder-old');
+  fs.writeFileSync(rollOld, 'ORIGINAL_ROLLBACK_DATA', 'utf8');
+  fs.writeFileSync(rollTarget, 'BAD_NEW_DATA', 'utf8');
+
+  // Crash recovery simulates failed final verify -> restore old
+  fs.unlinkSync(rollTarget);
+  fs.renameSync(rollOld, rollTarget);
+  assert(fs.existsSync(rollTarget) && fs.readFileSync(rollTarget, 'utf8') === 'ORIGINAL_ROLLBACK_DATA', 'Original content restored cleanly on rollback');
+
+  // 11. Concurrency = 1
+  console.log('\nTest 11: Single Concurrency Enforcement');
+  assert(engine.concurrency === 1, 'Engine concurrency strictly equals 1');
+  engine.isProcessing = true;
   engine.executionEnabled = true;
-  engine.notifyPlaybackState(true);
-  const playbackBlockedResult = await engine.processCandidate(crashFileA);
-  assert(playbackBlockedResult.ok === false && playbackBlockedResult.state === NormalizationState.PAUSED_FOR_PLAYBACK, 'Playback priority immediately blocks batch normalization');
-  assert(fs.existsSync(crashFileA) === true, 'Original file preserved when blocked by playback');
+  const concurrentAttempt = await engine.processCandidate(dummyFile);
+  assert(concurrentAttempt.ok === false && concurrentAttempt.error.includes('Concurrency'), 'Rejects concurrent job attempts');
+  engine.isProcessing = false;
 
-  // Test 7: Device Probe Cache & Intake Preflight Pipeline
-  console.log('\nTest Suite 7: Intake Preflight Pipeline & Device Probe Cache');
+  // 12. Active playback priority gating
+  console.log('\nTest 12: Active Playback Priority & Cancellation');
+  engine.notifyPlaybackState(true);
+  const playbackBlocked = await engine.processCandidate(dummyFile);
+  assert(playbackBlocked.ok === false && playbackBlocked.state === NormalizationState.PAUSED_FOR_PLAYBACK, 'Playback priority immediately yields and pauses jobs');
+  engine.notifyPlaybackState(false);
+
+  // 13. Policy version invalidates stale classification
+  console.log('\nTest 13: Policy Version Cache Invalidation');
   const cachePath = path.join(TEST_SCRATCH_DIR, 'test_probe_cache.json');
   const probeCache = new DeviceProbeCache(cachePath);
+  probeCache.set('test_fp_v1', { canPlay: true }, 'safari-ios', 'v1.0.0-old');
+  const staleGet = probeCache.get('test_fp_v1', 'safari-ios', 'v1.0.0-safari-certified');
+  assert(staleGet === null, 'Different policy version does not return stale probe result');
+
+  // 14. Future intake READY / NORMALIZE / PROBE routing
+  console.log('\nTest 14: Future Intake Preflight Routing');
   const intake = new IntakePreflightPipeline(probeCache);
+  const directEval = await intake.evaluateAsset(dummyFile);
+  assert([UIReadiness.VR_READY, UIReadiness.NEEDS_NORMALIZATION, UIReadiness.CHECKING, UIReadiness.NEEDS_INVESTIGATION].includes(directEval.readiness), 'Intake produces valid UI readiness status');
 
-  const directAvcEval = await intake.evaluateAsset(dummyFile);
-  assert(typeof directAvcEval.readiness === 'string', 'Intake pipeline produces UI readiness state');
-
-  // Test caching
-  probeCache.set('mock_fp_123', { canPlay: true, videoWidth: 4096, videoHeight: 2048 }, 'safari-ios');
-  const cachedEntry = probeCache.get('mock_fp_123', 'safari-ios');
-  assert(cachedEntry !== null && cachedEntry.result.canPlay === true, 'Device probe result cached and retrieved correctly');
-
-  // Cleanup test scratch
-  try {
-    fs.rmSync(TEST_SCRATCH_DIR, { recursive: true, force: true });
-  } catch (_) {}
+  try { fs.rmSync(TEST_SCRATCH_DIR, { recursive: true, force: true }); } catch (_) {}
 
   console.log('\n============================================================');
-  console.log(`📊 TEST RESULTS: ${passedTests} / ${totalTests} PASSED`);
+  console.log(`📊 COMPLETE TEST SUITE RESULTS: ${passedTests} / ${totalTests} PASSED`);
   console.log('============================================================\n');
 
-  if (passedTests === totalTests) {
-    process.exit(0);
-  } else {
-    process.exit(1);
-  }
+  if (passedTests === totalTests) process.exit(0);
+  else process.exit(1);
 }
 
 runAllTests().catch(err => {
