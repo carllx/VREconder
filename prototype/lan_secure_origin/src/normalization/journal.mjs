@@ -57,10 +57,24 @@ export class NormalizationJournal {
       }
 
       const parsed = JSON.parse(content);
-      if (!parsed || parsed.version !== 1 || typeof parsed.entries !== 'object' || parsed.entries === null) {
+      if (!parsed || parsed.version !== 1 || typeof parsed.entries !== 'object' || parsed.entries === null || Array.isArray(parsed.entries)) {
         this.isCorrupt = true;
         this.corruptReason = `Invalid journal schema or unsupported version: ${parsed?.version}`;
         throw new Error(`JOURNAL_CORRUPT: ${this.corruptReason}`);
+      }
+
+      const validStates = new Set(Object.values(NormalizationState));
+      for (const [key, entry] of Object.entries(parsed.entries)) {
+        if (!entry || typeof entry !== 'object' || Array.isArray(entry)) {
+          this.isCorrupt = true;
+          this.corruptReason = `Malformed journal entry for ${key}: entry is not an object`;
+          throw new Error(`JOURNAL_CORRUPT: ${this.corruptReason}`);
+        }
+        if (!entry.currentState || typeof entry.currentState !== 'string' || !validStates.has(entry.currentState)) {
+          this.isCorrupt = true;
+          this.corruptReason = `Invalid or unknown currentState '${entry.currentState}' for entry ${key}`;
+          throw new Error(`JOURNAL_CORRUPT: ${this.corruptReason}`);
+        }
       }
 
       return parsed;
@@ -117,6 +131,9 @@ export class NormalizationJournal {
     existing.currentState = state;
     existing.lastUpdated = now;
     existing.meta = { ...(existing.meta || {}), ...meta };
+    if (!Array.isArray(existing.history)) {
+      existing.history = [];
+    }
     existing.history.push({ state, timestamp: now, meta });
 
     journal.entries[canonical] = existing;
@@ -151,6 +168,12 @@ export class NormalizationJournal {
     const unrecovered = [];
 
     for (const [canonical, entry] of Object.entries(journal.entries)) {
+      if (!entry || typeof entry !== 'object' || Array.isArray(entry)) {
+        actions.push({ originalPath: canonical, action: 'malformed_entry_recovery_blocked', recovered: false, stateBeforeRecovery: null });
+        unrecovered.push(canonical);
+        continue;
+      }
+
       const state = entry.currentState;
       // Skip completed or terminal safe entries
       if (state === NormalizationState.DONE || state === NormalizationState.FAILED_SAFE || state === NormalizationState.CANCELLED) {
@@ -327,6 +350,11 @@ export class NormalizationJournal {
           }
         }
       }
+      // Case 5: Unknown or unrecognized state
+      else {
+        action = 'unknown_state_recovery_blocked';
+        recovered = false;
+      }
 
       if (recovered) {
         this.recordState(canonical, targetTerminalState, {
@@ -341,12 +369,15 @@ export class NormalizationJournal {
           ? NormalizationState.CLEANUP_PENDING
           : NormalizationState.RECOVERY_REQUIRED;
 
-        this.recordState(canonical, nextState, {
-          recoveryAction: action,
-          recoveredAt: new Date().toISOString(),
-          recoveredFrom: state,
-          recoverySuccess: false
-        });
+        // If state is known, record failure transition; if state is unknown/corrupt, do not mutate journal entry
+        if (state && Object.values(NormalizationState).includes(state)) {
+          this.recordState(canonical, nextState, {
+            recoveryAction: action,
+            recoveredAt: new Date().toISOString(),
+            recoveredFrom: state,
+            recoverySuccess: false
+          });
+        }
         unrecovered.push(canonical);
       }
 

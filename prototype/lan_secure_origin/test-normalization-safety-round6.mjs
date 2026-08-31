@@ -286,6 +286,157 @@ async function runRound6Tests() {
   const t6CanonicalBytesAfter = fs.readFileSync(t6Sample);
   assert(Buffer.compare(t6CanonicalBytesBefore, t6CanonicalBytesAfter) === 0, 'Canonical media bytes strictly unmutated');
 
+  // Test 7: Unknown currentState string ("FINL_VERIFIED") fails closed
+  console.log('\nTest 7: Unknown currentState string fails closed without mutating artifacts or journal');
+  const t7JournalPath = path.join(TEST_SCRATCH_DIR, 'journal_t7.json');
+  const t7Sample = path.join(TEST_SCRATCH_DIR, 't7_unknown_state.mp4');
+  const t7Old = path.join(TEST_SCRATCH_DIR, '.t7_unknown_state.mp4.vreconder-old');
+  const t7Partial = path.join(TEST_SCRATCH_DIR, '.t7_unknown_state.mp4.vreconder.partial');
+  fs.writeFileSync(t7Sample, 'CANONICAL_T7_CONTENT', 'utf8');
+  fs.writeFileSync(t7Old, 'OLD_T7_CONTENT', 'utf8');
+  fs.writeFileSync(t7Partial, 'PARTIAL_T7_CONTENT', 'utf8');
+
+  fs.writeFileSync(t7JournalPath, JSON.stringify({
+    version: 1,
+    entries: {
+      [t7Sample]: {
+        originalPath: t7Sample,
+        currentState: 'FINL_VERIFIED', // Unknown typo state!
+        initialFingerprint: null,
+        replacementFingerprint: null,
+        history: []
+      }
+    }
+  }, null, 2), 'utf8');
+
+  let t7UnlinkCount = 0;
+  let t7RenameCount = 0;
+  const t7FileOps = {
+    unlinkSync: (p) => { t7UnlinkCount++; return fs.unlinkSync(p); },
+    renameSync: (from, to) => { t7RenameCount++; return fs.renameSync(from, to); }
+  };
+
+  const t7Journal = new NormalizationJournal(t7JournalPath);
+  const t7Val = t7Journal.validateJournal();
+  assert(t7Val.ok === false, 'validateJournal fails on unknown state string');
+  assert(t7Val.error.includes('JOURNAL_CORRUPT') || t7Val.error.includes('FINL_VERIFIED'), 'Error identifies corrupt / unknown state');
+
+  const t7Rec = t7Journal.recoverOnStartup(t7FileOps);
+  assert(t7Rec.ok === false, 'recoverOnStartup fails on unknown state');
+  assert(t7Rec.status === 'JOURNAL_CORRUPT' || t7Rec.status === 'RECOVERY_BLOCKED', 'Recovery status is blocked');
+
+  const t7Engine = new NormalizationEngine({
+    journal: t7Journal,
+    executionEnabled: true,
+    allowedRoots: [TEST_SCRATCH_DIR],
+    fileOps: t7FileOps
+  });
+  const t7Init = await t7Engine.initialize();
+  assert(t7Init.ok === false, 'Engine initialize fails closed on unknown state');
+  assert(t7Engine.status === EngineStatus.JOURNAL_CORRUPT || t7Engine.status === EngineStatus.RECOVERY_BLOCKED, 'Engine status is not SAFE_IDLE');
+  assert(t7UnlinkCount === 0, 'Zero unlink operations executed');
+  assert(t7RenameCount === 0, 'Zero rename operations executed');
+  assert(fs.existsSync(t7Sample) === true, 'Canonical file preserved');
+  assert(fs.existsSync(t7Old) === true, 'Old backup file preserved');
+  assert(fs.existsSync(t7Partial) === true, 'Partial file preserved');
+
+  // Verify raw journal entry was NOT overwritten to FAILED_SAFE
+  const rawJournal7 = JSON.parse(fs.readFileSync(t7JournalPath, 'utf8'));
+  assert(rawJournal7.entries[t7Sample].currentState === 'FINL_VERIFIED', 'Unknown state entry was NOT rewritten to FAILED_SAFE');
+
+  // Test 8: Missing currentState fails closed
+  console.log('\nTest 8: Missing currentState fails closed');
+  const t8JournalPath = path.join(TEST_SCRATCH_DIR, 'journal_t8.json');
+  const t8Sample = path.join(TEST_SCRATCH_DIR, 't8_missing_state.mp4');
+  fs.writeFileSync(t8JournalPath, JSON.stringify({
+    version: 1,
+    entries: {
+      [t8Sample]: {
+        originalPath: t8Sample
+        // currentState is missing!
+      }
+    }
+  }, null, 2), 'utf8');
+
+  const t8Journal = new NormalizationJournal(t8JournalPath);
+  const t8Val = t8Journal.validateJournal();
+  assert(t8Val.ok === false, 'validateJournal fails on missing currentState');
+
+  const t8Engine = new NormalizationEngine({ journal: t8Journal, executionEnabled: true });
+  const t8Init = await t8Engine.initialize();
+  assert(t8Init.ok === false && t8Engine.status === EngineStatus.JOURNAL_CORRUPT, 'Engine initialize fails with JOURNAL_CORRUPT on missing currentState');
+
+  // Test 9: Malformed entry object (null entry) fails closed
+  console.log('\nTest 9: Malformed entry object (null) fails closed');
+  const t9JournalPath = path.join(TEST_SCRATCH_DIR, 'journal_t9.json');
+  const t9Sample = path.join(TEST_SCRATCH_DIR, 't9_null_entry.mp4');
+  fs.writeFileSync(t9JournalPath, JSON.stringify({
+    version: 1,
+    entries: {
+      [t9Sample]: null
+    }
+  }, null, 2), 'utf8');
+
+  const t9Journal = new NormalizationJournal(t9JournalPath);
+  const t9Val = t9Journal.validateJournal();
+  assert(t9Val.ok === false, 'validateJournal fails on null entry');
+
+  const t9Engine = new NormalizationEngine({ journal: t9Journal, executionEnabled: true });
+  const t9Init = await t9Engine.initialize();
+  assert(t9Init.ok === false && t9Engine.status === EngineStatus.JOURNAL_CORRUPT, 'Engine initialize fails with JOURNAL_CORRUPT on null entry');
+
+  // Test 10: Known terminal states (DONE, FAILED_SAFE, CANCELLED) preserve normal behavior
+  console.log('\nTest 10: Known terminal states (DONE, FAILED_SAFE, CANCELLED) pass validation');
+  const t10JournalPath = path.join(TEST_SCRATCH_DIR, 'journal_t10.json');
+  fs.writeFileSync(t10JournalPath, JSON.stringify({
+    version: 1,
+    entries: {
+      'file_done.mp4': { originalPath: 'file_done.mp4', currentState: NormalizationState.DONE },
+      'file_failed.mp4': { originalPath: 'file_failed.mp4', currentState: NormalizationState.FAILED_SAFE },
+      'file_cancelled.mp4': { originalPath: 'file_cancelled.mp4', currentState: NormalizationState.CANCELLED }
+    }
+  }, null, 2), 'utf8');
+
+  const t10Journal = new NormalizationJournal(t10JournalPath);
+  const t10Val = t10Journal.validateJournal();
+  assert(t10Val.ok === true, 'validateJournal succeeds on known terminal states');
+
+  const t10Rec = t10Journal.recoverOnStartup();
+  assert(t10Rec.ok === true && t10Rec.status === 'RECOVERED_SAFE', 'recoverOnStartup skips terminal entries cleanly');
+
+  const t10Engine = new NormalizationEngine({ journal: t10Journal, executionEnabled: true });
+  const t10Init = await t10Engine.initialize();
+  assert(t10Init.ok === true && t10Engine.status === EngineStatus.SAFE_IDLE, 'Engine initialize enters SAFE_IDLE');
+
+  // Test 11: Known non-terminal state (RECOVERY_REQUIRED) enters proven Round 6 recovery path
+  console.log('\nTest 11: Known non-terminal state (RECOVERY_REQUIRED) recovers cleanly with valid fingerprint');
+  const t11JournalPath = path.join(TEST_SCRATCH_DIR, 'journal_t11.json');
+  const t11Sample = path.join(TEST_SCRATCH_DIR, 't11_sample.mp4');
+  const t11Old = path.join(TEST_SCRATCH_DIR, '.t11_sample.mp4.vreconder-old');
+  fs.writeFileSync(t11Old, 'PROVEN_T11_ORIGINAL_BYTES', 'utf8');
+  fs.writeFileSync(t11Sample, 'CORRUPTED_T11_REPLACEMENT_BYTES', 'utf8');
+  const t11Fp = getMediaFingerprint(t11Old);
+
+  fs.writeFileSync(t11JournalPath, JSON.stringify({
+    version: 1,
+    entries: {
+      [t11Sample]: {
+        originalPath: t11Sample,
+        currentState: NormalizationState.RECOVERY_REQUIRED,
+        initialFingerprint: t11Fp
+      }
+    }
+  }, null, 2), 'utf8');
+
+  const t11Journal = new NormalizationJournal(t11JournalPath);
+  const t11Val = t11Journal.validateJournal();
+  assert(t11Val.ok === true, 'validateJournal succeeds on RECOVERY_REQUIRED with valid schema');
+
+  const t11Rec = t11Journal.recoverOnStartup();
+  assert(t11Rec.ok === true && t11Rec.status === 'RECOVERED_SAFE', 'recoverOnStartup rolls back to proven original');
+  assert(t11Journal.getEntry(t11Sample).currentState === NormalizationState.FAILED_SAFE, 'Journal marked FAILED_SAFE after recovery');
+  assert(isFingerprintValid(t11Sample, t11Fp) === true, 'Canonical restored to bit-identical original');
+
   // Clean scratch
   try { fs.rmSync(TEST_SCRATCH_DIR, { recursive: true, force: true }); } catch (_) {}
 
