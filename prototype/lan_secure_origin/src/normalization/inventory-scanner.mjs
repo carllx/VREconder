@@ -69,7 +69,7 @@ export function buildBucketCertificationPlan(uncertifiedItems) {
     const facts = item.facts;
     if (!facts || !facts.video) continue;
     const v = facts.video;
-    const bucketKey = `HEVC-hev1-Main-8bit-${v.width}x${v.height}-L${v.level}-${v.rFps || 'unknown'}`;
+    const bucketKey = `HEVC-hev1-Main-8bit-${v.width}x${v.height}-L${v.level}-rFps:${v.rFps || 'unknown'}-avgFps:${v.avgFps || 'unknown'}`;
 
     if (!buckets.has(bucketKey)) {
       buckets.set(bucketKey, {
@@ -79,6 +79,7 @@ export function buildBucketCertificationPlan(uncertifiedItems) {
         profile: v.profile,
         bitDepth: v.bitDepth,
         rFps: v.rFps,
+        avgFps: v.avgFps,
         numberOfMedia: 0,
         totalBytes: 0,
         representativeFiles: [],

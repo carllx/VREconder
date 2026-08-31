@@ -27,7 +27,8 @@ export const EXACT_CERTIFIED_BUCKETS = [
     bitDepth: 8,
     width: 3840,
     height: 1920,
-    rFpsAllowed: ['2997/50', '60000/1001', '60/1'],
+    rFps: '2997/50',
+    avgFps: '262749987/4359446',
     provenBy: 'SIVR033 (Mikami Yua_Arata Arina)'
   },
   {
@@ -41,7 +42,8 @@ export const EXACT_CERTIFIED_BUCKETS = [
     bitDepth: 8,
     width: 4096,
     height: 2048,
-    rFpsAllowed: ['60/1', '60000/1001', '2997/50'],
+    rFps: '60000/1001',
+    avgFps: '60000/1001',
     provenBy: 'Wakui Mito (DSVR01546 / VRKM962)'
   },
   {
@@ -55,7 +57,8 @@ export const EXACT_CERTIFIED_BUCKETS = [
     bitDepth: 8,
     width: 8192,
     height: 4096,
-    rFpsAllowed: ['2997/50', '60000/1001', '60/1'],
+    rFps: '60000/1001',
+    avgFps: '2118587705/34961143',
     provenBy: 'Kamiki Rei (DSVR01433)'
   }
 ];
@@ -118,7 +121,9 @@ export function matchExactCertifiedBucket(facts, ext) {
       v.width === b.width &&
       v.height === b.height &&
       v.level === b.level &&
-      b.rFpsAllowed.includes(v.rFps)
+      v.profile === b.profile &&
+      v.rFps === b.rFps &&
+      v.avgFps === b.avgFps
     ) {
       return b;
     }

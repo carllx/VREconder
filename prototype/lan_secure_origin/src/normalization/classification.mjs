@@ -116,7 +116,7 @@ export function classifyMedia(filePath, facts) {
         } else {
           return {
             classification: MediaClass.NEEDS_BUCKET_CERTIFICATION,
-            reason: `HEVC hev1 8-bit MP4 with untested envelope (${v.width}x${v.height}, Level ${v.level}, Profile ${v.profile}, rFps ${v.rFps})`,
+            reason: `HEVC hev1 8-bit MP4 with untested envelope (${v.width}x${v.height}, Level ${v.level}, Profile ${v.profile}, rFps ${v.rFps}, avgFps ${v.avgFps})`,
             repairCandidate: null
           };
         }

@@ -7,10 +7,14 @@ import { probeMediaFacts } from './ffprobe-facts.mjs';
  * Verifies 100% of container packets and atom structures without decoding video frames into pixels.
  * 
  * @param {string} filePath 
+ * @param {object} options
  * @returns {Promise<{ ok: boolean, error: string | null }>}
  */
-export async function runStreamcopyDemuxIntegrityCheck(filePath) {
+export async function runStreamcopyDemuxIntegrityCheck(filePath, options = {}) {
   return new Promise((resolve) => {
+    if (options.isCancelled?.()) {
+      return resolve({ ok: false, error: 'CANCELLED_BEFORE_DEMUX_CHECK' });
+    }
     const args = [
       '-v', 'error',
       '-xerror',
@@ -21,6 +25,7 @@ export async function runStreamcopyDemuxIntegrityCheck(filePath) {
     ];
 
     const child = spawn('ffmpeg', args, { stdio: ['ignore', 'ignore', 'pipe'] });
+    options.onChildProcess?.(child);
     let stderr = '';
 
     child.stderr.on('data', (d) => { stderr += d.toString(); });
@@ -39,10 +44,12 @@ export async function runStreamcopyDemuxIntegrityCheck(filePath) {
  * Counts stream packets and duration using ffprobe for each individual stream.
  * 
  * @param {string} filePath 
+ * @param {object} options
  * @returns {Promise<Array<{ index: number, codecType: string, codecName: string, packetCount: number, duration: number }> | null>}
  */
-export async function getPerStreamPacketDetails(filePath) {
+export async function getPerStreamPacketDetails(filePath, options = {}) {
   return new Promise((resolve) => {
+    if (options.isCancelled?.()) return resolve(null);
     const args = [
       '-v', 'error',
       '-count_packets',
@@ -52,6 +59,7 @@ export async function getPerStreamPacketDetails(filePath) {
     ];
 
     const child = spawn('ffprobe', args, { stdio: ['ignore', 'pipe', 'ignore'] });
+    options.onChildProcess?.(child);
     let stdout = '';
 
     child.stdout.on('data', (d) => { stdout += d.toString(); });
@@ -60,13 +68,17 @@ export async function getPerStreamPacketDetails(filePath) {
       if (code !== 0 || !stdout.trim()) return resolve(null);
       try {
         const raw = JSON.parse(stdout);
-        const streams = (raw.streams || []).map(s => ({
-          index: s.index,
-          codecType: s.codec_type,
-          codecName: s.codec_name,
-          packetCount: parseInt(s.nb_read_packets || s.nb_packets || '0', 10),
-          duration: parseFloat(s.duration || '0')
-        }));
+        const streams = (raw.streams || []).map(s => {
+          const countStr = s.nb_read_packets || s.nb_packets;
+          const count = countStr ? parseInt(countStr, 10) : 0;
+          return {
+            index: s.index,
+            codecType: s.codec_type,
+            codecName: s.codec_name,
+            packetCount: isNaN(count) ? 0 : count,
+            duration: parseFloat(s.duration || '0')
+          };
+        });
         resolve(streams);
       } catch (e) {
         resolve(null);
@@ -80,10 +92,12 @@ export async function getPerStreamPacketDetails(filePath) {
  * 
  * @param {string} filePath 
  * @param {string} streamSpecifier - e.g. '0:v:0', '0:a:0'
+ * @param {object} options
  * @returns {Promise<string | null>}
  */
-export async function getStreamPayloadMD5(filePath, streamSpecifier) {
+export async function getStreamPayloadMD5(filePath, streamSpecifier, options = {}) {
   return new Promise((resolve) => {
+    if (options.isCancelled?.()) return resolve(null);
     const args = [
       '-v', 'error',
       '-i', filePath,
@@ -94,6 +108,7 @@ export async function getStreamPayloadMD5(filePath, streamSpecifier) {
     ];
 
     const child = spawn('ffmpeg', args, { stdio: ['ignore', 'pipe', 'ignore'] });
+    options.onChildProcess?.(child);
     let stdout = '';
 
     child.stdout.on('data', (d) => { stdout += d.toString(); });
@@ -114,16 +129,26 @@ export async function getStreamPayloadMD5(filePath, streamSpecifier) {
  * Full Pipeline Verification:
  * Validates structural invariants across all retained streams, container demux integrity,
  * per-stream packet counts, and elementary stream payload hash equivalence.
+ * Fail-Closed: returns ok: false if any required evidence cannot be acquired.
  * 
  * @param {string} originalPath 
  * @param {string} outputPath 
  * @param {object} expectedRule 
+ * @param {object} options - { onChildProcess, isCancelled }
  * @returns {Promise<{ ok: boolean, reason: string | null, details: object }>}
  */
-export async function verifyNormalizedOutput(originalPath, outputPath, expectedRule = {}) {
+export async function verifyNormalizedOutput(originalPath, outputPath, expectedRule = {}, options = {}) {
+  if (options.isCancelled?.()) {
+    return { ok: false, reason: 'Verification cancelled', details: {} };
+  }
+
   const origFacts = await probeMediaFacts(originalPath);
   if (!origFacts || !origFacts.video) {
     return { ok: false, reason: 'Original media cannot be probed', details: {} };
+  }
+
+  if (options.isCancelled?.()) {
+    return { ok: false, reason: 'Verification cancelled', details: {} };
   }
 
   const outFacts = await probeMediaFacts(outputPath);
@@ -150,8 +175,8 @@ export async function verifyNormalizedOutput(originalPath, outputPath, expectedR
   if (oV.pixFmt !== nV.pixFmt || oV.bitDepth !== nV.bitDepth) {
     return { ok: false, reason: `Pixel format / bit depth mismatch: ${oV.pixFmt}/${oV.bitDepth} vs ${nV.pixFmt}/${nV.bitDepth}`, details: { oV, nV } };
   }
-  if (oV.rFps !== nV.rFps) {
-    return { ok: false, reason: `Frame rate mismatch: ${oV.rFps} vs ${nV.rFps}`, details: { oV, nV } };
+  if (oV.rFps !== nV.rFps || oV.avgFps !== nV.avgFps) {
+    return { ok: false, reason: `Frame rate mismatch: rFps ${oV.rFps}/avgFps ${oV.avgFps} vs rFps ${nV.rFps}/avgFps ${nV.avgFps}`, details: { oV, nV } };
   }
   if (Math.abs(oV.durationSec - nV.durationSec) > 0.5) {
     return { ok: false, reason: `Duration divergence: ${oV.durationSec}s vs ${nV.durationSec}s`, details: { oV, nV } };
@@ -175,42 +200,86 @@ export async function verifyNormalizedOutput(originalPath, outputPath, expectedR
     return { ok: false, reason: `Target tag requirement not met: expected ${expectedTag}, got ${nV.codecTag}`, details: { nV } };
   }
 
-  // 4. Container & Packet Demux Validation (no pixel decoding, checks all container streams & packets)
-  const demuxResult = await runStreamcopyDemuxIntegrityCheck(outputPath);
+  if (options.isCancelled?.()) {
+    return { ok: false, reason: 'Verification cancelled', details: {} };
+  }
+
+  // 4. Container & Packet Demux Validation (checks all container streams & packets)
+  const demuxResult = await runStreamcopyDemuxIntegrityCheck(outputPath, options);
   if (!demuxResult.ok) {
     return { ok: false, reason: `Container stream demux check failed: ${demuxResult.error}`, details: demuxResult };
   }
 
-  // 5. Per-Stream Packet Count Equality
-  const origStreams = await getPerStreamPacketDetails(originalPath);
-  const outStreams = await getPerStreamPacketDetails(outputPath);
-  if (origStreams && outStreams) {
-    if (origStreams.length !== outStreams.length) {
-      return { ok: false, reason: `Total stream count mismatch: ${origStreams.length} vs ${outStreams.length}`, details: {} };
+  if (options.isCancelled?.()) {
+    return { ok: false, reason: 'Verification cancelled', details: {} };
+  }
+
+  // 5. Per-Stream Packet Count Equality (P0-5 Fail-Closed: null or 0 packets fails verification)
+  const origStreams = await getPerStreamPacketDetails(originalPath, options);
+  const outStreams = await getPerStreamPacketDetails(outputPath, options);
+  if (!origStreams || !outStreams) {
+    return { ok: false, reason: 'Failed to retrieve per-stream packet details (ffprobe unavailable or unparseable)', details: {} };
+  }
+  if (origStreams.length !== outStreams.length) {
+    return { ok: false, reason: `Total stream count mismatch: ${origStreams.length} vs ${outStreams.length}`, details: {} };
+  }
+  for (let i = 0; i < origStreams.length; i++) {
+    const oS = origStreams[i];
+    const nS = outStreams[i];
+    if (oS.codecType !== nS.codecType || oS.codecName !== nS.codecName) {
+      return { ok: false, reason: `Stream [${i}] identity mismatch: ${oS.codecType}/${oS.codecName} vs ${nS.codecType}/${nS.codecName}`, details: { oS, nS } };
     }
-    for (let i = 0; i < origStreams.length; i++) {
-      const oS = origStreams[i];
-      const nS = outStreams[i];
-      if (oS.packetCount > 0 && nS.packetCount > 0 && oS.packetCount !== nS.packetCount) {
-        return { ok: false, reason: `Stream [${i}] packet count mismatch: ${oS.packetCount} vs ${nS.packetCount}`, details: { oS, nS } };
-      }
+    if (oS.packetCount <= 0 || nS.packetCount <= 0) {
+      return { ok: false, reason: `Stream [${i}] packet count missing or non-positive: ${oS.packetCount} vs ${nS.packetCount}`, details: { oS, nS } };
+    }
+    if (oS.packetCount !== nS.packetCount) {
+      return { ok: false, reason: `Stream [${i}] packet count mismatch: ${oS.packetCount} vs ${nS.packetCount}`, details: { oS, nS } };
     }
   }
 
-  // 6. Per-Stream Elementary Payload MD5 Equality
+  if (options.isCancelled?.()) {
+    return { ok: false, reason: 'Verification cancelled', details: {} };
+  }
+
+  // 6. Per-Stream Elementary Payload MD5 Equality across all retained streams (P0-5 Fail-Closed)
   // Video payload hash check
-  const origVideoMd5 = await getStreamPayloadMD5(originalPath, '0:v:0');
-  const outVideoMd5 = await getStreamPayloadMD5(outputPath, '0:v:0');
-  if (origVideoMd5 && outVideoMd5 && origVideoMd5 !== outVideoMd5) {
+  const origVideoMd5 = await getStreamPayloadMD5(originalPath, '0:v:0', options);
+  const outVideoMd5 = await getStreamPayloadMD5(outputPath, '0:v:0', options);
+  if (!origVideoMd5 || !outVideoMd5) {
+    return { ok: false, reason: 'Video stream payload MD5 could not be computed (returned null)', details: {} };
+  }
+  if (origVideoMd5 !== outVideoMd5) {
     return { ok: false, reason: `Video elementary stream payload MD5 mismatch: ${origVideoMd5} vs ${outVideoMd5}`, details: {} };
   }
 
   // Audio payload hash check for all audio streams
   for (let aIdx = 0; aIdx < origFacts.audioCount; aIdx++) {
-    const origAudioMd5 = await getStreamPayloadMD5(originalPath, `0:a:${aIdx}`);
-    const outAudioMd5 = await getStreamPayloadMD5(outputPath, `0:a:${aIdx}`);
-    if (origAudioMd5 && outAudioMd5 && origAudioMd5 !== outAudioMd5) {
+    if (options.isCancelled?.()) {
+      return { ok: false, reason: 'Verification cancelled', details: {} };
+    }
+    const origAudioMd5 = await getStreamPayloadMD5(originalPath, `0:a:${aIdx}`, options);
+    const outAudioMd5 = await getStreamPayloadMD5(outputPath, `0:a:${aIdx}`, options);
+    if (!origAudioMd5 || !outAudioMd5) {
+      return { ok: false, reason: `Audio stream [${aIdx}] payload MD5 could not be computed (returned null)`, details: {} };
+    }
+    if (origAudioMd5 !== outAudioMd5) {
       return { ok: false, reason: `Audio stream [${aIdx}] payload MD5 mismatch: ${origAudioMd5} vs ${outAudioMd5}`, details: {} };
+    }
+  }
+
+  // Check any other stream types retained by -map 0 (e.g. subtitles)
+  const otherStreams = origStreams.filter(s => s.codecType !== 'video' && s.codecType !== 'audio');
+  for (let sIdx = 0; sIdx < otherStreams.length; sIdx++) {
+    const s = otherStreams[sIdx];
+    if (s.codecType === 'subtitle') {
+      const origSubMd5 = await getStreamPayloadMD5(originalPath, `0:s:${sIdx}`, options);
+      const outSubMd5 = await getStreamPayloadMD5(outputPath, `0:s:${sIdx}`, options);
+      if (!origSubMd5 || !outSubMd5 || origSubMd5 !== outSubMd5) {
+        return { ok: false, reason: `Subtitle stream [${sIdx}] payload MD5 mismatch or unavailable`, details: {} };
+      }
+    } else {
+      // Unrecognized stream type in MP4 container cannot be reliably verified
+      return { ok: false, reason: `Unverifiable stream type [${s.codecType}] retained in container; destructive execution disallowed`, details: { stream: s } };
     }
   }
 
@@ -223,7 +292,8 @@ export async function verifyNormalizedOutput(originalPath, outputPath, expectedR
       codecTag: nV.codecTag,
       demuxChecked: true,
       videoMd5Matched: origVideoMd5 === outVideoMd5,
-      audioStreamsVerified: origFacts.audioCount
+      audioStreamsVerified: origFacts.audioCount,
+      allRetainedStreamsVerified: origStreams.length
     }
   };
 }

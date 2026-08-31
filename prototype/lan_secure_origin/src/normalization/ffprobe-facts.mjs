@@ -113,11 +113,21 @@ export async function probeMediaFacts(filePath) {
         let profile = videoStream ? (videoStream.profile || 'unknown') : 'unknown';
         let level = videoStream ? (videoStream.level ?? -1) : -1;
         let pixFmt = videoStream ? (videoStream.pix_fmt || 'unknown') : 'unknown';
-        let bitDepth = 8;
+        let bitDepth = null;
         if (videoStream && videoStream.bits_per_raw_sample) {
-          bitDepth = parseInt(videoStream.bits_per_raw_sample, 10);
-        } else if (pixFmt.includes('10') || pixFmt.includes('p010') || profile.toLowerCase().includes('main 10')) {
-          bitDepth = 10;
+          const rawBps = parseInt(videoStream.bits_per_raw_sample, 10);
+          if (!isNaN(rawBps) && rawBps > 0) {
+            bitDepth = rawBps;
+          }
+        }
+        if (bitDepth === null) {
+          const lowerPix = pixFmt.toLowerCase();
+          const lowerProf = profile.toLowerCase();
+          if (lowerPix.includes('10') || lowerPix.includes('p010') || lowerProf.includes('main 10') || lowerProf.includes('high 10')) {
+            bitDepth = 10;
+          } else if (['yuv420p', 'yuvj420p', 'nv12', 'nv21', 'yuv422p', 'yuvj422p', 'yuv444p', 'yuvj444p', 'rgb24', 'bgr24', 'rgba', 'bgra', 'gbrp'].includes(lowerPix) && !lowerProf.includes('10')) {
+            bitDepth = 8;
+          }
         }
 
         const width = videoStream ? (videoStream.width || 0) : 0;

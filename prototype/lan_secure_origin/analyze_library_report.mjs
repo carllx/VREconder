@@ -1,15 +1,16 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { classifyMedia, isDerivativeFile, MediaClass } from './src/normalization/classification.mjs';
-import { findCertifiedRepairRule } from './src/normalization/repair-rules.mjs';
-import { getDiskFreeSpace } from './src/normalization/inventory-scanner.mjs';
+import { findCertifiedRepairRule, matchExactCertifiedBucket } from './src/normalization/repair-rules.mjs';
+import { getDiskFreeSpace, buildBucketCertificationPlan } from './src/normalization/inventory-scanner.mjs';
 
 const raw = JSON.parse(fs.readFileSync('prototype/lan_secure_origin/scanned_raw_library.json', 'utf8'));
 
 let totalPhysicalFiles = raw.length;
 let derivativeCount = 0;
 let readyCount = 0;
-let candidateCount = 0;
+let certifiedCandidateCount = 0;
+let needsBucketCertCount = 0;
 let needsProbeCount = 0;
 let unknownCount = 0;
 let invalidCount = 0;
@@ -18,6 +19,7 @@ let candidateTotalBytes = 0;
 let largestCandidate = null;
 
 const candidates = [];
+const needsBucketItems = [];
 const needsProbeItems = [];
 const unknownItems = [];
 const readyItems = [];
@@ -39,13 +41,7 @@ for (const item of raw) {
   const classification = classifyMedia(filePath, facts);
   const ext = path.extname(filePath);
   const certifiedRule = findCertifiedRepairRule(facts, ext);
-
-  // Strict check: Only items matching certified rule become NORMALIZATION_CANDIDATE
-  let effectiveClass = classification.classification;
-  if (effectiveClass === MediaClass.NORMALIZATION_CANDIDATE && !certifiedRule) {
-    effectiveClass = MediaClass.UNSUPPORTED_UNKNOWN_FIX;
-  }
-
+  const effectiveClass = classification.classification;
   const v = facts?.video;
 
   const itemSummary = {
@@ -58,6 +54,7 @@ for (const item of raw) {
     classification: effectiveClass,
     reason: classification.reason,
     ruleId: certifiedRule ? certifiedRule.ruleId : null,
+    matchedBucket: certifiedRule ? certifiedRule.matchedBucket.bucketId : null,
     video: v ? {
       codec: v.codec,
       codecTag: v.codecTag,
@@ -67,6 +64,7 @@ for (const item of raw) {
       width: v.width,
       height: v.height,
       rFps: v.rFps,
+      avgFps: v.avgFps,
       durationSec: Math.round(v.durationSec)
     } : null
   };
@@ -76,13 +74,17 @@ for (const item of raw) {
       readyCount++;
       readyItems.push(itemSummary);
       break;
-    case MediaClass.NORMALIZATION_CANDIDATE:
-      candidateCount++;
+    case MediaClass.EXACT_CERTIFIED_NORMALIZATION_CANDIDATE:
+      certifiedCandidateCount++;
       candidateTotalBytes += size;
       if (!largestCandidate || size > largestCandidate.sizeBytes) {
         largestCandidate = itemSummary;
       }
       candidates.push(itemSummary);
+      break;
+    case MediaClass.NEEDS_BUCKET_CERTIFICATION:
+      needsBucketCertCount++;
+      needsBucketItems.push(itemSummary);
       break;
     case MediaClass.NEEDS_DEVICE_PROBE:
       needsProbeCount++;
@@ -103,57 +105,51 @@ const requiredFreeFloor = largestCandidate ? Math.ceil(largestCandidate.sizeByte
 const actualFreeSpace = getDiskFreeSpace('G:\\Media\\VR');
 const diskSafetyStatus = (actualFreeSpace >= 0 && actualFreeSpace >= requiredFreeFloor) ? 'SAFE_TO_START' : 'BLOCKED_NO_SPACE';
 
-// Breakdown of candidates
+// Breakdown of candidates by certified bucket
 const candidateBreakdown = {
+  byBucket: {},
   byRoot: {},
-  byCodec: {},
-  byTag: {},
-  byProfile: {},
-  byLevel: {},
-  byBitDepth: {},
   byResolutionBucket: {},
   byFpsBucket: {}
 };
 
 for (const c of candidates) {
+  const bucketKey = c.matchedBucket || 'UNKNOWN';
+  candidateBreakdown.byBucket[bucketKey] = (candidateBreakdown.byBucket[bucketKey] || 0) + 1;
+
   const rootKey = path.basename(c.root);
   candidateBreakdown.byRoot[rootKey] = (candidateBreakdown.byRoot[rootKey] || 0) + 1;
 
   const v = c.video;
   if (v) {
-    candidateBreakdown.byCodec[v.codec] = (candidateBreakdown.byCodec[v.codec] || 0) + 1;
-    candidateBreakdown.byTag[v.codecTag || 'empty'] = (candidateBreakdown.byTag[v.codecTag || 'empty'] || 0) + 1;
-    candidateBreakdown.byProfile[v.profile] = (candidateBreakdown.byProfile[v.profile] || 0) + 1;
-    candidateBreakdown.byLevel[String(v.level)] = (candidateBreakdown.byLevel[String(v.level)] || 0) + 1;
-    candidateBreakdown.byBitDepth[`${v.bitDepth}-bit`] = (candidateBreakdown.byBitDepth[`${v.bitDepth}-bit`] || 0) + 1;
-
-    let resBucket = 'Other';
-    if (v.width >= 7680 || v.height >= 3840) resBucket = '8K';
-    else if (v.width >= 4800 || v.height >= 2400) resBucket = '5K/6K';
-    else if (v.width >= 3840 || v.height >= 1920) resBucket = '4K';
-    else resBucket = '<4K';
+    let resBucket = `${v.width}x${v.height}`;
     candidateBreakdown.byResolutionBucket[resBucket] = (candidateBreakdown.byResolutionBucket[resBucket] || 0) + 1;
 
-    let fpsBucket = 'Other';
-    if (v.rFps.startsWith('60') || v.rFps.startsWith('59.9')) fpsBucket = '60 fps';
-    else if (v.rFps.startsWith('30') || v.rFps.startsWith('29.9')) fpsBucket = '30 fps';
-    else fpsBucket = v.rFps || 'Unknown';
+    let fpsBucket = v.rFps || 'Unknown';
     candidateBreakdown.byFpsBucket[fpsBucket] = (candidateBreakdown.byFpsBucket[fpsBucket] || 0) + 1;
   }
 }
+
+const bucketCertificationPlan = buildBucketCertificationPlan(needsBucketItems.map(i => ({
+  path: i.fullPath,
+  sizeBytes: i.sizeBytes,
+  facts: { video: i.video }
+})));
 
 const finalReport = {
   inventorySummary: {
     totalPhysicalFiles,
     totalLogicalMedia,
     readyDirectCount: readyCount,
-    normalizationCandidateCount: candidateCount,
+    exactCertifiedCandidateCount: certifiedCandidateCount,
+    needsBucketCertificationCount: needsBucketCertCount,
     needsDeviceProbeCount: needsProbeCount,
     unsupportedUnknownCount: unknownCount,
     invalidMediaCount: invalidCount,
     experimentDerivativeCount: derivativeCount
   },
   candidateBreakdown,
+  bucketCertificationPlan,
   storageImpact: {
     candidateTotalSourceBytes: candidateTotalBytes,
     candidateTotalSourceGB: (candidateTotalBytes / (1024 * 1024 * 1024)).toFixed(2) + ' GB',
@@ -172,6 +168,7 @@ const finalReport = {
     diskSafetyStatus
   },
   sampleCandidates: candidates.slice(0, 10),
+  needsBucketCertificationItems: needsBucketItems,
   needsDeviceProbeItems: needsProbeItems,
   sampleUnknownItems: unknownItems.slice(0, 10),
   sampleDerivatives: derivativeItems.slice(0, 10)
@@ -182,6 +179,12 @@ console.log('FINAL_REPORT_SUMMARY:\n' + JSON.stringify({
   inventorySummary: finalReport.inventorySummary,
   candidateBreakdown: finalReport.candidateBreakdown,
   storageImpact: finalReport.storageImpact,
+  bucketCertificationPlanSummary: finalReport.bucketCertificationPlan.map(p => ({
+    bucketSignature: p.bucketSignature,
+    numberOfMedia: p.numberOfMedia,
+    totalBytesGB: (p.totalBytes / (1024 * 1024 * 1024)).toFixed(2) + ' GB',
+    representativeSample: p.representativeFiles[0] ? path.basename(p.representativeFiles[0].path) : null
+  })),
   sampleCandidateCount: finalReport.sampleCandidates.length,
   needsProbeCount: finalReport.needsDeviceProbeItems.length,
   sampleUnknownCount: finalReport.sampleUnknownItems.length

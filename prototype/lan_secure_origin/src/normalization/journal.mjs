@@ -9,6 +9,7 @@ export const NormalizationState = {
   SWAP_STEP1_RENAME_ORIGINAL: 'SWAP_STEP1_RENAME_ORIGINAL',
   SWAP_STEP2_RENAME_PARTIAL: 'SWAP_STEP2_RENAME_PARTIAL',
   FINAL_VERIFYING: 'FINAL_VERIFYING',
+  FINAL_VERIFIED: 'FINAL_VERIFIED',
   DONE: 'DONE',
   FAILED_SAFE: 'FAILED_SAFE',
   PAUSED_FOR_PLAYBACK: 'PAUSED_FOR_PLAYBACK',
@@ -99,8 +100,13 @@ export class NormalizationJournal {
 
     const existing = journal.entries[canonical] || {
       originalPath: canonical,
+      initialFingerprint: meta.initialFingerprint || null,
       history: []
     };
+
+    if (meta.initialFingerprint && !existing.initialFingerprint) {
+      existing.initialFingerprint = meta.initialFingerprint;
+    }
 
     existing.currentState = state;
     existing.lastUpdated = now;
@@ -144,54 +150,90 @@ export class NormalizationJournal {
       const base = path.basename(canonical, ext);
       const partialPath = path.join(dir, `.${base}${ext}.vreconder.partial`);
       const oldPath = path.join(dir, `.${base}${ext}.vreconder-old`);
+      const recordedFingerprint = entry.initialFingerprint || entry.meta?.initialFingerprint || null;
 
       let action = 'none';
       let recovered = true;
 
-      // Crash Case 1: Interrupted after Step 1 (original was renamed to .old, but partial not yet renamed to canonical)
-      if (state === NormalizationState.SWAP_STEP1_RENAME_ORIGINAL) {
-        if (fs.existsSync(oldPath) && !fs.existsSync(canonical)) {
+      // Crash Case E/F: FINAL_VERIFIED (Final verification succeeded durably before crash, but old file cleanup or DONE was interrupted)
+      if (state === NormalizationState.FINAL_VERIFIED) {
+        if (fs.existsSync(oldPath)) {
           try {
-            fs.renameSync(oldPath, canonical);
-            action = 'restored_old_to_canonical';
+            fs.unlinkSync(oldPath);
+            action = 'finalized_verified_canonical_cleaned_old';
           } catch (e) {
-            action = `failed_restore_old: ${e.message}`;
+            action = `failed_cleanup_old: ${e.message}`;
             recovered = false;
+          }
+        } else {
+          action = 'finalized_verified_canonical_intact';
+        }
+        if (recovered) {
+          this.recordState(canonical, NormalizationState.DONE, {
+            completedAt: new Date().toISOString(),
+            recoveredFrom: NormalizationState.FINAL_VERIFIED
+          });
+          actions.push({ originalPath: canonical, action, recovered, stateBeforeRecovery: state });
+          continue;
+        }
+      }
+      // Crash Case B/C/D: Interrupted after Step 1, Step 2, or during FINAL_VERIFYING
+      else if (
+        state === NormalizationState.SWAP_STEP1_RENAME_ORIGINAL ||
+        state === NormalizationState.SWAP_STEP2_RENAME_PARTIAL ||
+        state === NormalizationState.FINAL_VERIFYING
+      ) {
+        if (fs.existsSync(oldPath)) {
+          // P0-4: Must verify that .old is genuinely the recorded original before any rollback
+          let identityMatches = false;
+          if (recordedFingerprint) {
+            try {
+              const oldStat = fs.statSync(oldPath);
+              if (oldStat.size === recordedFingerprint.sizeBytes && Math.floor(oldStat.mtimeMs) === recordedFingerprint.mtimeMs) {
+                identityMatches = true;
+              }
+            } catch (_) {
+              identityMatches = false;
+            }
+          }
+
+          if (!identityMatches) {
+            action = 'artifact_fingerprint_mismatch_recovery_blocked';
+            recovered = false;
+          } else {
+            // Identity verified: safe to rollback
+            try {
+              if (fs.existsSync(canonical)) {
+                fs.unlinkSync(canonical);
+              }
+              fs.renameSync(oldPath, canonical);
+              action = 'rolled_back_to_proven_original';
+            } catch (e) {
+              action = `failed_rollback: ${e.message}`;
+              recovered = false;
+            }
+            if (fs.existsSync(partialPath)) {
+              try { fs.unlinkSync(partialPath); } catch (_) {}
+            }
           }
         } else if (!fs.existsSync(oldPath) && fs.existsSync(canonical)) {
+          // Step 1 crash before rename succeeded
           action = 'canonical_intact_old_missing';
+          if (fs.existsSync(partialPath)) {
+            try { fs.unlinkSync(partialPath); } catch (_) {}
+          }
         } else {
-          action = 'unexpected_file_state_after_step1';
+          action = 'unexpected_file_state_after_swap';
           recovered = false;
         }
-        if (fs.existsSync(partialPath)) {
-          try { fs.unlinkSync(partialPath); } catch (_) {}
-        }
       }
-      // Crash Case 2: Interrupted during Step 2 or Final Verifying (both old and canonical exist, or partial was renamed)
-      else if (state === NormalizationState.SWAP_STEP2_RENAME_PARTIAL || state === NormalizationState.FINAL_VERIFYING) {
-        if (fs.existsSync(oldPath) && fs.existsSync(canonical)) {
-          // Unfinalized state: rollback canonical to old
-          try {
-            fs.unlinkSync(canonical);
-            fs.renameSync(oldPath, canonical);
-            action = 'rolled_back_partial_restored_old';
-          } catch (e) {
-            action = `failed_rollback: ${e.message}`;
-            recovered = false;
-          }
-        } else if (fs.existsSync(oldPath) && !fs.existsSync(canonical)) {
-          try {
-            fs.renameSync(oldPath, canonical);
-            action = 'restored_old_to_canonical';
-          } catch (e) {
-            action = `failed_restore_old: ${e.message}`;
-            recovered = false;
-          }
-        }
-      }
-      // Crash Case 3: Interrupted during Remuxing or Structure Verifying
-      else if (state === NormalizationState.REMUXING || state === NormalizationState.STRUCTURE_VERIFYING || state === NormalizationState.PENDING || state === NormalizationState.VERIFIED) {
+      // Crash Case A: Interrupted during Remuxing, Structure Verifying, or Pending
+      else if (
+        state === NormalizationState.REMUXING ||
+        state === NormalizationState.STRUCTURE_VERIFYING ||
+        state === NormalizationState.PENDING ||
+        state === NormalizationState.VERIFIED
+      ) {
         if (fs.existsSync(partialPath)) {
           try {
             fs.unlinkSync(partialPath);
