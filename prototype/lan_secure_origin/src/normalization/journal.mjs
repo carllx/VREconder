@@ -128,7 +128,12 @@ export class NormalizationJournal {
    * Deterministic crash recovery on startup.
    * Restores interrupted swaps, cleans up journal-verified orphans, and fails closed on unverified artifacts.
    */
-  recoverOnStartup() {
+  recoverOnStartup(fileOps = {}) {
+    const _unlinkSync = fileOps.unlinkSync || fs.unlinkSync;
+    const _renameSync = fileOps.renameSync || fs.renameSync;
+    const _existsSync = fileOps.existsSync || fs.existsSync;
+    const _statSync = fileOps.statSync || fs.statSync;
+
     let journal;
     try {
       journal = this.readJournal();
@@ -167,8 +172,8 @@ export class NormalizationJournal {
       const checkFp = (target, fp) => {
         if (!fp) return true;
         try {
-          if (!fs.existsSync(target)) return false;
-          const st = fs.statSync(target);
+          if (!_existsSync(target)) return false;
+          const st = _statSync(target);
           return st.size === fp.sizeBytes && Math.floor(st.mtimeMs) === fp.mtimeMs;
         } catch (_) {
           return false;
@@ -183,9 +188,9 @@ export class NormalizationJournal {
           action = 'replacement_fingerprint_mismatch_recovery_blocked';
           recovered = false;
         } else {
-          if (fs.existsSync(oldPath)) {
+          if (_existsSync(oldPath)) {
             try {
-              fs.unlinkSync(oldPath);
+              _unlinkSync(oldPath);
               action = 'finalized_verified_canonical_cleaned_old';
             } catch (e) {
               action = `failed_cleanup_old: ${e.message}`;
@@ -201,21 +206,22 @@ export class NormalizationJournal {
       }
       // Case 2: PAUSED_FOR_PLAYBACK (Transient state invariant validation)
       else if (state === NormalizationState.PAUSED_FOR_PLAYBACK) {
-        if (fs.existsSync(oldPath)) {
+        if (_existsSync(oldPath)) {
           action = 'paused_unexpected_old_backup_recovery_blocked';
           recovered = false;
         } else {
-          if (fs.existsSync(partialPath)) {
+          if (_existsSync(partialPath)) {
             try {
-              fs.unlinkSync(partialPath);
+              _unlinkSync(partialPath);
+              action = 'paused_cleaned_partial';
             } catch (e) {
               action = `paused_failed_clean_partial: ${e.message}`;
               recovered = false;
             }
           }
           if (recovered) {
-            if (fs.existsSync(canonical) && checkFp(canonical, recordedFingerprint)) {
-              action = 'paused_clean_state_verified';
+            if (_existsSync(canonical) && checkFp(canonical, recordedFingerprint)) {
+              action = action === 'paused_cleaned_partial' ? 'paused_clean_partial_verified' : 'paused_clean_state_verified';
               targetTerminalState = NormalizationState.CANCELLED;
             } else {
               action = 'paused_canonical_mismatch_recovery_blocked';
@@ -231,37 +237,55 @@ export class NormalizationJournal {
         state === NormalizationState.SWAP_STEP2_RENAME_PARTIAL ||
         state === NormalizationState.FINAL_VERIFYING
       ) {
-        if (fs.existsSync(oldPath)) {
+        if (_existsSync(oldPath)) {
           const oldMatchesOriginal = checkFp(oldPath, recordedFingerprint);
           if (!oldMatchesOriginal) {
             action = 'artifact_fingerprint_mismatch_recovery_blocked';
             recovered = false;
           } else {
             try {
-              if (fs.existsSync(canonical)) {
-                fs.unlinkSync(canonical);
+              if (_existsSync(canonical)) {
+                _unlinkSync(canonical);
               }
-              fs.renameSync(oldPath, canonical);
-              if (fs.existsSync(partialPath)) {
-                try { fs.unlinkSync(partialPath); } catch (_) {}
+              _renameSync(oldPath, canonical);
+              if (_existsSync(partialPath)) {
+                try {
+                  _unlinkSync(partialPath);
+                } catch (partialErr) {
+                  action = `rollback_failed_clean_partial: ${partialErr.message}`;
+                  recovered = false;
+                }
               }
-              if (checkFp(canonical, recordedFingerprint)) {
-                action = 'rolled_back_to_proven_original';
-              } else {
-                action = 'rollback_canonical_fingerprint_mismatch_recovery_blocked';
-                recovered = false;
+              if (recovered) {
+                if (checkFp(canonical, recordedFingerprint)) {
+                  action = 'rolled_back_to_proven_original';
+                  targetTerminalState = NormalizationState.FAILED_SAFE;
+                } else {
+                  action = 'rollback_canonical_fingerprint_mismatch_recovery_blocked';
+                  recovered = false;
+                }
               }
             } catch (e) {
               action = `failed_rollback: ${e.message}`;
               recovered = false;
             }
           }
-        } else if (!fs.existsSync(oldPath) && fs.existsSync(canonical)) {
+        } else if (!_existsSync(oldPath) && _existsSync(canonical)) {
           if (state === NormalizationState.SWAP_STEP1_RENAME_ORIGINAL || (state === NormalizationState.RECOVERY_REQUIRED && checkFp(canonical, recordedFingerprint))) {
             if (checkFp(canonical, recordedFingerprint)) {
-              action = 'canonical_intact_old_missing';
-              if (fs.existsSync(partialPath)) {
-                try { fs.unlinkSync(partialPath); } catch (_) {}
+              if (_existsSync(partialPath)) {
+                try {
+                  _unlinkSync(partialPath);
+                  action = 'canonical_intact_cleaned_partial';
+                } catch (partialErr) {
+                  action = `canonical_intact_failed_clean_partial: ${partialErr.message}`;
+                  recovered = false;
+                }
+              } else {
+                action = 'canonical_intact_old_missing';
+              }
+              if (recovered) {
+                targetTerminalState = NormalizationState.FAILED_SAFE;
               }
             } else {
               action = 'step1_canonical_mismatch_recovery_blocked';
@@ -283,9 +307,9 @@ export class NormalizationJournal {
         state === NormalizationState.PENDING ||
         state === NormalizationState.VERIFIED
       ) {
-        if (fs.existsSync(partialPath)) {
+        if (_existsSync(partialPath)) {
           try {
-            fs.unlinkSync(partialPath);
+            _unlinkSync(partialPath);
             action = 'cleaned_orphan_partial';
           } catch (e) {
             action = `failed_clean_partial: ${e.message}`;
@@ -295,9 +319,12 @@ export class NormalizationJournal {
           action = 'no_artifacts_original_intact';
         }
 
-        if (recovered && !checkFp(canonical, recordedFingerprint)) {
+        if (recovered && (!checkFp(canonical, recordedFingerprint) || !_existsSync(canonical))) {
           action = 'canonical_corrupted_recovery_blocked';
           recovered = false;
+        }
+        if (recovered) {
+          targetTerminalState = NormalizationState.FAILED_SAFE;
         }
       }
 
@@ -309,7 +336,12 @@ export class NormalizationJournal {
           recoverySuccess: true
         });
       } else {
-        this.recordState(canonical, NormalizationState.RECOVERY_REQUIRED, {
+        // If state was CLEANUP_PENDING or FINAL_VERIFIED and canonical matches replacement, keep CLEANUP_PENDING!
+        const nextState = (state === NormalizationState.CLEANUP_PENDING || state === NormalizationState.FINAL_VERIFIED) && checkFp(canonical, replacementFingerprint)
+          ? NormalizationState.CLEANUP_PENDING
+          : NormalizationState.RECOVERY_REQUIRED;
+
+        this.recordState(canonical, nextState, {
           recoveryAction: action,
           recoveredAt: new Date().toISOString(),
           recoveredFrom: state,

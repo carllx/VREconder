@@ -17,6 +17,7 @@ export const EngineStatus = {
   PAUSED_FOR_PLAYBACK: 'PAUSED_FOR_PLAYBACK',
   JOURNAL_CORRUPT: 'JOURNAL_CORRUPT',
   RECOVERY_BLOCKED: 'RECOVERY_BLOCKED',
+  CLEANUP_PENDING: 'CLEANUP_PENDING',
   SUBPROCESS_JOIN_TIMEOUT: 'SUBPROCESS_JOIN_TIMEOUT'
 };
 
@@ -62,7 +63,7 @@ export class NormalizationEngine {
       return { ok: false, status: EngineStatus.JOURNAL_CORRUPT, details: { error: validation.error } };
     }
 
-    const recovery = this.journal.recoverOnStartup();
+    const recovery = this.journal.recoverOnStartup(this.fileOps);
     if (!recovery.ok) {
       this.status = EngineStatus.RECOVERY_BLOCKED;
       return { ok: false, status: EngineStatus.RECOVERY_BLOCKED, details: recovery };
@@ -173,6 +174,7 @@ export class NormalizationEngine {
       this.status === EngineStatus.UNINITIALIZED ||
       this.status === EngineStatus.JOURNAL_CORRUPT ||
       this.status === EngineStatus.RECOVERY_BLOCKED ||
+      this.status === EngineStatus.CLEANUP_PENDING ||
       this.status === EngineStatus.SUBPROCESS_JOIN_TIMEOUT
     ) {
       return {
@@ -329,8 +331,26 @@ export class NormalizationEngine {
       if (job.isCancelled || this.isPlaybackActive) {
         return this._handleJobCancellation(job);
       }
-      if (fs.existsSync(partialPath)) try { (this.fileOps.unlinkSync || fs.unlinkSync)(partialPath); } catch (_) {}
+      const rollback = executeRollback({
+        canonical,
+        oldPath,
+        partialPath,
+        isSwapped: false,
+        initialFingerprint,
+        fileOps: this.fileOps
+      });
       const err = remuxResult.error || 'Remux execution failed';
+      if (!rollback.ok) {
+        this.status = EngineStatus.RECOVERY_BLOCKED;
+        this.journal.recordState(canonical, NormalizationState.RECOVERY_REQUIRED, {
+          error: 'ROLLBACK_FAILED_RECOVERY_REQUIRED',
+          originalError: err,
+          rollbackError: rollback.error
+        });
+        this.activeJob = null;
+        this.isProcessing = false;
+        return { ok: false, state: NormalizationState.RECOVERY_REQUIRED, error: `Remux cleanup failed: ${rollback.error}` };
+      }
       this.journal.recordState(canonical, NormalizationState.FAILED_SAFE, { error: err });
       this.activeJob = null;
       this.isProcessing = false;
@@ -349,7 +369,25 @@ export class NormalizationEngine {
     }
 
     if (!structVerify.ok) {
-      if (fs.existsSync(partialPath)) try { (this.fileOps.unlinkSync || fs.unlinkSync)(partialPath); } catch (_) {}
+      const rollback = executeRollback({
+        canonical,
+        oldPath,
+        partialPath,
+        isSwapped: false,
+        initialFingerprint,
+        fileOps: this.fileOps
+      });
+      if (!rollback.ok) {
+        this.status = EngineStatus.RECOVERY_BLOCKED;
+        this.journal.recordState(canonical, NormalizationState.RECOVERY_REQUIRED, {
+          error: 'ROLLBACK_FAILED_RECOVERY_REQUIRED',
+          originalError: structVerify.reason,
+          rollbackError: rollback.error
+        });
+        this.activeJob = null;
+        this.isProcessing = false;
+        return { ok: false, state: NormalizationState.RECOVERY_REQUIRED, error: `Structure verify cleanup failed: ${rollback.error}` };
+      }
       this.journal.recordState(canonical, NormalizationState.FAILED_SAFE, { error: structVerify.reason });
       this.activeJob = null;
       this.isProcessing = false;
@@ -364,15 +402,23 @@ export class NormalizationEngine {
     }
 
     if (!isFingerprintValid(canonical, initialFingerprint)) {
-      if (fs.existsSync(partialPath)) try { (this.fileOps.unlinkSync || fs.unlinkSync)(partialPath); } catch (_) {}
-      this.journal.recordState(canonical, NormalizationState.FAILED_SAFE, {
-        error: 'ORIGINAL_FINGERPRINT_MISMATCH',
-        reason: 'Original source file mutated during remuxing process'
+      const rollback = executeRollback({
+        canonical,
+        oldPath,
+        partialPath,
+        isSwapped: false,
+        initialFingerprint,
+        fileOps: this.fileOps
       });
+      this.journal.recordState(canonical, NormalizationState.RECOVERY_REQUIRED, {
+        error: 'ORIGINAL_FINGERPRINT_MISMATCH',
+        reason: 'Original source file mutated during remuxing process',
+        rollbackError: rollback.ok ? null : rollback.error
+      });
+      this.status = EngineStatus.RECOVERY_BLOCKED;
       this.activeJob = null;
       this.isProcessing = false;
-      this.status = EngineStatus.SAFE_IDLE;
-      return { ok: false, state: NormalizationState.FAILED_SAFE, error: 'ORIGINAL_FINGERPRINT_MISMATCH' };
+      return { ok: false, state: NormalizationState.RECOVERY_REQUIRED, error: 'ORIGINAL_FINGERPRINT_MISMATCH' };
     }
 
     this.journal.recordState(canonical, NormalizationState.SWAP_STEP1_RENAME_ORIGINAL, { oldPath, partialPath, initialFingerprint });
@@ -381,7 +427,25 @@ export class NormalizationEngine {
       (this.fileOps.renameSync || fs.renameSync)(canonical, oldPath);
       job.isSwapped = true;
     } catch (step1Err) {
-      if (fs.existsSync(partialPath)) try { (this.fileOps.unlinkSync || fs.unlinkSync)(partialPath); } catch (_) {}
+      const rollback = executeRollback({
+        canonical,
+        oldPath,
+        partialPath,
+        isSwapped: false,
+        initialFingerprint,
+        fileOps: this.fileOps
+      });
+      if (!rollback.ok) {
+        this.status = EngineStatus.RECOVERY_BLOCKED;
+        this.journal.recordState(canonical, NormalizationState.RECOVERY_REQUIRED, {
+          error: 'ROLLBACK_FAILED_RECOVERY_REQUIRED',
+          originalError: step1Err.message,
+          rollbackError: rollback.error
+        });
+        this.activeJob = null;
+        this.isProcessing = false;
+        return { ok: false, state: NormalizationState.RECOVERY_REQUIRED, error: `Swap step 1 cleanup failed: ${rollback.error}` };
+      }
       this.journal.recordState(canonical, NormalizationState.FAILED_SAFE, { error: `Swap step 1 failed: ${step1Err.message}` });
       this.activeJob = null;
       this.isProcessing = false;
@@ -446,11 +510,12 @@ export class NormalizationEngine {
       replacementFingerprint
     });
 
+    if (this.fileOps.onFinalVerified) {
+      await this.fileOps.onFinalVerified(job);
+    }
+
     if (job.isCancelled || this.isPlaybackActive) {
-      this.activeJob = null;
-      this.isProcessing = false;
-      this.status = EngineStatus.PAUSED_FOR_PLAYBACK;
-      return { ok: false, state: NormalizationState.PAUSED_FOR_PLAYBACK, error: 'Cancelled for playback after final verification' };
+      return this._handleJobCancellation(job);
     }
 
     const currentReplacementFp = getMediaFingerprint(canonical);
@@ -482,7 +547,7 @@ export class NormalizationEngine {
       });
       this.activeJob = null;
       this.isProcessing = false;
-      this.status = EngineStatus.SAFE_IDLE;
+      this.status = EngineStatus.CLEANUP_PENDING;
       return { ok: false, state: NormalizationState.CLEANUP_PENDING, error: `Old backup cleanup failed: ${cleanupError}` };
     }
 
