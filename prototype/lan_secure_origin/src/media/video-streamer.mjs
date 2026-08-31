@@ -4,6 +4,19 @@ import path from 'node:path';
 let rangeRequestSeq = 0;
 const recentRangeLifecycles = [];
 const MAX_RANGE_HISTORY = 100;
+let activeStreamCount = 0;
+const streamCountListeners = new Set();
+
+export function onActiveStreamCountChange(fn) {
+  streamCountListeners.add(fn);
+  return () => streamCountListeners.delete(fn);
+}
+
+function notifyStreamCountChange() {
+  for (const fn of streamCountListeners) {
+    try { fn(activeStreamCount); } catch (_) {}
+  }
+}
 
 export function getRecentRangeLifecycles(options = {}) {
   const { sinceMs = null, mediaPath = null, limit = 20 } = options;
@@ -173,9 +186,18 @@ export function streamVideo(req, res, filePath) {
 
   res.writeHead(statusCode, headers);
 
+  activeStreamCount++;
+  notifyStreamCountChange();
+  let streamCountDecremented = false;
+
   const fileStream = fs.createReadStream(filePath, { start: readStart, end: readEnd });
 
   const finalize = (outcome) => {
+    if (!streamCountDecremented) {
+      streamCountDecremented = true;
+      activeStreamCount = Math.max(0, activeStreamCount - 1);
+      notifyStreamCountChange();
+    }
     if (!fileStream.destroyed) {
       fileStream.destroy();
     }

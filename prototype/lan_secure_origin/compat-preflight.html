@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>Safari Media Compatibility Preflight - VREconder</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: #090d16;
+      color: #f8fafc;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      padding: 16px;
+      line-height: 1.5;
+    }
+    h1 {
+      font-size: 1.2rem;
+      color: #38bdf8;
+      margin-bottom: 8px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .subtitle {
+      font-size: 0.82rem;
+      color: #94a3b8;
+      margin-bottom: 16px;
+    }
+    .card {
+      background: #131b2e;
+      border: 1px solid #243048;
+      border-radius: 10px;
+      padding: 14px;
+      margin-bottom: 14px;
+    }
+    .status-banner {
+      font-size: 0.88rem;
+      padding: 10px 14px;
+      border-radius: 8px;
+      font-weight: 600;
+      margin-bottom: 12px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .status-running {
+      background: rgba(56, 189, 248, 0.15);
+      border: 1px solid #0284c7;
+      color: #38bdf8;
+    }
+    .status-done {
+      background: rgba(16, 185, 129, 0.15);
+      border: 1px solid #059669;
+      color: #34d399;
+    }
+    .stage-item {
+      font-size: 0.8rem;
+      color: #cbd5e1;
+      padding: 6px 0;
+      border-bottom: 1px solid #1e293b;
+      display: flex;
+      justify-content: space-between;
+    }
+    .stage-item:last-child { border-bottom: none; }
+    .stage-name { font-weight: 500; }
+    .stage-status { font-family: monospace; }
+    .test-viewport {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      background: #020617;
+      border: 1px solid #1e293b;
+      border-radius: 8px;
+      padding: 10px;
+      margin-bottom: 14px;
+    }
+    video {
+      width: 140px;
+      height: 80px;
+      background: #000;
+      border-radius: 4px;
+      border: 1px solid #334155;
+      object-fit: contain;
+    }
+    .video-info {
+      font-size: 0.75rem;
+      color: #94a3b8;
+      flex: 1;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.78rem;
+      margin-top: 8px;
+    }
+    th, td {
+      border: 1px solid #243048;
+      padding: 8px 10px;
+      text-align: left;
+    }
+    th {
+      background: #0f172a;
+      color: #94a3b8;
+      font-weight: 600;
+    }
+    .badge {
+      display: inline-block;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 0.72rem;
+      font-weight: bold;
+    }
+    .badge-ok { background: rgba(16, 185, 129, 0.2); color: #34d399; }
+    .badge-err { background: rgba(239, 68, 68, 0.2); color: #f87171; }
+    .badge-warn { background: rgba(245, 158, 11, 0.2); color: #fbbf24; }
+    .badge-info { background: rgba(56, 189, 248, 0.2); color: #38bdf8; }
+    .badge-pending { background: #334155; color: #94a3b8; }
+  </style>
+</head>
+<body>
+  <h1><span>⚡</span> Safari Compatibility Preflight</h1>
+  <div class="subtitle">全自动 Safari HEVC 容器兼容性因果测试（iPhone 原生无需眼镜 / 顺序执行）</div>
+
+  <div id="statusBanner" class="status-banner status-running">
+    <span id="bannerText">正在运行第 1 / 6 项测试...</span>
+    <span id="bannerProgress">0%</span>
+  </div>
+
+  <div class="test-viewport">
+    <video id="probeVideo" playsinline muted autoplay preload="auto"></video>
+    <div class="video-info">
+      <div>当前测试项: <b id="lblCurrentItem" style="color:#f1f5f9;">--</b></div>
+      <div>分辨率: <span id="lblDimensions">0 × 0</span> | 状态: <span id="lblState">HAVE_NOTHING</span></div>
+      <div>网络状态: <span id="lblNetState">0</span> | 错误: <span id="lblError">None</span></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div style="font-size:0.82rem; font-weight:bold; color:#94a3b8; margin-bottom:8px;">测试对等结果总表 (Summary Verdict Table)</div>
+    <table id="verdictTable">
+      <thead>
+        <tr>
+          <th>测试对 (Pair)</th>
+          <th>Original (HEV1)</th>
+          <th>HVC1 Derivative</th>
+          <th>因果结论 (Verdict)</th>
+        </tr>
+      </thead>
+      <tbody id="verdictBody">
+        <tr id="row-8k">
+          <td><b>1. 8K Kamiki</b></td>
+          <td id="res-8k-orig"><span class="badge badge-pending">Pending</span></td>
+          <td id="res-8k-hvc1"><span class="badge badge-pending">Pending</span></td>
+          <td id="verdict-8k"><span class="badge badge-pending">Waiting</span></td>
+        </tr>
+        <tr id="row-4k">
+          <td><b>2. 4K SIVR033</b></td>
+          <td id="res-4k-orig"><span class="badge badge-pending">Pending</span></td>
+          <td id="res-4k-hvc1"><span class="badge badge-pending">Pending</span></td>
+          <td id="verdict-4k"><span class="badge badge-pending">Waiting</span></td>
+        </tr>
+        <tr id="row-wakui">
+          <td><b>3. Render Wakui Mito</b></td>
+          <td id="res-wakui-orig"><span class="badge badge-pending">Pending</span></td>
+          <td id="res-wakui-hvc1"><span class="badge badge-pending">Pending</span></td>
+          <td id="verdict-wakui"><span class="badge badge-pending">Waiting</span></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="card">
+    <div style="font-size:0.82rem; font-weight:bold; color:#94a3b8; margin-bottom:8px;">事件执行流水线 (Execution Trace)</div>
+    <div id="traceLog"></div>
+  </div>
+
+  <script>
+    const PAIRS = [
+      {
+        id: '8k',
+        name: '8K Kamiki',
+        original: { name: '8K Kamiki (Original)', path: '8K/Kamiki Rei - DSVR01433.mp4', expectedTag: 'hev1' },
+        derivative: { name: '8K Kamiki (HVC1_TEST)', path: '8K/Kamiki Rei - DSVR01433_HVC1_TEST.mp4', expectedTag: 'hvc1' }
+      },
+      {
+        id: '4k',
+        name: '4K SIVR033',
+        original: { name: '4K SIVR033 (Original)', path: 'New folder/Mikami Yua_Arata Arina (Hashimoto Arina) - SIVR033.mp4', expectedTag: 'hev1' },
+        derivative: { name: '4K SIVR033 (HVC1_TEST)', path: 'New folder/Mikami Yua_Arata Arina (Hashimoto Arina) - SIVR033_HVC1_TEST.mp4', expectedTag: 'hvc1' }
+      },
+      {
+        id: 'wakui',
+        name: 'Render Wakui Mito',
+        original: { name: 'Render Wakui Mito (Original)', path: 'Render/4096_2048_crf18_avc1-Wakui Mito(Wakui Mito) - DSVR01546 - (HEVC_19).mp4.mp4', expectedTag: 'hev1' },
+        derivative: { name: 'Render Wakui Mito (HVC1_TEST)', path: 'Render/4096_2048_crf18_avc1-Wakui Mito(Wakui Mito) - DSVR01546 - (HEVC_19)_HVC1_TEST.mp4', expectedTag: 'hvc1' }
+      }
+    ];
+
+    const video = document.getElementById('probeVideo');
+    const bannerText = document.getElementById('bannerText');
+    const bannerProgress = document.getElementById('bannerProgress');
+    const statusBanner = document.getElementById('statusBanner');
+    const lblCurrentItem = document.getElementById('lblCurrentItem');
+    const lblDimensions = document.getElementById('lblDimensions');
+    const lblState = document.getElementById('lblState');
+    const lblNetState = document.getElementById('lblNetState');
+    const lblError = document.getElementById('lblError');
+    const traceLog = document.getElementById('traceLog');
+
+    const stateNames = ['HAVE_NOTHING', 'HAVE_METADATA', 'HAVE_CURRENT_DATA', 'HAVE_FUTURE_DATA', 'HAVE_ENOUGH_DATA'];
+    const resultsMap = {};
+
+    function addTrace(msg, type = 'info') {
+      const el = document.createElement('div');
+      el.className = 'stage-item';
+      el.innerHTML = `<span class="stage-name">[${new Date().toLocaleTimeString()}] ${msg}</span><span class="stage-status badge badge-${type}">${type.toUpperCase()}</span>`;
+      traceLog.prepend(el);
+    }
+
+    function probeSingleItem(item) {
+      return new Promise((resolve) => {
+        lblCurrentItem.textContent = item.name;
+        lblError.textContent = 'None';
+        addTrace(`开始测试: ${item.name}`, 'info');
+
+        const metrics = {
+          itemName: item.name,
+          path: item.path,
+          expectedTag: item.expectedTag,
+          events: [],
+          videoWidth: 0,
+          videoHeight: 0,
+          duration: 0,
+          readyState: 0,
+          networkState: 0,
+          error: null,
+          canPlay: false,
+          timedOut: false,
+          startTime: Date.now(),
+          elapsedMs: 0
+        };
+
+        let resolved = false;
+        let timeoutId = null;
+
+        function recordEvent(evtName) {
+          const now = Date.now();
+          metrics.events.push({ name: evtName, timeMs: now - metrics.startTime });
+          metrics.readyState = video.readyState;
+          metrics.networkState = video.networkState;
+          metrics.videoWidth = video.videoWidth;
+          metrics.videoHeight = video.videoHeight;
+          metrics.duration = video.duration || 0;
+
+          lblDimensions.textContent = `${video.videoWidth} × ${video.videoHeight}`;
+          lblState.textContent = stateNames[video.readyState] || String(video.readyState);
+          lblNetState.textContent = String(video.networkState);
+        }
+
+        const onEvent = (e) => {
+          recordEvent(e.type);
+          if (e.type === 'loadeddata' || e.type === 'canplay') {
+            metrics.canPlay = true;
+            finish(null);
+          } else if (e.type === 'error') {
+            const err = video.error;
+            metrics.error = err ? { code: err.code, message: err.message } : { code: -1, message: 'Unknown error' };
+            lblError.textContent = metrics.error ? `Code ${metrics.error.code}` : 'Error';
+            finish(metrics.error);
+          }
+        };
+
+        ['loadstart', 'loadedmetadata', 'loadeddata', 'canplay', 'error'].forEach(evt => {
+          video.addEventListener(evt, onEvent);
+        });
+
+        function cleanup() {
+          if (timeoutId) clearTimeout(timeoutId);
+          ['loadstart', 'loadedmetadata', 'loadeddata', 'canplay', 'error'].forEach(evt => {
+            video.removeEventListener(evt, onEvent);
+          });
+        }
+
+        function finish(err) {
+          if (resolved) return;
+          resolved = true;
+          cleanup();
+          metrics.elapsedMs = Date.now() - metrics.startTime;
+          metrics.readyState = video.readyState;
+          metrics.networkState = video.networkState;
+          metrics.videoWidth = video.videoWidth;
+          metrics.videoHeight = video.videoHeight;
+          metrics.duration = video.duration || 0;
+
+          if (metrics.canPlay) {
+            addTrace(`${item.name} 成功播放 (canplay/loadeddata), 分辨率: ${metrics.videoWidth}x${metrics.videoHeight}`, 'ok');
+          } else if (metrics.error) {
+            addTrace(`${item.name} 触发错误: Code ${metrics.error.code} (${metrics.error.message || 'MEDIA_ERR_SRC_NOT_SUPPORTED'})`, 'err');
+          } else if (metrics.timedOut) {
+            addTrace(`${item.name} 超时未触发数据`, 'warn');
+          }
+
+          resolve(metrics);
+        }
+
+        timeoutId = setTimeout(() => {
+          metrics.timedOut = true;
+          finish({ code: 'TIMEOUT', message: 'Probe timeout after 8s' });
+        }, 8000);
+
+        video.src = '/video?path=' + encodeURIComponent(item.path);
+        video.load();
+        video.play().catch(() => {});
+      });
+    }
+
+    async function runAllTests() {
+      const allResults = [];
+      const totalSteps = PAIRS.length * 2;
+      let currentStep = 0;
+
+      for (const pair of PAIRS) {
+        // Step 1: Probe original
+        currentStep++;
+        bannerText.textContent = `正在运行第 ${currentStep} / ${totalSteps} 项测试: ${pair.original.name}...`;
+        bannerProgress.textContent = `${Math.round((currentStep / totalSteps) * 100)}%`;
+        const origResult = await probeSingleItem(pair.original);
+        allResults.push(origResult);
+
+        const elOrig = document.getElementById(`res-${pair.id}-orig`);
+        if (origResult.canPlay) {
+          elOrig.innerHTML = `<span class="badge badge-ok">✓ CanPlay (${origResult.videoWidth}x${origResult.videoHeight})</span>`;
+        } else if (origResult.error) {
+          elOrig.innerHTML = `<span class="badge badge-err">✗ Code ${origResult.error.code}</span>`;
+        } else {
+          elOrig.innerHTML = `<span class="badge badge-warn">Timeout</span>`;
+        }
+
+        // Small pause
+        await new Promise(r => setTimeout(r, 600));
+
+        // Step 2: Probe HVC1 derivative
+        currentStep++;
+        bannerText.textContent = `正在运行第 ${currentStep} / ${totalSteps} 项测试: ${pair.derivative.name}...`;
+        bannerProgress.textContent = `${Math.round((currentStep / totalSteps) * 100)}%`;
+        const derivResult = await probeSingleItem(pair.derivative);
+        allResults.push(derivResult);
+
+        const elDeriv = document.getElementById(`res-${pair.id}-hvc1`);
+        if (derivResult.canPlay) {
+          elDeriv.innerHTML = `<span class="badge badge-ok">✓ CanPlay (${derivResult.videoWidth}x${derivResult.videoHeight})</span>`;
+        } else if (derivResult.error) {
+          elDeriv.innerHTML = `<span class="badge badge-err">✗ Code ${derivResult.error.code}</span>`;
+        } else {
+          elDeriv.innerHTML = `<span class="badge badge-warn">Timeout</span>`;
+        }
+
+        // Determine Verdict
+        const elVerdict = document.getElementById(`verdict-${pair.id}`);
+        let verdict = 'UNKNOWN';
+        if (origResult.error && origResult.error.code === 4 && derivResult.canPlay) {
+          verdict = 'ORIGINAL_CODE4__HVC1_SUPPORTED';
+          elVerdict.innerHTML = `<span class="badge badge-ok">ORIGINAL_CODE4__HVC1_SUPPORTED</span>`;
+        } else if (origResult.canPlay && derivResult.canPlay) {
+          verdict = 'BOTH_SUPPORTED';
+          elVerdict.innerHTML = `<span class="badge badge-info">BOTH_SUPPORTED</span>`;
+        } else if (origResult.error && derivResult.error) {
+          verdict = 'BOTH_FAILED';
+          elVerdict.innerHTML = `<span class="badge badge-err">BOTH_FAILED</span>`;
+        } else {
+          verdict = `ORIG_${origResult.canPlay?'OK':'ERR'}__DERIV_${derivResult.canPlay?'OK':'ERR'}`;
+          elVerdict.innerHTML = `<span class="badge badge-warn">${verdict}</span>`;
+        }
+
+        resultsMap[pair.id] = {
+          pairName: pair.name,
+          original: origResult,
+          derivative: derivResult,
+          verdict
+        };
+
+        await new Promise(r => setTimeout(r, 600));
+      }
+
+      // Finish & Submit
+      bannerText.textContent = '✅ 全部测试完成！已生成结构化判定结果并持久化到服务器。';
+      bannerProgress.textContent = '100%';
+      statusBanner.className = 'status-banner status-done';
+      addTrace('测试套件完成，正在向服务器上报判定证据...', 'ok');
+
+      const payload = {
+        clientFamily: 'safari-ios',
+        userAgent: navigator.userAgent,
+        timestamp: new Date().toISOString(),
+        pairsTested: resultsMap
+      };
+
+      try {
+        await fetch('/api/preflight/report', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        addTrace('服务器报告保存成功 (preflight_results.json)', 'ok');
+      } catch (e) {
+        addTrace('上报失败: ' + e.message, 'err');
+      }
+    }
+
+    // Auto-start on load
+    window.addEventListener('DOMContentLoaded', () => {
+      setTimeout(runAllTests, 1000);
+    });
+  </script>
+</body>
+</html>

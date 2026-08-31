@@ -35,3 +35,12 @@ _Avoid_: Folder, Playlist database
 **Media Library**:
 The media-management side that discovers and describes Video Assets, understands codec/container differences, and selects Source Media or a Playback Variant before handing playback to the Player.
 _Avoid_: Player, Playback Queue
+
+**Library Normalization**:
+The user-authorized, transactional process of upgrading physical container or stream packaging in-place to ensure broad client compatibility while maintaining a single authoritative copy per Logical Media.
+_Avoid_: Bulk batch destruction, Multi-variant sprawl
+
+**Compatibility Preflight**:
+The automated static and lightweight device-level verification gate executed before playback to ensure media satisfies client playback invariants.
+_Avoid_: In-headset debugging, Runtime blind trial
+
