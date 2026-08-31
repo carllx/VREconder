@@ -7,6 +7,15 @@ import { DeviceProbeCache } from '../preflight/device-probe-cache.mjs';
 const probeCache = new DeviceProbeCache();
 const engine = new NormalizationEngine({ executionEnabled: false });
 
+// Initialize engine asynchronously on startup
+export const engineInitPromise = engine.initialize().then(initResult => {
+  console.log(`[NormalizationEngine] Startup initialization complete. Status: ${initResult.status}`);
+  return initResult;
+}).catch(err => {
+  console.error(`[NormalizationEngine] Startup initialization error:`, err);
+  return { ok: false, status: 'INITIALIZATION_FAILED', error: err.message };
+});
+
 /**
  * Handles Preflight and Normalization API routes.
  * 
@@ -91,14 +100,23 @@ export function handlePreflightRoutes(req, res, pathname, __dirname, allowedRoot
 
   // 5. Normalization engine status
   if (pathname === '/api/normalization/status' && req.method === 'GET') {
-    const journalEntries = engine.journal.readJournal();
+    let journalEntries = null;
+    let journalError = null;
+    try {
+      journalEntries = engine.journal.readJournal();
+    } catch (e) {
+      journalError = e.message;
+    }
+
     res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
     res.end(JSON.stringify({
+      engineStatus: engine.status,
       executionEnabled: engine.executionEnabled,
       isProcessing: engine.isProcessing,
       isPlaybackActive: engine.isPlaybackActive,
       concurrency: engine.concurrency,
-      journal: journalEntries
+      journal: journalEntries,
+      journalError
     }, null, 2));
     return true;
   }
@@ -109,3 +127,4 @@ export function handlePreflightRoutes(req, res, pathname, __dirname, allowedRoot
 export function getEngineInstance() {
   return engine;
 }
+

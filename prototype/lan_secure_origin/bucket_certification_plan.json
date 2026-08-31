@@ -1,0 +1,127 @@
+[
+  {
+    "bucketSignature": "HEVC-hev1-Main-8bit-4320x2160-L180-60000/1001",
+    "resolution": "4320x2160",
+    "level": 180,
+    "profile": "Main",
+    "bitDepth": 8,
+    "rFps": "60000/1001",
+    "numberOfMedia": 60,
+    "totalBytes": 129894045124,
+    "representativeFiles": [
+      {
+        "path": "G:\\Media\\VR\\Render\\4320_2160_crfun_vp09-Shizuka - DSVR01585.mp4 - (AVC_23.0) - (HEVC_26.5).mp4",
+        "sizeBytes": 1999577859,
+        "durationSec": 2153.763
+      },
+      {
+        "path": "G:\\Media\\VR\\Render\\Aizuki Himari - SIVR329-(HEVC_23).mp4",
+        "sizeBytes": 2894749868,
+        "durationSec": 1637.469167
+      }
+    ],
+    "proposedProbeOperation": {
+      "ffmpegCommand": "-map 0 -c copy -tag:v hvc1",
+      "purpose": "Probe Safari VideoToolbox playback compatibility for uncertified envelope"
+    }
+  },
+  {
+    "bucketSignature": "HEVC-hev1-Main-8bit-4320x2160-L180-60/1",
+    "resolution": "4320x2160",
+    "level": 180,
+    "profile": "Main",
+    "bitDepth": 8,
+    "rFps": "60/1",
+    "numberOfMedia": 17,
+    "totalBytes": 23617819172,
+    "representativeFiles": [
+      {
+        "path": "G:\\Media\\VR\\Render\\4320_2160_crfunknown_avc1-Shinoda Yuu - VOVS197 - (HEVC_27).mp4",
+        "sizeBytes": 1183807558,
+        "durationSec": 1320.15
+      },
+      {
+        "path": "G:\\Media\\VR\\Render\\4320_2160_crfun_avc1-Amane Mahina(Hoshi Maria) - SIVR172 - (HEVC_27).mp4",
+        "sizeBytes": 1210521059,
+        "durationSec": 728.033333
+      }
+    ],
+    "proposedProbeOperation": {
+      "ffmpegCommand": "-map 0 -c copy -tag:v hvc1",
+      "purpose": "Probe Safari VideoToolbox playback compatibility for uncertified envelope"
+    }
+  },
+  {
+    "bucketSignature": "HEVC-hev1-Main-8bit-4320x2160-L180-2997/50",
+    "resolution": "4320x2160",
+    "level": 180,
+    "profile": "Main",
+    "bitDepth": 8,
+    "rFps": "2997/50",
+    "numberOfMedia": 7,
+    "totalBytes": 12066267978,
+    "representativeFiles": [
+      {
+        "path": "G:\\Media\\VR\\Render\\Hachino Tsubasa - KMVR859-(HEVC_21_cv_hevc_videotoolbox).mp4",
+        "sizeBytes": 1600003308,
+        "durationSec": 1043.443443
+      },
+      {
+        "path": "G:\\Media\\VR\\Render\\Jinguuji Nao - TJVR010-(HEVC_18).mp4",
+        "sizeBytes": 2326369933,
+        "durationSec": 1433.460583
+      }
+    ],
+    "proposedProbeOperation": {
+      "ffmpegCommand": "-map 0 -c copy -tag:v hvc1",
+      "purpose": "Probe Safari VideoToolbox playback compatibility for uncertified envelope"
+    }
+  },
+  {
+    "bucketSignature": "HEVC-hev1-Main-8bit-5400x2700-L180-60000/1001",
+    "resolution": "5400x2700",
+    "level": 180,
+    "profile": "Main",
+    "bitDepth": 8,
+    "rFps": "60000/1001",
+    "numberOfMedia": 1,
+    "totalBytes": 3934150172,
+    "representativeFiles": [
+      {
+        "path": "G:\\Media\\VR\\Render\\Ootsuki Hibiki - SAVR0262 - (HEVC_21.0).mp4",
+        "sizeBytes": 3934150172,
+        "durationSec": 1611.328
+      }
+    ],
+    "proposedProbeOperation": {
+      "ffmpegCommand": "-map 0 -c copy -tag:v hvc1",
+      "purpose": "Probe Safari VideoToolbox playback compatibility for uncertified envelope"
+    }
+  },
+  {
+    "bucketSignature": "HEVC-hev1-Main-8bit-4320x2160-L180-30/1",
+    "resolution": "4320x2160",
+    "level": 180,
+    "profile": "Main",
+    "bitDepth": 8,
+    "rFps": "30/1",
+    "numberOfMedia": 4,
+    "totalBytes": 2739923617,
+    "representativeFiles": [
+      {
+        "path": "G:\\Media\\VR\\Render\\EPORNER.COM - [O6D7pHnEqNA] CUTE GURLS_final_libx265.mp4",
+        "sizeBytes": 460063137,
+        "durationSec": 1000.160544
+      },
+      {
+        "path": "G:\\Media\\VR\\Render\\EPORNER.COM - [AQOSPa44hK2] [B] A Raw Collection Of Days With Hana (2160) - (HEVC_27).mp4",
+        "sizeBytes": 1329101332,
+        "durationSec": 1517.238005
+      }
+    ],
+    "proposedProbeOperation": {
+      "ffmpegCommand": "-map 0 -c copy -tag:v hvc1",
+      "purpose": "Probe Safari VideoToolbox playback compatibility for uncertified envelope"
+    }
+  }
+]

@@ -57,6 +57,54 @@ export function collectMediaFiles(rootDirs) {
 }
 
 /**
+ * Builds an automatic bucket certification plan for uncertified HEVC groups.
+ * 
+ * @param {Array<object>} uncertifiedItems 
+ * @returns {Array<object>}
+ */
+export function buildBucketCertificationPlan(uncertifiedItems) {
+  const buckets = new Map();
+
+  for (const item of uncertifiedItems) {
+    const facts = item.facts;
+    if (!facts || !facts.video) continue;
+    const v = facts.video;
+    const bucketKey = `HEVC-hev1-Main-8bit-${v.width}x${v.height}-L${v.level}-${v.rFps || 'unknown'}`;
+
+    if (!buckets.has(bucketKey)) {
+      buckets.set(bucketKey, {
+        bucketSignature: bucketKey,
+        resolution: `${v.width}x${v.height}`,
+        level: v.level,
+        profile: v.profile,
+        bitDepth: v.bitDepth,
+        rFps: v.rFps,
+        numberOfMedia: 0,
+        totalBytes: 0,
+        representativeFiles: [],
+        proposedProbeOperation: {
+          ffmpegCommand: '-map 0 -c copy -tag:v hvc1',
+          purpose: 'Probe Safari VideoToolbox playback compatibility for uncertified envelope'
+        }
+      });
+    }
+
+    const b = buckets.get(bucketKey);
+    b.numberOfMedia++;
+    b.totalBytes += item.sizeBytes;
+    if (b.representativeFiles.length < 2) {
+      b.representativeFiles.push({
+        path: item.path,
+        sizeBytes: item.sizeBytes,
+        durationSec: v.durationSec
+      });
+    }
+  }
+
+  return Array.from(buckets.values()).sort((a, b) => b.totalBytes - a.totalBytes);
+}
+
+/**
  * Performs a read-only inventory scan and produces a Dry Run report.
  * 
  * @param {string[]} rootDirs 
@@ -67,16 +115,20 @@ export async function runDryRunInventory(rootDirs) {
   const items = [];
 
   let totalFiles = files.length;
-  let readyCount = 0;
-  let candidateCount = 0;
-  let needsProbeCount = 0;
-  let unknownCount = 0;
-  let invalidCount = 0;
-  let derivativeCount = 0;
+  let readyDirectCount = 0;
+  let exactCertifiedCandidateCount = 0;
+  let needsBucketCertificationCount = 0;
+  let needsDeviceProbeCount = 0;
+  let unsupportedUnknownCount = 0;
+  let invalidMediaCount = 0;
+  let derivativeExcludedCount = 0;
 
-  let predictedBytesRewritten = 0;
+  let exactCertifiedBytesRewritten = 0;
+  let needsBucketBytes = 0;
   let largestCandidateBytes = 0;
   let largestCandidatePath = null;
+
+  const uncertifiedCandidates = [];
 
   // Process files with bounded concurrency of 6
   const concurrency = 6;
@@ -91,7 +143,7 @@ export async function runDryRunInventory(rootDirs) {
       const size = stat ? stat.size : 0;
 
       if (isDeriv) {
-        derivativeCount++;
+        derivativeExcludedCount++;
         items.push({
           path: filePath,
           sizeBytes: size,
@@ -106,45 +158,60 @@ export async function runDryRunInventory(rootDirs) {
       const ext = path.extname(filePath);
       const repairRule = findRepairCandidate(facts, ext);
 
-      switch (classification.classification) {
-        case MediaClass.READY_DIRECT:
-          readyCount++;
-          break;
-        case MediaClass.NORMALIZATION_CANDIDATE:
-          candidateCount++;
-          predictedBytesRewritten += size;
-          if (size > largestCandidateBytes) {
-            largestCandidateBytes = size;
-            largestCandidatePath = filePath;
-          }
-          break;
-        case MediaClass.NEEDS_DEVICE_PROBE:
-          needsProbeCount++;
-          break;
-        case MediaClass.UNSUPPORTED_UNKNOWN_FIX:
-          unknownCount++;
-          break;
-        default:
-          invalidCount++;
-          break;
-      }
-
-      items.push({
+      const itemRecord = {
         path: filePath,
         sizeBytes: size,
         facts,
         classification: classification.classification,
         reason: classification.reason,
-        repairCandidate: repairRule ? repairRule.id : null
-      });
+        repairCandidate: repairRule ? repairRule.ruleId : null,
+        matchedBucket: classification.matchedBucket || null
+      };
+
+      switch (classification.classification) {
+        case MediaClass.READY_DIRECT:
+          readyDirectCount++;
+          break;
+        case MediaClass.EXACT_CERTIFIED_NORMALIZATION_CANDIDATE:
+          exactCertifiedCandidateCount++;
+          exactCertifiedBytesRewritten += size;
+          if (size > largestCandidateBytes) {
+            largestCandidateBytes = size;
+            largestCandidatePath = filePath;
+          }
+          break;
+        case MediaClass.NEEDS_BUCKET_CERTIFICATION:
+          needsBucketCertificationCount++;
+          needsBucketBytes += size;
+          uncertifiedCandidates.push(itemRecord);
+          break;
+        case MediaClass.NEEDS_DEVICE_PROBE:
+          needsDeviceProbeCount++;
+          break;
+        case MediaClass.UNSUPPORTED_UNKNOWN_FIX:
+          unsupportedUnknownCount++;
+          break;
+        default:
+          invalidMediaCount++;
+          break;
+      }
+
+      items.push(itemRecord);
     }
   }
 
   const workers = Array.from({ length: Math.min(concurrency, files.length) }, () => worker());
   await Promise.all(workers);
 
+  const bucketCertificationPlan = buildBucketCertificationPlan(uncertifiedCandidates);
 
-  // Margin of 20% on top of the largest candidate
+  // Write bucket_certification_plan.json artifact
+  try {
+    const planPath = path.join(process.cwd(), 'prototype/lan_secure_origin/bucket_certification_plan.json');
+    fs.writeFileSync(planPath, JSON.stringify(bucketCertificationPlan, null, 2), 'utf8');
+  } catch (_) {}
+
+  // Estimated free space requirement based on largest candidate
   const estimatedFreeSpaceRequirement = Math.ceil(largestCandidateBytes * 1.2);
   const sampleRoot = rootDirs.find(r => fs.existsSync(r)) || process.cwd();
   const availableFreeSpace = getDiskFreeSpace(sampleRoot);
@@ -153,14 +220,18 @@ export async function runDryRunInventory(rootDirs) {
     scannedRoots: rootDirs,
     summary: {
       totalFilesScanned: totalFiles,
-      readyDirectCount: readyCount,
-      normalizationCandidateCount: candidateCount,
-      needsDeviceProbeCount: needsProbeCount,
-      unsupportedUnknownCount: unknownCount,
-      invalidMediaCount: invalidCount,
-      derivativeExcludedCount: derivativeCount,
-      predictedBytesRewritten,
-      predictedGigabytesRewritten: (predictedBytesRewritten / (1024 * 1024 * 1024)).toFixed(2) + ' GB',
+      totalLogicalMedia: totalFiles - derivativeExcludedCount,
+      readyDirectCount,
+      exactCertifiedCandidateCount,
+      needsBucketCertificationCount,
+      needsDeviceProbeCount,
+      unsupportedUnknownCount,
+      invalidMediaCount,
+      derivativeExcludedCount,
+      exactCertifiedBytesRewritten,
+      exactCertifiedGigabytesRewritten: (exactCertifiedBytesRewritten / (1024 * 1024 * 1024)).toFixed(2) + ' GB',
+      needsBucketBytes,
+      needsBucketGigabytes: (needsBucketBytes / (1024 * 1024 * 1024)).toFixed(2) + ' GB',
       largestCandidate: largestCandidatePath ? {
         path: largestCandidatePath,
         sizeBytes: largestCandidateBytes,
@@ -170,8 +241,10 @@ export async function runDryRunInventory(rootDirs) {
       estimatedTemporaryFreeSpaceRequirementGB: (estimatedFreeSpaceRequirement / (1024 * 1024 * 1024)).toFixed(2) + ' GB',
       availableDiskFreeSpaceBytes: availableFreeSpace,
       availableDiskFreeSpaceGB: availableFreeSpace >= 0 ? (availableFreeSpace / (1024 * 1024 * 1024)).toFixed(2) + ' GB' : 'Unknown',
-      isFreeSpaceSufficient: availableFreeSpace === -1 || availableFreeSpace >= estimatedFreeSpaceRequirement
+      isFreeSpaceSufficient: availableFreeSpace >= 0 && availableFreeSpace >= estimatedFreeSpaceRequirement
     },
+    bucketCertificationPlan,
     items
   };
 }
+

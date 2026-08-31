@@ -6,17 +6,20 @@ export const NormalizationState = {
   REMUXING: 'REMUXING',
   STRUCTURE_VERIFYING: 'STRUCTURE_VERIFYING',
   VERIFIED: 'VERIFIED',
-  SWAPPING: 'SWAPPING',
+  SWAP_STEP1_RENAME_ORIGINAL: 'SWAP_STEP1_RENAME_ORIGINAL',
+  SWAP_STEP2_RENAME_PARTIAL: 'SWAP_STEP2_RENAME_PARTIAL',
   FINAL_VERIFYING: 'FINAL_VERIFYING',
   DONE: 'DONE',
   FAILED_SAFE: 'FAILED_SAFE',
-  WAITING_DEVICE: 'WAITING_DEVICE',
-  PAUSED_FOR_PLAYBACK: 'PAUSED_FOR_PLAYBACK'
+  PAUSED_FOR_PLAYBACK: 'PAUSED_FOR_PLAYBACK',
+  CANCELLED: 'CANCELLED'
 };
 
 export class NormalizationJournal {
   constructor(journalFilePath) {
     this.journalFilePath = path.resolve(journalFilePath);
+    this.isCorrupt = false;
+    this.corruptReason = null;
     this.ensureJournalFile();
   }
 
@@ -24,24 +27,63 @@ export class NormalizationJournal {
     const dir = path.dirname(this.journalFilePath);
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
     if (!fs.existsSync(this.journalFilePath)) {
-      fs.writeFileSync(this.journalFilePath, JSON.stringify({ version: 1, entries: {} }, null, 2), 'utf8');
+      try {
+        fs.writeFileSync(this.journalFilePath, JSON.stringify({ version: 1, entries: {} }, null, 2), 'utf8');
+      } catch (e) {
+        this.isCorrupt = true;
+        this.corruptReason = `Failed to create journal file: ${e.message}`;
+      }
     }
   }
 
   readJournal() {
-    try {
+    if (this.isCorrupt) {
+      throw new Error(`JOURNAL_CORRUPT: ${this.corruptReason}`);
+    }
+
+    if (!fs.existsSync(this.journalFilePath)) {
       this.ensureJournalFile();
+    }
+
+    try {
       const content = fs.readFileSync(this.journalFilePath, 'utf8');
-      return JSON.parse(content);
+      if (!content.trim()) {
+        this.isCorrupt = true;
+        this.corruptReason = 'Journal file is empty / zero bytes';
+        throw new Error(`JOURNAL_CORRUPT: ${this.corruptReason}`);
+      }
+
+      const parsed = JSON.parse(content);
+      if (!parsed || parsed.version !== 1 || typeof parsed.entries !== 'object' || parsed.entries === null) {
+        this.isCorrupt = true;
+        this.corruptReason = `Invalid journal schema or unsupported version: ${parsed?.version}`;
+        throw new Error(`JOURNAL_CORRUPT: ${this.corruptReason}`);
+      }
+
+      return parsed;
     } catch (e) {
-      return { version: 1, entries: {} };
+      this.isCorrupt = true;
+      this.corruptReason = this.corruptReason || `Malformed JSON in journal file: ${e.message}`;
+      throw new Error(`JOURNAL_CORRUPT: ${this.corruptReason}`);
     }
   }
 
   writeJournal(data) {
+    if (this.isCorrupt) {
+      throw new Error(`Cannot write to corrupted journal: ${this.corruptReason}`);
+    }
     const tmp = `${this.journalFilePath}.tmp`;
     fs.writeFileSync(tmp, JSON.stringify(data, null, 2), 'utf8');
     fs.renameSync(tmp, this.journalFilePath);
+  }
+
+  validateJournal() {
+    try {
+      this.readJournal();
+      return { ok: true };
+    } catch (err) {
+      return { ok: false, error: err.message };
+    }
   }
 
   getEntry(originalPath) {
@@ -71,18 +113,29 @@ export class NormalizationJournal {
   }
 
   /**
-   * Performs crash recovery scan on startup.
-   * Restores any swapped-out old original files and cleans up orphaned .partial files.
-   * 
-   * @returns {Array<{ originalPath: string, action: string, recovered: boolean }>}
+   * Deterministic crash recovery on startup.
+   * Restores interrupted swaps, cleans up journal-verified orphans, and fails closed on unverified artifacts.
    */
   recoverOnStartup() {
-    const journal = this.readJournal();
-    const recoveryActions = [];
+    let journal;
+    try {
+      journal = this.readJournal();
+    } catch (err) {
+      return {
+        ok: false,
+        status: 'JOURNAL_CORRUPT',
+        error: err.message,
+        actions: [],
+        unrecovered: ['JOURNAL_UNREADABLE']
+      };
+    }
+
+    const actions = [];
+    const unrecovered = [];
 
     for (const [canonical, entry] of Object.entries(journal.entries)) {
       const state = entry.currentState;
-      if (state === NormalizationState.DONE || state === NormalizationState.FAILED_SAFE) {
+      if (state === NormalizationState.DONE || state === NormalizationState.FAILED_SAFE || state === NormalizationState.CANCELLED) {
         continue;
       }
 
@@ -95,41 +148,80 @@ export class NormalizationJournal {
       let action = 'none';
       let recovered = true;
 
-      if (state === NormalizationState.SWAPPING || state === NormalizationState.FINAL_VERIFYING) {
-        // Interrupted during or after rename
+      // Crash Case 1: Interrupted after Step 1 (original was renamed to .old, but partial not yet renamed to canonical)
+      if (state === NormalizationState.SWAP_STEP1_RENAME_ORIGINAL) {
         if (fs.existsSync(oldPath) && !fs.existsSync(canonical)) {
-          // Original was renamed to .vreconder-old but target was not finalized -> Rollback
           try {
             fs.renameSync(oldPath, canonical);
-            action = 'restored_old_to_original';
+            action = 'restored_old_to_canonical';
           } catch (e) {
             action = `failed_restore_old: ${e.message}`;
             recovered = false;
           }
-        } else if (fs.existsSync(oldPath) && fs.existsSync(canonical)) {
-          // Both exist: if crash occurred before old removal, keep original intact
-          action = 'preserved_both_for_safety';
+        } else if (!fs.existsSync(oldPath) && fs.existsSync(canonical)) {
+          action = 'canonical_intact_old_missing';
+        } else {
+          action = 'unexpected_file_state_after_step1';
+          recovered = false;
         }
-      } else if (state === NormalizationState.REMUXING || state === NormalizationState.STRUCTURE_VERIFYING) {
-        // Interrupted while remuxing or verifying partial: remove partial, original is untouched
+        if (fs.existsSync(partialPath)) {
+          try { fs.unlinkSync(partialPath); } catch (_) {}
+        }
+      }
+      // Crash Case 2: Interrupted during Step 2 or Final Verifying (both old and canonical exist, or partial was renamed)
+      else if (state === NormalizationState.SWAP_STEP2_RENAME_PARTIAL || state === NormalizationState.FINAL_VERIFYING) {
+        if (fs.existsSync(oldPath) && fs.existsSync(canonical)) {
+          // Unfinalized state: rollback canonical to old
+          try {
+            fs.unlinkSync(canonical);
+            fs.renameSync(oldPath, canonical);
+            action = 'rolled_back_partial_restored_old';
+          } catch (e) {
+            action = `failed_rollback: ${e.message}`;
+            recovered = false;
+          }
+        } else if (fs.existsSync(oldPath) && !fs.existsSync(canonical)) {
+          try {
+            fs.renameSync(oldPath, canonical);
+            action = 'restored_old_to_canonical';
+          } catch (e) {
+            action = `failed_restore_old: ${e.message}`;
+            recovered = false;
+          }
+        }
+      }
+      // Crash Case 3: Interrupted during Remuxing or Structure Verifying
+      else if (state === NormalizationState.REMUXING || state === NormalizationState.STRUCTURE_VERIFYING || state === NormalizationState.PENDING || state === NormalizationState.VERIFIED) {
         if (fs.existsSync(partialPath)) {
           try {
             fs.unlinkSync(partialPath);
             action = 'cleaned_orphan_partial';
           } catch (e) {
             action = `failed_clean_partial: ${e.message}`;
+            recovered = false;
           }
+        } else {
+          action = 'no_artifacts_original_intact';
         }
       }
 
       this.recordState(canonical, NormalizationState.FAILED_SAFE, {
         recoveryAction: action,
-        recoveredAt: new Date().toISOString()
+        recoveredAt: new Date().toISOString(),
+        recoverySuccess: recovered
       });
 
-      recoveryActions.push({ originalPath: canonical, action, recovered });
+      if (!recovered) {
+        unrecovered.push(canonical);
+      }
+      actions.push({ originalPath: canonical, action, recovered, stateBeforeRecovery: state });
     }
 
-    return recoveryActions;
+    return {
+      ok: unrecovered.length === 0,
+      status: unrecovered.length === 0 ? 'RECOVERED_SAFE' : 'RECOVERY_BLOCKED',
+      actions,
+      unrecovered
+    };
   }
 }
