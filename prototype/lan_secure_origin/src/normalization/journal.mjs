@@ -10,10 +10,12 @@ export const NormalizationState = {
   SWAP_STEP2_RENAME_PARTIAL: 'SWAP_STEP2_RENAME_PARTIAL',
   FINAL_VERIFYING: 'FINAL_VERIFYING',
   FINAL_VERIFIED: 'FINAL_VERIFIED',
+  CLEANUP_PENDING: 'CLEANUP_PENDING',
   DONE: 'DONE',
   FAILED_SAFE: 'FAILED_SAFE',
   PAUSED_FOR_PLAYBACK: 'PAUSED_FOR_PLAYBACK',
-  CANCELLED: 'CANCELLED'
+  CANCELLED: 'CANCELLED',
+  RECOVERY_REQUIRED: 'RECOVERY_REQUIRED'
 };
 
 export class NormalizationJournal {
@@ -145,6 +147,7 @@ export class NormalizationJournal {
 
     for (const [canonical, entry] of Object.entries(journal.entries)) {
       const state = entry.currentState;
+      // Skip completed or terminal safe entries
       if (state === NormalizationState.DONE || state === NormalizationState.FAILED_SAFE || state === NormalizationState.CANCELLED) {
         continue;
       }
@@ -159,24 +162,24 @@ export class NormalizationJournal {
 
       let action = 'none';
       let recovered = true;
+      let targetTerminalState = NormalizationState.FAILED_SAFE;
 
-      // Crash Case E/F: FINAL_VERIFIED
-      // Must prove canonical exists AND matches the verified replacement fingerprint before unlinking .old
-      if (state === NormalizationState.FINAL_VERIFIED) {
-        let canonicalMatchesReplacement = false;
-        if (fs.existsSync(canonical) && replacementFingerprint) {
-          try {
-            const canStat = fs.statSync(canonical);
-            if (canStat.size === replacementFingerprint.sizeBytes && Math.floor(canStat.mtimeMs) === replacementFingerprint.mtimeMs) {
-              canonicalMatchesReplacement = true;
-            }
-          } catch (_) {
-            canonicalMatchesReplacement = false;
-          }
+      const checkFp = (target, fp) => {
+        if (!fp) return true;
+        try {
+          if (!fs.existsSync(target)) return false;
+          const st = fs.statSync(target);
+          return st.size === fp.sizeBytes && Math.floor(st.mtimeMs) === fp.mtimeMs;
+        } catch (_) {
+          return false;
         }
+      };
+
+      // Case 1: FINAL_VERIFIED or CLEANUP_PENDING
+      if (state === NormalizationState.FINAL_VERIFIED || state === NormalizationState.CLEANUP_PENDING) {
+        const canonicalMatchesReplacement = checkFp(canonical, replacementFingerprint);
 
         if (!canonicalMatchesReplacement) {
-          // Canonical missing / tampered / replaced: NEVER delete .old backup!
           action = 'replacement_fingerprint_mismatch_recovery_blocked';
           recovered = false;
         } else {
@@ -192,70 +195,70 @@ export class NormalizationJournal {
             action = 'finalized_verified_canonical_intact';
           }
           if (recovered) {
-            this.recordState(canonical, NormalizationState.DONE, {
-              completedAt: new Date().toISOString(),
-              recoveredFrom: NormalizationState.FINAL_VERIFIED
-            });
-            actions.push({ originalPath: canonical, action, recovered, stateBeforeRecovery: state });
-            continue;
+            targetTerminalState = NormalizationState.DONE;
           }
         }
       }
-      // Crash Case B/C/D: Interrupted after Step 1, Step 2, or during FINAL_VERIFYING
+      // Case 2: PAUSED_FOR_PLAYBACK (Transient state invariant validation)
+      else if (state === NormalizationState.PAUSED_FOR_PLAYBACK) {
+        if (fs.existsSync(oldPath)) {
+          action = 'paused_unexpected_old_backup_recovery_blocked';
+          recovered = false;
+        } else {
+          if (fs.existsSync(partialPath)) {
+            try {
+              fs.unlinkSync(partialPath);
+            } catch (e) {
+              action = `paused_failed_clean_partial: ${e.message}`;
+              recovered = false;
+            }
+          }
+          if (recovered) {
+            if (fs.existsSync(canonical) && checkFp(canonical, recordedFingerprint)) {
+              action = 'paused_clean_state_verified';
+              targetTerminalState = NormalizationState.CANCELLED;
+            } else {
+              action = 'paused_canonical_mismatch_recovery_blocked';
+              recovered = false;
+            }
+          }
+        }
+      }
+      // Case 3: RECOVERY_REQUIRED or Interrupted Swap States (SWAP_STEP1, SWAP_STEP2, FINAL_VERIFYING)
       else if (
+        state === NormalizationState.RECOVERY_REQUIRED ||
         state === NormalizationState.SWAP_STEP1_RENAME_ORIGINAL ||
         state === NormalizationState.SWAP_STEP2_RENAME_PARTIAL ||
         state === NormalizationState.FINAL_VERIFYING
       ) {
         if (fs.existsSync(oldPath)) {
-          // P0-4: Must verify that .old is genuinely the recorded original before any rollback
-          let identityMatches = false;
-          if (recordedFingerprint) {
-            try {
-              const oldStat = fs.statSync(oldPath);
-              if (oldStat.size === recordedFingerprint.sizeBytes && Math.floor(oldStat.mtimeMs) === recordedFingerprint.mtimeMs) {
-                identityMatches = true;
-              }
-            } catch (_) {
-              identityMatches = false;
-            }
-          }
-
-          if (!identityMatches) {
+          const oldMatchesOriginal = checkFp(oldPath, recordedFingerprint);
+          if (!oldMatchesOriginal) {
             action = 'artifact_fingerprint_mismatch_recovery_blocked';
             recovered = false;
           } else {
-            // Identity verified: safe to rollback
             try {
               if (fs.existsSync(canonical)) {
                 fs.unlinkSync(canonical);
               }
               fs.renameSync(oldPath, canonical);
-              action = 'rolled_back_to_proven_original';
+              if (fs.existsSync(partialPath)) {
+                try { fs.unlinkSync(partialPath); } catch (_) {}
+              }
+              if (checkFp(canonical, recordedFingerprint)) {
+                action = 'rolled_back_to_proven_original';
+              } else {
+                action = 'rollback_canonical_fingerprint_mismatch_recovery_blocked';
+                recovered = false;
+              }
             } catch (e) {
               action = `failed_rollback: ${e.message}`;
               recovered = false;
             }
-            if (fs.existsSync(partialPath)) {
-              try { fs.unlinkSync(partialPath); } catch (_) {}
-            }
           }
         } else if (!fs.existsSync(oldPath) && fs.existsSync(canonical)) {
-          if (state === NormalizationState.SWAP_STEP1_RENAME_ORIGINAL) {
-            // Step 1: Original was not renamed yet, but ONLY safe if canonical still matches original initialFingerprint!
-            let canonicalMatchesOriginal = false;
-            if (recordedFingerprint) {
-              try {
-                const canStat = fs.statSync(canonical);
-                if (canStat.size === recordedFingerprint.sizeBytes && Math.floor(canStat.mtimeMs) === recordedFingerprint.mtimeMs) {
-                  canonicalMatchesOriginal = true;
-                }
-              } catch (_) {
-                canonicalMatchesOriginal = false;
-              }
-            }
-
-            if (canonicalMatchesOriginal) {
+          if (state === NormalizationState.SWAP_STEP1_RENAME_ORIGINAL || (state === NormalizationState.RECOVERY_REQUIRED && checkFp(canonical, recordedFingerprint))) {
+            if (checkFp(canonical, recordedFingerprint)) {
               action = 'canonical_intact_old_missing';
               if (fs.existsSync(partialPath)) {
                 try { fs.unlinkSync(partialPath); } catch (_) {}
@@ -265,7 +268,6 @@ export class NormalizationJournal {
               recovered = false;
             }
           } else {
-            // SWAP_STEP2_RENAME_PARTIAL or FINAL_VERIFYING with missing .old backup: FAIL CLOSED!
             action = 'swap_incomplete_old_backup_missing_recovery_blocked';
             recovered = false;
           }
@@ -274,7 +276,7 @@ export class NormalizationJournal {
           recovered = false;
         }
       }
-      // Crash Case A: Interrupted during Remuxing, Structure Verifying, or Pending
+      // Case 4: Pre-swap states (REMUXING, STRUCTURE_VERIFYING, PENDING, VERIFIED)
       else if (
         state === NormalizationState.REMUXING ||
         state === NormalizationState.STRUCTURE_VERIFYING ||
@@ -292,17 +294,30 @@ export class NormalizationJournal {
         } else {
           action = 'no_artifacts_original_intact';
         }
+
+        if (recovered && !checkFp(canonical, recordedFingerprint)) {
+          action = 'canonical_corrupted_recovery_blocked';
+          recovered = false;
+        }
       }
 
-      this.recordState(canonical, NormalizationState.FAILED_SAFE, {
-        recoveryAction: action,
-        recoveredAt: new Date().toISOString(),
-        recoverySuccess: recovered
-      });
-
-      if (!recovered) {
+      if (recovered) {
+        this.recordState(canonical, targetTerminalState, {
+          recoveryAction: action,
+          recoveredAt: new Date().toISOString(),
+          recoveredFrom: state,
+          recoverySuccess: true
+        });
+      } else {
+        this.recordState(canonical, NormalizationState.RECOVERY_REQUIRED, {
+          recoveryAction: action,
+          recoveredAt: new Date().toISOString(),
+          recoveredFrom: state,
+          recoverySuccess: false
+        });
         unrecovered.push(canonical);
       }
+
       actions.push({ originalPath: canonical, action, recovered, stateBeforeRecovery: state });
     }
 

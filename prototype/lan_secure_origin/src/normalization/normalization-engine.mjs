@@ -7,6 +7,7 @@ import { probeMediaFacts } from './ffprobe-facts.mjs';
 import { getMediaFingerprint, isFingerprintValid } from './fingerprint.mjs';
 import { verifyNormalizedOutput } from './verifier.mjs';
 import { findRepairCandidate } from './repair-rules.mjs';
+import { executeRollback, RollbackStatus } from './rollback-helper.mjs';
 
 export const EngineStatus = {
   UNINITIALIZED: 'UNINITIALIZED',
@@ -24,6 +25,7 @@ export class NormalizationEngine {
     this.journal = options.journal || new NormalizationJournal(options.journalPath || path.join(process.cwd(), 'prototype/lan_secure_origin/normalization_journal.json'));
     this.executionEnabled = options.executionEnabled ?? false; // Hard safety gate: disabled by default
     this.allowedRoots = options.allowedRoots || null; // Optional isolation guard
+    this.fileOps = options.fileOps || {}; // Fault injection hook
     this.status = EngineStatus.UNINITIALIZED;
     this.activeProcesses = new Set();
     this.activeJob = null;
@@ -53,20 +55,13 @@ export class NormalizationEngine {
     return this.activeProcesses.size === 0;
   }
 
-  /**
-   * Initializes engine on startup: validates journal and executes deterministic recovery.
-   * 
-   * @returns {Promise<{ ok: boolean, status: string, details: object }>}
-   */
   async initialize() {
-    // 1. Validate journal file integrity
     const validation = this.journal.validateJournal();
     if (!validation.ok) {
       this.status = EngineStatus.JOURNAL_CORRUPT;
       return { ok: false, status: EngineStatus.JOURNAL_CORRUPT, details: { error: validation.error } };
     }
 
-    // 2. Perform deterministic startup recovery scan
     const recovery = this.journal.recoverOnStartup();
     if (!recovery.ok) {
       this.status = EngineStatus.RECOVERY_BLOCKED;
@@ -79,72 +74,100 @@ export class NormalizationEngine {
 
   notifyPlaybackState(isActive) {
     this.isPlaybackActive = !!isActive;
-    if (this.isPlaybackActive && this.activeJob && !this.activeJob.isCancelled) {
-      console.log(`[NormalizationEngine] Playback active! Cancelling active job: ${this.activeJob.originalPath}`);
-      this.cancelActiveJobForPlayback();
+    if (this.isPlaybackActive) {
+      if (this.activeJob && !this.activeJob.isCancelled) {
+        console.log(`[NormalizationEngine] Playback active! Cancelling active job: ${this.activeJob.originalPath}`);
+        this.cancelActiveJobForPlayback();
+      } else if (this.isProcessing && this.activeProcesses.size > 0) {
+        console.log(`[NormalizationEngine] Playback active! Cancelling active normalization processes.`);
+        this.cancelActiveJobForPlayback();
+      }
     }
   }
 
   /**
-   * Monotonic job-level cancellation.
-   * Waits asynchronously until all active child processes exit before releasing locks.
-   * 
-   * @param {number} timeoutMs
-   * @returns {Promise<void>}
+   * Monotonic single-owner cancellation sequence.
+   * Guarantees that rollback, cleanup, and journal state finalization execute exactly once per job.
    */
-  async cancelActiveJobForPlayback(timeoutMs = 10000) {
-    if (!this.activeJob) return;
-
-    const job = this.activeJob;
-    job.isCancelled = true;
-    job.cancelReason = 'PLAYBACK_ACTIVE';
-    this.status = EngineStatus.CANCEL_REQUESTED;
-
-    // Terminate all active processes (remux, verification, probes)
-    for (const proc of this.activeProcesses) {
-      try {
-        proc.kill('SIGTERM');
-      } catch (_) {}
+  async _cancelJobInternal(job, reason, timeoutMs = 10000) {
+    if (!job) return { ok: false, state: NormalizationState.PAUSED_FOR_PLAYBACK };
+    if (job.cancellationPromise) {
+      return job.cancellationPromise;
     }
 
-    // Await complete join of all subprocesses
-    const joined = await this._waitForActiveProcesses(timeoutMs);
-    if (!joined) {
-      console.error('[NormalizationEngine] FATAL: Child processes failed to exit within timeout during cancellation.');
-      this.status = EngineStatus.SUBPROCESS_JOIN_TIMEOUT;
-      // Do NOT rollback or cleanup files while children might still be writing!
-      // Do NOT release isProcessing lock or activeJob!
-      return;
-    }
+    job.cancellationPromise = (async () => {
+      job.isCancelled = true;
+      job.cancelReason = reason || 'PLAYBACK_ACTIVE';
+      this.status = EngineStatus.CANCEL_REQUESTED;
 
-    // Rollback or clean partial safely only after all children have exited
-    if (job.isSwapped && fs.existsSync(job.oldPath)) {
-      try {
-        if (fs.existsSync(job.originalPath)) fs.unlinkSync(job.originalPath);
-        fs.renameSync(job.oldPath, job.originalPath);
-      } catch (_) {}
-    } else if (fs.existsSync(job.partialPath)) {
-      try { fs.unlinkSync(job.partialPath); } catch (_) {}
-    }
+      // 1. Terminate all active child processes
+      for (const proc of this.activeProcesses) {
+        try { proc.kill('SIGTERM'); } catch (_) {}
+      }
 
-    try {
-      this.journal.recordState(job.originalPath, NormalizationState.PAUSED_FOR_PLAYBACK, {
-        reason: 'Active playback initiated',
-        pausedAt: new Date().toISOString()
+      // 2. Await join of all subprocesses
+      const joined = await this._waitForActiveProcesses(timeoutMs);
+      if (!joined) {
+        console.error('[NormalizationEngine] FATAL: Child processes failed to exit within timeout during cancellation.');
+        this.status = EngineStatus.SUBPROCESS_JOIN_TIMEOUT;
+        return { ok: false, state: NormalizationState.FAILED_SAFE, error: 'SUBPROCESS_JOIN_TIMEOUT' };
+      }
+
+      // 3. Single-owner rollback execution
+      const rollback = executeRollback({
+        canonical: job.originalPath,
+        oldPath: job.oldPath,
+        partialPath: job.partialPath,
+        isSwapped: job.isSwapped,
+        initialFingerprint: job.initialFingerprint,
+        fileOps: this.fileOps
       });
-    } catch (_) {}
 
-    this.activeJob = null;
-    this.isProcessing = false;
-    this.status = EngineStatus.PAUSED_FOR_PLAYBACK;
+      if (!rollback.ok) {
+        console.error(`[NormalizationEngine] FATAL: Rollback failed during cancellation: ${rollback.error}`);
+        this.status = EngineStatus.RECOVERY_BLOCKED;
+        this.journal.recordState(job.originalPath, NormalizationState.RECOVERY_REQUIRED, {
+          error: 'ROLLBACK_FAILED_RECOVERY_REQUIRED',
+          rollbackError: rollback.error,
+          pausedAt: new Date().toISOString()
+        });
+        return { ok: false, state: NormalizationState.RECOVERY_REQUIRED, error: rollback.error };
+      }
+
+      // 4. Record PAUSED_FOR_PLAYBACK only after proven clean rollback
+      this.journal.recordState(job.originalPath, NormalizationState.PAUSED_FOR_PLAYBACK, {
+        reason: job.cancelReason,
+        pausedAt: new Date().toISOString(),
+        initialFingerprint: job.initialFingerprint
+      });
+
+      this.activeJob = null;
+      this.isProcessing = false;
+      this.status = EngineStatus.PAUSED_FOR_PLAYBACK;
+      return { ok: false, state: NormalizationState.PAUSED_FOR_PLAYBACK, error: 'Cancelled for playback' };
+    })();
+
+    return job.cancellationPromise;
   }
 
-  /**
-   * Executes in-place normalization for a single candidate file.
-   * 
-   * @param {string} originalPath 
-   * @returns {Promise<{ ok: boolean, state: string, error?: string }>}
-   */
+  async cancelActiveJobForPlayback(timeoutMs = 10000) {
+    if (this.activeJob) {
+      return this._cancelJobInternal(this.activeJob, 'PLAYBACK_ACTIVE', timeoutMs);
+    }
+    if (this.isProcessing && this.activeProcesses.size > 0) {
+      for (const proc of this.activeProcesses) {
+        try { proc.kill('SIGTERM'); } catch (_) {}
+      }
+      await this._waitForActiveProcesses(timeoutMs);
+      this.isProcessing = false;
+      this.status = EngineStatus.PAUSED_FOR_PLAYBACK;
+    }
+  }
+
+  async _handleJobCancellation(job, timeoutMs = 10000) {
+    return this._cancelJobInternal(job, job.cancelReason || 'PLAYBACK_ACTIVE', timeoutMs);
+  }
+
   async processCandidate(originalPath) {
     if (
       this.status === EngineStatus.UNINITIALIZED ||
@@ -188,7 +211,6 @@ export class NormalizationEngine {
 
     const canonical = path.normalize(path.resolve(originalPath));
 
-    // Path guard check
     if (this.allowedRoots && Array.isArray(this.allowedRoots)) {
       const isAllowed = this.allowedRoots.some(root => {
         const rel = path.relative(path.resolve(root), canonical);
@@ -213,7 +235,6 @@ export class NormalizationEngine {
     const partialPath = path.join(dir, `.${base}${ext}.vreconder.partial`);
     const oldPath = path.join(dir, `.${base}${ext}.vreconder-old`);
 
-    // P0 Safety: Pre-existing recovery artifacts must NEVER be blindly unlinked
     if (fs.existsSync(oldPath) || fs.existsSync(partialPath)) {
       let entry = null;
       try {
@@ -224,66 +245,36 @@ export class NormalizationEngine {
         return { ok: false, state: NormalizationState.FAILED_SAFE, error: 'JOURNAL_CORRUPT' };
       }
 
-      // If journal has no proven active record for this target, FAIL CLOSED
-      if (!entry || (entry.currentState === NormalizationState.DONE || entry.currentState === NormalizationState.FAILED_SAFE)) {
-        this.journal.recordState(canonical, NormalizationState.FAILED_SAFE, {
+      if (!entry || (entry.currentState === NormalizationState.DONE || entry.currentState === NormalizationState.FAILED_SAFE || entry.currentState === NormalizationState.CANCELLED)) {
+        this.journal.recordState(canonical, NormalizationState.RECOVERY_REQUIRED, {
           error: 'BLOCKED_RECOVERY_REQUIRED',
           reason: 'Pre-existing .vreconder-old or .partial artifact found without valid pending journal state'
         });
-        this.isProcessing = false;
-        this.status = EngineStatus.SAFE_IDLE;
-        return { ok: false, state: NormalizationState.FAILED_SAFE, error: 'BLOCKED_RECOVERY_REQUIRED' };
+        this.status = EngineStatus.RECOVERY_BLOCKED;
+        return { ok: false, state: NormalizationState.RECOVERY_REQUIRED, error: 'BLOCKED_RECOVERY_REQUIRED' };
       }
     }
 
-    // P0 Safety: Free space UNKNOWN must fail closed
     const stat = fs.statSync(canonical);
     const requiredFree = Math.ceil(stat.size * 1.2);
     const available = getDiskFreeSpace(canonical);
 
     if (available < 0) {
-      this.journal.recordState(canonical, NormalizationState.FAILED_SAFE, {
-        error: 'BLOCKED_SPACE_UNKNOWN',
-        available
-      });
+      this.journal.recordState(canonical, NormalizationState.FAILED_SAFE, { error: 'BLOCKED_SPACE_UNKNOWN', available });
       this.isProcessing = false;
       this.status = EngineStatus.SAFE_IDLE;
       return { ok: false, state: NormalizationState.FAILED_SAFE, error: 'BLOCKED_SPACE_UNKNOWN' };
     }
 
     if (available < requiredFree) {
-      this.journal.recordState(canonical, NormalizationState.FAILED_SAFE, {
-        error: 'BLOCKED_NO_SPACE',
-        requiredFree,
-        available
-      });
+      this.journal.recordState(canonical, NormalizationState.FAILED_SAFE, { error: 'BLOCKED_NO_SPACE', requiredFree, available });
       this.isProcessing = false;
       this.status = EngineStatus.SAFE_IDLE;
       return { ok: false, state: NormalizationState.FAILED_SAFE, error: 'BLOCKED_NO_SPACE' };
     }
 
-    // Probing facts and matching certified rule with full job-scoped child process tracking
-    const facts = await probeMediaFacts(canonical, {
-      onChildProcess: (c) => this._registerProcess(c),
-      isCancelled: () => this.isPlaybackActive
-    });
-    if (this.isPlaybackActive) {
-      this.isProcessing = false;
-      this.status = EngineStatus.PAUSED_FOR_PLAYBACK;
-      return { ok: false, state: NormalizationState.PAUSED_FOR_PLAYBACK, error: 'Cancelled for playback during probe' };
-    }
-
-    const rule = findRepairCandidate(facts, ext);
-    if (!rule) {
-      this.isProcessing = false;
-      this.status = EngineStatus.SAFE_IDLE;
-      return { ok: false, state: NormalizationState.FAILED_SAFE, error: 'No applicable repair candidate rule' };
-    }
-
-    // Capture initial fingerprint for invariant comparison
     const initialFingerprint = getMediaFingerprint(canonical);
 
-    // Initialize Job Descriptor with Monotonic Cancellation State
     const job = {
       originalPath: canonical,
       partialPath,
@@ -291,59 +282,54 @@ export class NormalizationEngine {
       initialFingerprint,
       isCancelled: false,
       cancelReason: null,
-      isSwapped: false
+      isSwapped: false,
+      cancellationPromise: null
     };
     this.activeJob = job;
 
-    // Phase 1: PENDING
-    this.journal.recordState(canonical, NormalizationState.PENDING, {
-      ruleId: rule.ruleId,
-      initialFingerprint
+    const facts = await probeMediaFacts(canonical, {
+      onChildProcess: (c) => this._registerProcess(c),
+      isCancelled: () => job.isCancelled || this.isPlaybackActive
     });
 
     if (job.isCancelled || this.isPlaybackActive) {
       return this._handleJobCancellation(job);
     }
 
-    // Phase 2: REMUXING
+    const rule = findRepairCandidate(facts, ext);
+    if (!rule) {
+      this.activeJob = null;
+      this.isProcessing = false;
+      this.status = EngineStatus.SAFE_IDLE;
+      return { ok: false, state: NormalizationState.FAILED_SAFE, error: 'No applicable repair candidate rule' };
+    }
+
+    this.journal.recordState(canonical, NormalizationState.PENDING, { ruleId: rule.ruleId, initialFingerprint });
+
+    if (job.isCancelled || this.isPlaybackActive) {
+      return this._handleJobCancellation(job);
+    }
+
     this.journal.recordState(canonical, NormalizationState.REMUXING, { partialPath });
 
     const remuxResult = await new Promise((resolve) => {
-      const args = [
-        '-v', 'error',
-        '-y',
-        '-i', canonical,
-        '-map', '0',
-        '-c', 'copy',
-        '-tag:v', rule.expectedOutputTag || 'hvc1',
-        '-f', 'mp4',
-        partialPath
-      ];
-
+      const args = ['-v', 'error', '-y', '-i', canonical, '-map', '0', '-c', 'copy', '-tag:v', rule.expectedOutputTag || 'hvc1', '-f', 'mp4', partialPath];
       const child = spawn('ffmpeg', args, { stdio: ['ignore', 'ignore', 'pipe'] });
       this._registerProcess(child);
       let stderr = '';
-
       child.stderr.on('data', (d) => { stderr += d.toString(); });
-      child.on('error', (err) => {
-        resolve({ ok: false, error: err.message });
-      });
+      child.on('error', (err) => resolve({ ok: false, error: err.message }));
       child.on('close', (code) => {
-        if (code === 0 && fs.existsSync(partialPath)) {
-          resolve({ ok: true });
-        } else {
-          resolve({ ok: false, error: stderr.trim() || `ffmpeg exited with code ${code}` });
-        }
+        if (code === 0 && fs.existsSync(partialPath)) resolve({ ok: true });
+        else resolve({ ok: false, error: stderr.trim() || `ffmpeg exited with code ${code}` });
       });
     });
 
     if (job.isCancelled || this.isPlaybackActive || !remuxResult.ok) {
-      if (fs.existsSync(partialPath)) {
-        try { fs.unlinkSync(partialPath); } catch (_) {}
-      }
       if (job.isCancelled || this.isPlaybackActive) {
         return this._handleJobCancellation(job);
       }
+      if (fs.existsSync(partialPath)) try { (this.fileOps.unlinkSync || fs.unlinkSync)(partialPath); } catch (_) {}
       const err = remuxResult.error || 'Remux execution failed';
       this.journal.recordState(canonical, NormalizationState.FAILED_SAFE, { error: err });
       this.activeJob = null;
@@ -352,7 +338,6 @@ export class NormalizationEngine {
       return { ok: false, state: NormalizationState.FAILED_SAFE, error: err };
     }
 
-    // Phase 3: STRUCTURE_VERIFYING
     this.journal.recordState(canonical, NormalizationState.STRUCTURE_VERIFYING);
     const structVerify = await verifyNormalizedOutput(canonical, partialPath, rule, {
       onChildProcess: (c) => this._registerProcess(c),
@@ -364,9 +349,7 @@ export class NormalizationEngine {
     }
 
     if (!structVerify.ok) {
-      if (fs.existsSync(partialPath)) {
-        try { fs.unlinkSync(partialPath); } catch (_) {}
-      }
+      if (fs.existsSync(partialPath)) try { (this.fileOps.unlinkSync || fs.unlinkSync)(partialPath); } catch (_) {}
       this.journal.recordState(canonical, NormalizationState.FAILED_SAFE, { error: structVerify.reason });
       this.activeJob = null;
       this.isProcessing = false;
@@ -374,17 +357,14 @@ export class NormalizationEngine {
       return { ok: false, state: NormalizationState.FAILED_SAFE, error: structVerify.reason };
     }
 
-    // Phase 4: VERIFIED
     this.journal.recordState(canonical, NormalizationState.VERIFIED);
 
-    // Monotonic cancellation check & playback check IMMEDIATELY before swap
     if (job.isCancelled || this.isPlaybackActive) {
       return this._handleJobCancellation(job);
     }
 
-    // Invariant check: Original fingerprint must be identical to when job started
     if (!isFingerprintValid(canonical, initialFingerprint)) {
-      if (fs.existsSync(partialPath)) try { fs.unlinkSync(partialPath); } catch (_) {}
+      if (fs.existsSync(partialPath)) try { (this.fileOps.unlinkSync || fs.unlinkSync)(partialPath); } catch (_) {}
       this.journal.recordState(canonical, NormalizationState.FAILED_SAFE, {
         error: 'ORIGINAL_FINGERPRINT_MISMATCH',
         reason: 'Original source file mutated during remuxing process'
@@ -395,18 +375,13 @@ export class NormalizationEngine {
       return { ok: false, state: NormalizationState.FAILED_SAFE, error: 'ORIGINAL_FINGERPRINT_MISMATCH' };
     }
 
-    // Phase 5: Transactional Step 1 — Rename canonical -> oldPath
-    this.journal.recordState(canonical, NormalizationState.SWAP_STEP1_RENAME_ORIGINAL, {
-      oldPath,
-      partialPath,
-      initialFingerprint
-    });
+    this.journal.recordState(canonical, NormalizationState.SWAP_STEP1_RENAME_ORIGINAL, { oldPath, partialPath, initialFingerprint });
 
     try {
-      fs.renameSync(canonical, oldPath);
+      (this.fileOps.renameSync || fs.renameSync)(canonical, oldPath);
       job.isSwapped = true;
     } catch (step1Err) {
-      if (fs.existsSync(partialPath)) try { fs.unlinkSync(partialPath); } catch (_) {}
+      if (fs.existsSync(partialPath)) try { (this.fileOps.unlinkSync || fs.unlinkSync)(partialPath); } catch (_) {}
       this.journal.recordState(canonical, NormalizationState.FAILED_SAFE, { error: `Swap step 1 failed: ${step1Err.message}` });
       this.activeJob = null;
       this.isProcessing = false;
@@ -414,28 +389,28 @@ export class NormalizationEngine {
       return { ok: false, state: NormalizationState.FAILED_SAFE, error: step1Err.message };
     }
 
-    // Phase 6: Transactional Step 2 — Rename partialPath -> canonical
-    this.journal.recordState(canonical, NormalizationState.SWAP_STEP2_RENAME_PARTIAL, {
-      oldPath,
-      canonical,
-      initialFingerprint
-    });
+    this.journal.recordState(canonical, NormalizationState.SWAP_STEP2_RENAME_PARTIAL, { oldPath, canonical, initialFingerprint });
 
     try {
-      fs.renameSync(partialPath, canonical);
+      (this.fileOps.renameSync || fs.renameSync)(partialPath, canonical);
     } catch (step2Err) {
-      // Emergency Rollback: restore oldPath back to canonical
-      if (fs.existsSync(oldPath) && !fs.existsSync(canonical)) {
-        try { fs.renameSync(oldPath, canonical); } catch (_) {}
+      const rollback = executeRollback({ canonical, oldPath, partialPath, isSwapped: true, initialFingerprint, fileOps: this.fileOps });
+      if (!rollback.ok) {
+        this.status = EngineStatus.RECOVERY_BLOCKED;
+        this.journal.recordState(canonical, NormalizationState.RECOVERY_REQUIRED, {
+          error: 'ROLLBACK_FAILED_RECOVERY_REQUIRED',
+          originalError: step2Err.message,
+          rollbackError: rollback.error
+        });
+        return { ok: false, state: NormalizationState.RECOVERY_REQUIRED, error: `Swap step 2 rollback failed: ${rollback.error}` };
       }
-      this.journal.recordState(canonical, NormalizationState.FAILED_SAFE, { error: `Swap step 2 failed: ${step2Err.message}` });
+      this.journal.recordState(canonical, NormalizationState.FAILED_SAFE, { error: `Swap step 2 failed: ${step2Err.message}`, rolledBack: true });
       this.activeJob = null;
       this.isProcessing = false;
       this.status = EngineStatus.SAFE_IDLE;
       return { ok: false, state: NormalizationState.FAILED_SAFE, error: step2Err.message };
     }
 
-    // Phase 7: FINAL_VERIFYING on the newly installed canonical file
     this.journal.recordState(canonical, NormalizationState.FINAL_VERIFYING, { initialFingerprint });
     const finalVerify = await verifyNormalizedOutput(oldPath, canonical, rule, {
       onChildProcess: (c) => this._registerProcess(c),
@@ -447,19 +422,23 @@ export class NormalizationEngine {
     }
 
     if (!finalVerify.ok) {
-      // Deterministic Emergency Rollback: remove corrupt target and restore verified original
-      try {
-        if (fs.existsSync(canonical)) fs.unlinkSync(canonical);
-        if (fs.existsSync(oldPath)) fs.renameSync(oldPath, canonical);
-      } catch (_) {}
-      this.journal.recordState(canonical, NormalizationState.FAILED_SAFE, { error: `Final verify failed: ${finalVerify.reason}` });
+      const rollback = executeRollback({ canonical, oldPath, partialPath, isSwapped: true, initialFingerprint, fileOps: this.fileOps });
+      if (!rollback.ok) {
+        this.status = EngineStatus.RECOVERY_BLOCKED;
+        this.journal.recordState(canonical, NormalizationState.RECOVERY_REQUIRED, {
+          error: 'ROLLBACK_FAILED_RECOVERY_REQUIRED',
+          originalError: finalVerify.reason,
+          rollbackError: rollback.error
+        });
+        return { ok: false, state: NormalizationState.RECOVERY_REQUIRED, error: `Final verify rollback failed: ${rollback.error}` };
+      }
+      this.journal.recordState(canonical, NormalizationState.FAILED_SAFE, { error: `Final verify failed: ${finalVerify.reason}`, rolledBack: true });
       this.activeJob = null;
       this.isProcessing = false;
       this.status = EngineStatus.SAFE_IDLE;
       return { ok: false, state: NormalizationState.FAILED_SAFE, error: finalVerify.reason };
     }
 
-    // Phase 8: FINAL_VERIFIED — Record validated canonical replacement identity BEFORE unlinking oldPath
     const replacementFingerprint = getMediaFingerprint(canonical);
     this.journal.recordState(canonical, NormalizationState.FINAL_VERIFIED, {
       finalVerifiedAt: new Date().toISOString(),
@@ -467,78 +446,50 @@ export class NormalizationEngine {
       replacementFingerprint
     });
 
-    // Check cancellation once more
     if (job.isCancelled || this.isPlaybackActive) {
-      // Even if cancelled here, canonical is final-verified; we pause safely
       this.activeJob = null;
       this.isProcessing = false;
       this.status = EngineStatus.PAUSED_FOR_PLAYBACK;
       return { ok: false, state: NormalizationState.PAUSED_FOR_PLAYBACK, error: 'Cancelled for playback after final verification' };
     }
 
-    // Phase 9: DONE — Unlink old backup only if canonical matches verified replacement identity
     const currentReplacementFp = getMediaFingerprint(canonical);
-    if (
-      !currentReplacementFp ||
-      !replacementFingerprint ||
-      currentReplacementFp.sizeBytes !== replacementFingerprint.sizeBytes ||
-      currentReplacementFp.mtimeMs !== replacementFingerprint.mtimeMs
-    ) {
+    if (!currentReplacementFp || !replacementFingerprint || currentReplacementFp.sizeBytes !== replacementFingerprint.sizeBytes || currentReplacementFp.mtimeMs !== replacementFingerprint.mtimeMs) {
       console.error('[NormalizationEngine] Replacement fingerprint mismatch before unlinking old backup. Preserving backup.');
-      this.journal.recordState(canonical, NormalizationState.FAILED_SAFE, {
-        error: 'REPLACEMENT_TAMPERED_BEFORE_BACKUP_CLEANUP'
+      this.journal.recordState(canonical, NormalizationState.RECOVERY_REQUIRED, { error: 'REPLACEMENT_TAMPERED_BEFORE_BACKUP_CLEANUP' });
+      this.status = EngineStatus.RECOVERY_BLOCKED;
+      return { ok: false, state: NormalizationState.RECOVERY_REQUIRED, error: 'REPLACEMENT_TAMPERED_BEFORE_BACKUP_CLEANUP' };
+    }
+
+    let cleanupSuccess = true;
+    let cleanupError = null;
+    if (fs.existsSync(oldPath)) {
+      try {
+        (this.fileOps.unlinkSync || fs.unlinkSync)(oldPath);
+      } catch (unlinkErr) {
+        cleanupSuccess = false;
+        cleanupError = unlinkErr.message;
+        console.warn(`[NormalizationEngine] Warning: Could not unlink old file: ${unlinkErr.message}`);
+      }
+    }
+
+    if (!cleanupSuccess) {
+      this.journal.recordState(canonical, NormalizationState.CLEANUP_PENDING, {
+        finalVerifiedAt: new Date().toISOString(),
+        initialFingerprint,
+        replacementFingerprint,
+        cleanupError
       });
       this.activeJob = null;
       this.isProcessing = false;
       this.status = EngineStatus.SAFE_IDLE;
-      return { ok: false, state: NormalizationState.FAILED_SAFE, error: 'REPLACEMENT_TAMPERED_BEFORE_BACKUP_CLEANUP' };
+      return { ok: false, state: NormalizationState.CLEANUP_PENDING, error: `Old backup cleanup failed: ${cleanupError}` };
     }
 
-    try {
-      if (fs.existsSync(oldPath)) {
-        fs.unlinkSync(oldPath);
-      }
-    } catch (unlinkErr) {
-      console.warn(`[NormalizationEngine] Warning: Could not unlink old file: ${unlinkErr.message}`);
-    }
-
-    this.journal.recordState(canonical, NormalizationState.DONE, {
-      completedAt: new Date().toISOString()
-    });
-
+    this.journal.recordState(canonical, NormalizationState.DONE, { completedAt: new Date().toISOString() });
     this.activeJob = null;
     this.isProcessing = false;
     this.status = EngineStatus.SAFE_IDLE;
     return { ok: true, state: NormalizationState.DONE };
   }
-
-  async _handleJobCancellation(job, timeoutMs = 10000) {
-    for (const proc of this.activeProcesses) {
-      try { proc.kill('SIGTERM'); } catch (_) {}
-    }
-    const joined = await this._waitForActiveProcesses(timeoutMs);
-    if (!joined) {
-      console.error('[NormalizationEngine] FATAL: Subprocess join timeout during job cancellation.');
-      this.status = EngineStatus.SUBPROCESS_JOIN_TIMEOUT;
-      return { ok: false, state: NormalizationState.FAILED_SAFE, error: 'SUBPROCESS_JOIN_TIMEOUT' };
-    }
-
-    if (job.isSwapped && fs.existsSync(job.oldPath)) {
-      try {
-        if (fs.existsSync(job.originalPath)) fs.unlinkSync(job.originalPath);
-        fs.renameSync(job.oldPath, job.originalPath);
-      } catch (_) {}
-    } else if (fs.existsSync(job.partialPath)) {
-      try { fs.unlinkSync(job.partialPath); } catch (_) {}
-    }
-    this.journal.recordState(job.originalPath, NormalizationState.PAUSED_FOR_PLAYBACK, {
-      reason: job.cancelReason || 'Active playback priority',
-      pausedAt: new Date().toISOString()
-    });
-    this.activeJob = null;
-    this.isProcessing = false;
-    this.status = EngineStatus.PAUSED_FOR_PLAYBACK;
-    return { ok: false, state: NormalizationState.PAUSED_FOR_PLAYBACK, error: 'Cancelled for playback' };
-  }
 }
-
