@@ -54,7 +54,9 @@ export function executeRollback({
   const _statSync = fileOps.statSync || fs.statSync;
 
   const checkFingerprint = (targetPath, expectedFp) => {
-    if (!expectedFp) return true;
+    if (!expectedFp || typeof expectedFp !== 'object' || typeof expectedFp.sizeBytes !== 'number' || typeof expectedFp.mtimeMs !== 'number') {
+      return false;
+    }
     try {
       if (!_existsSync(targetPath)) return false;
       const st = _statSync(targetPath);
@@ -80,11 +82,13 @@ export function executeRollback({
       }
 
       // Verify .old backup matches recorded initial fingerprint before mutating anything
-      if (initialFingerprint && !checkFingerprint(oldPath, initialFingerprint)) {
+      if (!initialFingerprint || !checkFingerprint(oldPath, initialFingerprint)) {
         return {
           ok: false,
           status: RollbackStatus.ROLLBACK_BLOCKED,
-          error: 'SWAP_ROLLBACK_FAILED_OLD_FINGERPRINT_MISMATCH'
+          error: !initialFingerprint
+            ? 'SWAP_ROLLBACK_INITIAL_FINGERPRINT_MISSING'
+            : 'SWAP_ROLLBACK_FAILED_OLD_FINGERPRINT_MISMATCH'
         };
       }
 
@@ -113,7 +117,7 @@ export function executeRollback({
       }
 
       // Invariant: Verify canonical is now restored and matches initial fingerprint
-      if (initialFingerprint && !checkFingerprint(canonical, initialFingerprint)) {
+      if (!checkFingerprint(canonical, initialFingerprint)) {
         return {
           ok: false,
           status: RollbackStatus.ROLLBACK_BLOCKED,
@@ -141,6 +145,16 @@ export function executeRollback({
     }
 
     // Case 2: Unswapped state (canonical was never renamed to oldPath)
+    if (!initialFingerprint || !checkFingerprint(canonical, initialFingerprint)) {
+      return {
+        ok: false,
+        status: RollbackStatus.ROLLBACK_BLOCKED,
+        error: !initialFingerprint
+          ? 'UNSWAPPED_ROLLBACK_INITIAL_FINGERPRINT_MISSING'
+          : (!canonicalExists ? 'UNSWAPPED_ROLLBACK_CANONICAL_MISSING' : 'UNSWAPPED_ROLLBACK_CANONICAL_FINGERPRINT_MISMATCH')
+      };
+    }
+
     if (partialExists) {
       try {
         _unlinkSync(partialPath);
@@ -151,23 +165,6 @@ export function executeRollback({
           error: `UNSWAPPED_ROLLBACK_UNLINK_PARTIAL_FAILED: ${unlinkPartialErr.message}`
         };
       }
-    }
-
-    // Verify canonical is still present and matches initial fingerprint if provided
-    if (canonicalExists) {
-      if (initialFingerprint && !checkFingerprint(canonical, initialFingerprint)) {
-        return {
-          ok: false,
-          status: RollbackStatus.ROLLBACK_BLOCKED,
-          error: 'UNSWAPPED_ROLLBACK_CANONICAL_FINGERPRINT_MISMATCH'
-        };
-      }
-    } else {
-      return {
-        ok: false,
-        status: RollbackStatus.ROLLBACK_BLOCKED,
-        error: 'UNSWAPPED_ROLLBACK_CANONICAL_MISSING'
-      };
     }
 
     return {

@@ -170,7 +170,9 @@ export class NormalizationJournal {
       let targetTerminalState = NormalizationState.FAILED_SAFE;
 
       const checkFp = (target, fp) => {
-        if (!fp) return true;
+        if (!fp || typeof fp !== 'object' || typeof fp.sizeBytes !== 'number' || typeof fp.mtimeMs !== 'number') {
+          return false;
+        }
         try {
           if (!_existsSync(target)) return false;
           const st = _statSync(target);
@@ -209,6 +211,9 @@ export class NormalizationJournal {
         if (_existsSync(oldPath)) {
           action = 'paused_unexpected_old_backup_recovery_blocked';
           recovered = false;
+        } else if (!checkFp(canonical, recordedFingerprint)) {
+          action = 'paused_canonical_mismatch_recovery_blocked';
+          recovered = false;
         } else {
           if (_existsSync(partialPath)) {
             try {
@@ -220,13 +225,8 @@ export class NormalizationJournal {
             }
           }
           if (recovered) {
-            if (_existsSync(canonical) && checkFp(canonical, recordedFingerprint)) {
-              action = action === 'paused_cleaned_partial' ? 'paused_clean_partial_verified' : 'paused_clean_state_verified';
-              targetTerminalState = NormalizationState.CANCELLED;
-            } else {
-              action = 'paused_canonical_mismatch_recovery_blocked';
-              recovered = false;
-            }
+            action = action === 'paused_cleaned_partial' ? 'paused_clean_partial_verified' : 'paused_clean_state_verified';
+            targetTerminalState = NormalizationState.CANCELLED;
           }
         }
       }
@@ -271,7 +271,7 @@ export class NormalizationJournal {
             }
           }
         } else if (!_existsSync(oldPath) && _existsSync(canonical)) {
-          if (state === NormalizationState.SWAP_STEP1_RENAME_ORIGINAL || (state === NormalizationState.RECOVERY_REQUIRED && checkFp(canonical, recordedFingerprint))) {
+          if (state === NormalizationState.SWAP_STEP1_RENAME_ORIGINAL || state === NormalizationState.RECOVERY_REQUIRED) {
             if (checkFp(canonical, recordedFingerprint)) {
               if (_existsSync(partialPath)) {
                 try {
@@ -307,24 +307,24 @@ export class NormalizationJournal {
         state === NormalizationState.PENDING ||
         state === NormalizationState.VERIFIED
       ) {
-        if (_existsSync(partialPath)) {
-          try {
-            _unlinkSync(partialPath);
-            action = 'cleaned_orphan_partial';
-          } catch (e) {
-            action = `failed_clean_partial: ${e.message}`;
-            recovered = false;
-          }
-        } else {
-          action = 'no_artifacts_original_intact';
-        }
-
-        if (recovered && (!checkFp(canonical, recordedFingerprint) || !_existsSync(canonical))) {
+        if (!checkFp(canonical, recordedFingerprint)) {
           action = 'canonical_corrupted_recovery_blocked';
           recovered = false;
-        }
-        if (recovered) {
-          targetTerminalState = NormalizationState.FAILED_SAFE;
+        } else {
+          if (_existsSync(partialPath)) {
+            try {
+              _unlinkSync(partialPath);
+              action = 'cleaned_orphan_partial';
+            } catch (e) {
+              action = `failed_clean_partial: ${e.message}`;
+              recovered = false;
+            }
+          } else {
+            action = 'no_artifacts_original_intact';
+          }
+          if (recovered) {
+            targetTerminalState = NormalizationState.FAILED_SAFE;
+          }
         }
       }
 

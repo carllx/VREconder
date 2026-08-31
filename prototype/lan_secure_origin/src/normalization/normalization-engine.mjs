@@ -27,6 +27,8 @@ export class NormalizationEngine {
     this.executionEnabled = options.executionEnabled ?? false; // Hard safety gate: disabled by default
     this.allowedRoots = options.allowedRoots || null; // Optional isolation guard
     this.fileOps = options.fileOps || {}; // Fault injection hook
+    this.getMediaFingerprint = options.getMediaFingerprint || options.fileOps?.getMediaFingerprint || getMediaFingerprint;
+    this.spawn = options.spawn || options.fileOps?.spawn || spawn;
     this.status = EngineStatus.UNINITIALIZED;
     this.activeProcesses = new Set();
     this.activeJob = null;
@@ -275,7 +277,12 @@ export class NormalizationEngine {
       return { ok: false, state: NormalizationState.FAILED_SAFE, error: 'BLOCKED_NO_SPACE' };
     }
 
-    const initialFingerprint = getMediaFingerprint(canonical);
+    const initialFingerprint = this.getMediaFingerprint(canonical);
+    if (!initialFingerprint || typeof initialFingerprint.sizeBytes !== 'number' || typeof initialFingerprint.mtimeMs !== 'number') {
+      this.isProcessing = false;
+      this.status = EngineStatus.SAFE_IDLE;
+      return { ok: false, state: NormalizationState.FAILED_SAFE, error: 'INITIAL_FINGERPRINT_UNAVAILABLE' };
+    }
 
     const job = {
       originalPath: canonical,
@@ -316,7 +323,7 @@ export class NormalizationEngine {
 
     const remuxResult = await new Promise((resolve) => {
       const args = ['-v', 'error', '-y', '-i', canonical, '-map', '0', '-c', 'copy', '-tag:v', rule.expectedOutputTag || 'hvc1', '-f', 'mp4', partialPath];
-      const child = spawn('ffmpeg', args, { stdio: ['ignore', 'ignore', 'pipe'] });
+      const child = (this.spawn || spawn)('ffmpeg', args, { stdio: ['ignore', 'ignore', 'pipe'] });
       this._registerProcess(child);
       let stderr = '';
       child.stderr.on('data', (d) => { stderr += d.toString(); });
@@ -503,7 +510,18 @@ export class NormalizationEngine {
       return { ok: false, state: NormalizationState.FAILED_SAFE, error: finalVerify.reason };
     }
 
-    const replacementFingerprint = getMediaFingerprint(canonical);
+    const replacementFingerprint = this.getMediaFingerprint(canonical);
+    if (!replacementFingerprint || typeof replacementFingerprint.sizeBytes !== 'number' || typeof replacementFingerprint.mtimeMs !== 'number') {
+      this.journal.recordState(canonical, NormalizationState.RECOVERY_REQUIRED, {
+        error: 'REPLACEMENT_FINGERPRINT_UNAVAILABLE',
+        initialFingerprint
+      });
+      this.status = EngineStatus.RECOVERY_BLOCKED;
+      this.activeJob = null;
+      this.isProcessing = false;
+      return { ok: false, state: NormalizationState.RECOVERY_REQUIRED, error: 'REPLACEMENT_FINGERPRINT_UNAVAILABLE' };
+    }
+
     this.journal.recordState(canonical, NormalizationState.FINAL_VERIFIED, {
       finalVerifiedAt: new Date().toISOString(),
       initialFingerprint,
@@ -518,11 +536,17 @@ export class NormalizationEngine {
       return this._handleJobCancellation(job);
     }
 
-    const currentReplacementFp = getMediaFingerprint(canonical);
-    if (!currentReplacementFp || !replacementFingerprint || currentReplacementFp.sizeBytes !== replacementFingerprint.sizeBytes || currentReplacementFp.mtimeMs !== replacementFingerprint.mtimeMs) {
+    const currentReplacementFp = this.getMediaFingerprint(canonical);
+    if (!currentReplacementFp || currentReplacementFp.sizeBytes !== replacementFingerprint.sizeBytes || currentReplacementFp.mtimeMs !== replacementFingerprint.mtimeMs) {
       console.error('[NormalizationEngine] Replacement fingerprint mismatch before unlinking old backup. Preserving backup.');
-      this.journal.recordState(canonical, NormalizationState.RECOVERY_REQUIRED, { error: 'REPLACEMENT_TAMPERED_BEFORE_BACKUP_CLEANUP' });
+      this.journal.recordState(canonical, NormalizationState.RECOVERY_REQUIRED, {
+        error: 'REPLACEMENT_TAMPERED_BEFORE_BACKUP_CLEANUP',
+        initialFingerprint,
+        replacementFingerprint
+      });
       this.status = EngineStatus.RECOVERY_BLOCKED;
+      this.activeJob = null;
+      this.isProcessing = false;
       return { ok: false, state: NormalizationState.RECOVERY_REQUIRED, error: 'REPLACEMENT_TAMPERED_BEFORE_BACKUP_CLEANUP' };
     }
 

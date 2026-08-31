@@ -1,5 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { EventEmitter } from 'node:events';
+import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { getMediaFingerprint, isFingerprintValid } from './src/normalization/fingerprint.mjs';
 import { NormalizationJournal, NormalizationState } from './src/normalization/journal.mjs';
@@ -220,9 +222,25 @@ async function runRound5Tests() {
 
   // Test 5: P1 — Pre-swap Runtime Cleanup Failure Transitions to RECOVERY_BLOCKED
   console.log('\nTest 5: P1 — Pre-swap Runtime Cleanup Failure Transitions to RECOVERY_BLOCKED');
-  // Sub-case 5.1: Remux failure + partial unlink failure
+  // Sub-case 5.0: Pre-existing artifact gate test
+  const t50Sample = path.join(TEST_SCRATCH_DIR, 't50_artifact_gate.mp4');
+  createSyntheticHevcFixture(t50Sample, 0.2);
+  const t50Partial = path.join(TEST_SCRATCH_DIR, '.t50_artifact_gate.mp4.vreconder.partial');
+  const t50Journal = getJournal('t50');
+  const t50Engine = new NormalizationEngine({
+    journal: t50Journal,
+    executionEnabled: true,
+    allowedRoots: [TEST_SCRATCH_DIR]
+  });
+  await t50Engine.initialize();
+  fs.writeFileSync(t50Partial, 'PRE_EXISTING_PARTIAL_BYTES', 'utf8');
+  const t50Result = await t50Engine.processCandidate(t50Sample);
+  assert(t50Result.ok === false && t50Result.state === NormalizationState.RECOVERY_REQUIRED, 'Pre-existing artifact without journal state transitions to RECOVERY_REQUIRED');
+  assert(t50Engine.status === EngineStatus.RECOVERY_BLOCKED, 'Engine status is RECOVERY_BLOCKED on pre-existing artifact gate');
+
+  // Sub-case 5.1: True production-path remux failure + partial unlink failure
   const t51Sample = path.join(TEST_SCRATCH_DIR, 't51_remux_fail.mp4');
-  fs.writeFileSync(t51Sample, 'INVALID_MEDIA_BYTES_FOR_FFMPEG', 'utf8');
+  createSyntheticHevcFixture(t51Sample, 0.2);
   const t51Partial = path.join(TEST_SCRATCH_DIR, '.t51_remux_fail.mp4.vreconder.partial');
   const t51Journal = getJournal('t51');
 
@@ -230,6 +248,20 @@ async function runRound5Tests() {
     journal: t51Journal,
     executionEnabled: true,
     allowedRoots: [TEST_SCRATCH_DIR],
+    spawn: (cmd, args, opts) => {
+      if (cmd === 'ffmpeg') {
+        const emitter = new EventEmitter();
+        emitter.stderr = new EventEmitter();
+        // Write simulated partial file during remuxing
+        fs.writeFileSync(t51Partial, 'PARTIAL_BYTES_FROM_FAILED_REMUX', 'utf8');
+        setTimeout(() => {
+          emitter.stderr.emit('data', Buffer.from('Simulated encoder failure in ffmpeg\n'));
+          emitter.emit('close', 1);
+        }, 20);
+        return emitter;
+      }
+      return spawn(cmd, args, opts);
+    },
     fileOps: {
       unlinkSync: (p) => {
         if (p === t51Partial) throw new Error('EPERM: simulated partial unlink fail');
@@ -238,10 +270,10 @@ async function runRound5Tests() {
     }
   });
   await t51Engine.initialize();
-  fs.writeFileSync(t51Partial, 'STUCK_PARTIAL_BYTES', 'utf8');
   const t51Result = await t51Engine.processCandidate(t51Sample);
-  assert(t51Result.ok === false && t51Result.state === NormalizationState.RECOVERY_REQUIRED, 'Pre-existing artifact or remux failure with broken unlink is RECOVERY_REQUIRED');
+  assert(t51Result.ok === false && t51Result.state === NormalizationState.RECOVERY_REQUIRED, 'True production-path remux failure with partial unlink fault transitions to RECOVERY_REQUIRED');
   assert(t51Engine.status === EngineStatus.RECOVERY_BLOCKED, 'Engine status is RECOVERY_BLOCKED (not SAFE_IDLE)');
+  assert(fs.existsSync(t51Partial) === true, 'Partial file preserved on disk for recovery');
 
   // Sub-case 5.2: Structure verify failure + partial unlink failure
   const t52Sample = path.join(TEST_SCRATCH_DIR, 't52_struct_fail.mp4');
