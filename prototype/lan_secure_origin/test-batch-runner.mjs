@@ -13,7 +13,8 @@ import {
 import { NormalizationEngine, EngineStatus } from './src/normalization/normalization-engine.mjs';
 import { NormalizationJournal, NormalizationState } from './src/normalization/journal.mjs';
 import { createSyntheticHevcFixture } from './test-fixtures-helper.mjs';
-import { MediaClass } from './src/normalization/classification.mjs';
+import { classifyMedia, MediaClass } from './src/normalization/classification.mjs';
+import { verifyAuthorizationUniverse } from './src/normalization/authorization-manifest.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -409,8 +410,111 @@ async function runTests() {
     console.log('  ✅ [PASS] Current-fact drift excluded from pending and strictly NOT counted in completed');
   }
 
+  // Test 14: Authorization Universe Identity Lock Matrix
+  console.log('\nTest 14: Authorization Universe Identity Lock Matrix');
+  {
+    const rawInvPath = path.resolve(__dirname, 'scanned_raw_library.json');
+    const manifestPath = path.resolve(__dirname, 'batch_authorization_manifest.json');
+
+    // 1. Exact authorized universe => allowed
+    const validCheck = verifyAuthorizationUniverse({ manifestPath, inventoryPath: rawInvPath });
+    assert.strictEqual(validCheck.ok, true, 'Exact authorized universe succeeds');
+    assert.strictEqual(validCheck.count, 235, 'Authorized universe count is exactly 235');
+    assert.strictEqual(validCheck.bucketBreakdown.BUCKET_A1_4K_59FPS_SIVR033, 1, 'Bucket A1 is 1');
+    assert.strictEqual(validCheck.bucketBreakdown.BUCKET_A2_4K_60FPS_WAKUI, 233, 'Bucket A2 is 233');
+    assert.strictEqual(validCheck.bucketBreakdown.BUCKET_B_8K_60FPS_KAMIKI, 1, 'Bucket B is 1');
+
+    // 2. One candidate path changed => blocked
+    const rawItems = JSON.parse(fs.readFileSync(rawInvPath, 'utf8'));
+    const pathChangedItems = JSON.parse(JSON.stringify(rawItems));
+    const firstCand = pathChangedItems.find(i => classifyMedia(i.fullPath, i.facts).classification === MediaClass.EXACT_CERTIFIED_NORMALIZATION_CANDIDATE);
+    firstCand.fullPath = firstCand.fullPath + '_modified_path.mp4';
+    const pathChangedCheck = verifyAuthorizationUniverse({
+      manifestPath,
+      fileOps: {
+        existsSync: () => true,
+        readFileSync: (p) => p.includes('manifest') ? fs.readFileSync(manifestPath, 'utf8') : JSON.stringify(pathChangedItems)
+      }
+    });
+    assert.strictEqual(pathChangedCheck.ok, false, 'Path change is blocked');
+    assert.strictEqual(pathChangedCheck.reason, 'UNIVERSE_DIGEST_MISMATCH', 'Blocked reason is digest mismatch');
+
+    // 3. Fingerprint/identity changed => blocked
+    const fpChangedItems = JSON.parse(JSON.stringify(rawItems));
+    const candToChange = fpChangedItems.find(i => classifyMedia(i.fullPath, i.facts).classification === MediaClass.EXACT_CERTIFIED_NORMALIZATION_CANDIDATE);
+    candToChange.facts.video.durationSec += 10.5;
+    const fpChangedCheck = verifyAuthorizationUniverse({
+      manifestPath,
+      fileOps: {
+        existsSync: () => true,
+        readFileSync: (p) => p.includes('manifest') ? fs.readFileSync(manifestPath, 'utf8') : JSON.stringify(fpChangedItems)
+      }
+    });
+    assert.strictEqual(fpChangedCheck.ok, false, 'Fingerprint change is blocked');
+    assert.strictEqual(fpChangedCheck.reason, 'UNIVERSE_DIGEST_MISMATCH', 'Blocked reason is digest mismatch');
+
+    // 4. Candidate added/removed => blocked
+    const candToRemoveIdx = rawItems.findIndex(i => classifyMedia(i.fullPath, i.facts).classification === MediaClass.EXACT_CERTIFIED_NORMALIZATION_CANDIDATE);
+    const countChangedItems = [...rawItems];
+    countChangedItems.splice(candToRemoveIdx, 1);
+    const countChangedCheck = verifyAuthorizationUniverse({
+      manifestPath,
+      fileOps: {
+        existsSync: () => true,
+        readFileSync: (p) => p.includes('manifest') ? fs.readFileSync(manifestPath, 'utf8') : JSON.stringify(countChangedItems)
+      }
+    });
+    assert.strictEqual(countChangedCheck.ok, false, 'Count change is blocked');
+    assert.strictEqual(countChangedCheck.reason, 'UNIVERSE_COUNT_MISMATCH', 'Blocked reason is count mismatch');
+
+    // 5. Same count (235) but different candidate substituted => blocked
+    const substitutedItems = JSON.parse(JSON.stringify(rawItems));
+    const candSub = substitutedItems.find(i => classifyMedia(i.fullPath, i.facts).classification === MediaClass.EXACT_CERTIFIED_NORMALIZATION_CANDIDATE);
+    candSub.fullPath = 'G:\\Media\\VR\\RogueMedia_Substituted.mp4';
+    const subCheck = verifyAuthorizationUniverse({
+      manifestPath,
+      fileOps: {
+        existsSync: () => true,
+        readFileSync: (p) => p.includes('manifest') ? fs.readFileSync(manifestPath, 'utf8') : JSON.stringify(substitutedItems)
+      }
+    });
+    assert.strictEqual(subCheck.ok, false, 'Substitution is blocked');
+    assert.strictEqual(subCheck.reason, 'UNIVERSE_DIGEST_MISMATCH', 'Blocked reason is digest mismatch');
+
+    // 6. Missing / corrupt manifest => blocked
+    const missingCheck = verifyAuthorizationUniverse({ manifestPath: path.join(TEST_DIR, 'non_existent_manifest.json'), inventoryPath: rawInvPath });
+    assert.strictEqual(missingCheck.ok, false, 'Missing manifest is blocked');
+    assert.strictEqual(missingCheck.reason, 'MANIFEST_NOT_FOUND');
+
+    const corruptManifestPath = path.join(TEST_DIR, 'corrupt_manifest.json');
+    fs.writeFileSync(corruptManifestPath, '{ invalid manifest json !!!', 'utf8');
+    const corruptCheck = verifyAuthorizationUniverse({ manifestPath: corruptManifestPath, inventoryPath: rawInvPath });
+    assert.strictEqual(corruptCheck.ok, false, 'Corrupt manifest is blocked');
+    assert.strictEqual(corruptCheck.reason, 'MANIFEST_CORRUPT');
+
+    // 7. Canonical Pilot currently hvc1/DONE preserves 235 universe identity & yields 234 pending queue
+    const pilotJournal = new NormalizationJournal(path.join(__dirname, 'normalization_journal.json'));
+    const pilotPlan = await derivePendingQueue({ inventoryPath: rawInvPath, journal: pilotJournal });
+    assert.strictEqual(pilotPlan.totalAcceptedUniverse, 235, 'Pilot is part of the 235 authorized universe');
+    assert.strictEqual(pilotPlan.alreadyCompleted.length, 1, 'Pilot recognized as already DONE');
+    assert.strictEqual(pilotPlan.pendingQueue.length, 234, 'Pending rollout queue is exactly 234');
+
+    // 8. BatchNormalizationRunner fail-closed with verifyAuthorizationManifest
+    const blockedRunner = new BatchNormalizationRunner({
+      executionEnabled: true,
+      verifyAuthorizationManifest: true,
+      manifestPath: corruptManifestPath,
+      inventoryPath: rawInvPath
+    });
+    const blockReport = await blockedRunner.runQueue([rawItems[0].fullPath]);
+    assert.strictEqual(blockReport.status, BatchStatus.BLOCKED, 'Runner blocked on corrupt manifest');
+    assert(blockReport.blockReason.includes('AUTHORIZATION_UNIVERSE_LOCK_FAILED'), 'Block reason notes authorization lock');
+
+    console.log('  ✅ [PASS] Authorization universe identity lock matrix strictly verified (exact allowed, all drifts fail-closed, pilot DONE preserved)');
+  }
+
   console.log('\n============================================================');
-  console.log('🎉 ALL BATCH RUNNER SUITES PASSED (13/13)');
+  console.log('🎉 ALL BATCH RUNNER SUITES PASSED (14/14)');
   console.log('============================================================');
 }
 

@@ -3,6 +3,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { BatchNormalizationRunner, ServerPlaybackMonitor, derivePendingQueue } from './src/normalization/batch-runner.mjs';
 import { NormalizationJournal } from './src/normalization/journal.mjs';
+import { verifyAuthorizationUniverse, DEFAULT_MANIFEST_PATH } from './src/normalization/authorization-manifest.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -86,11 +87,29 @@ async function main() {
     return;
   }
 
+  if (authorizeExecution) {
+    console.log('🔒 Verifying authorization manifest and accepted universe identity...');
+    const authCheck = verifyAuthorizationUniverse({
+      manifestPath: DEFAULT_MANIFEST_PATH,
+      inventoryPath
+    });
+    if (!authCheck.ok) {
+      console.error(`❌ AUTHORIZATION UNIVERSE IDENTITY LOCK FAILED: ${authCheck.reason}`);
+      console.error(`   Details: ${authCheck.error || '--'}`);
+      playbackMonitor.close();
+      process.exit(1);
+    }
+    console.log(`✅ Authorization universe identity verified (${authCheck.count} items, digest ${authCheck.universeDigest.slice(0, 12)}...)\n`);
+  }
+
   console.log('🚀 Initializing BatchNormalizationRunner (executionEnabled: true)...');
   const runner = new BatchNormalizationRunner({
     journal,
     executionEnabled: true,
     playbackMonitor,
+    verifyAuthorizationManifest: true,
+    manifestPath: DEFAULT_MANIFEST_PATH,
+    inventoryPath,
     onProgress: (prog, formatted) => {
       console.log(`\n--- Queue Progress ---`);
       console.log(formatted);

@@ -7,6 +7,7 @@ import { probeMediaFacts } from './ffprobe-facts.mjs';
 import { classifyMedia, isDerivativeFile, MediaClass } from './classification.mjs';
 import { findRepairCandidate, matchNormalizedCertifiedBucket } from './repair-rules.mjs';
 import { evaluateDiskFreeSpaceSafety } from './inventory-scanner.mjs';
+import { verifyAuthorizationUniverse } from './authorization-manifest.mjs';
 
 export const CANONICAL_ACCEPTED_INVENTORY = 'scanned_raw_library.json';
 
@@ -237,20 +238,11 @@ export async function derivePendingQueue(options = {}) {
         const rule = findRepairCandidate(currentFacts, ext);
 
         if (!rule) {
-          // Check if it's cleanly the exact certified envelope normalized to hvc1
-          const normalizedBucket = matchNormalizedCertifiedBucket(currentFacts, ext);
-          if (normalizedBucket) {
-            alreadyCompleted.push({
-              path: fullPath,
-              reason: 'CURRENT_FACTS_ALREADY_NORMALIZED',
-              matchedBucket: normalizedBucket.bucketId
-            });
+          const normBucket = matchNormalizedCertifiedBucket(currentFacts, ext);
+          if (normBucket) {
+            alreadyCompleted.push({ path: fullPath, reason: 'CURRENT_FACTS_ALREADY_NORMALIZED', matchedBucket: normBucket.bucketId });
           } else {
-            // Current-fact drift! Do NOT count as completed!
-            skippedOrExcluded.push({
-              path: fullPath,
-              reason: 'CURRENT_FACTS_DRIFT_EXCLUDED'
-            });
+            skippedOrExcluded.push({ path: fullPath, reason: 'CURRENT_FACTS_DRIFT_EXCLUDED' });
           }
           continue;
         }
@@ -289,6 +281,10 @@ export class BatchNormalizationRunner {
     this.fileOps = options.fileOps || {};
     this.playbackMonitor = options.playbackMonitor || null;
     this.onProgress = options.onProgress || null;
+
+    this.verifyAuthorizationManifest = options.verifyAuthorizationManifest ?? false;
+    this.manifestPath = options.manifestPath || null;
+    this.inventoryPath = options.inventoryPath || null;
 
     // Scope lock: In destructive mode, forbid custom inventory override
     if (this.executionEnabled && options.inventoryPath) {
@@ -397,6 +393,22 @@ export class BatchNormalizationRunner {
     this.isBlocked = false;
     this.blockReason = null;
     this._emitProgress();
+
+    // -1. Authorization universe identity lock verification in destructive mode
+    if (this.executionEnabled && this.verifyAuthorizationManifest) {
+      const authCheck = verifyAuthorizationUniverse({
+        manifestPath: options.manifestPath || this.manifestPath,
+        inventoryPath: options.inventoryPath || this.inventoryPath,
+        fileOps: this.fileOps
+      });
+      if (!authCheck.ok) {
+        this.status = BatchStatus.BLOCKED;
+        this.isBlocked = true;
+        this.blockReason = `AUTHORIZATION_UNIVERSE_LOCK_FAILED: ${authCheck.reason}`;
+        this._emitProgress();
+        return this._generateReport();
+      }
+    }
 
     // 0. Playback monitor initial health check (fail-closed if monitor exists but is unhealthy)
     if (this.playbackMonitor && typeof this.playbackMonitor.checkHealth === 'function') {
