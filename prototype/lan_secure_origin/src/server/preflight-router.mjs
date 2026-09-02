@@ -121,7 +121,54 @@ export function handlePreflightRoutes(req, res, pathname, __dirname, allowedRoot
     return true;
   }
 
+  // 6. Real-time Playback status endpoint
+  if (pathname === '/api/playback/status' && req.method === 'GET') {
+    res.writeHead(200, {
+      'Content-Type': 'application/json; charset=utf-8',
+      'Cache-Control': 'no-cache, no-store'
+    });
+    res.end(JSON.stringify({
+      isPlaybackActive: engine.isPlaybackActive,
+      serverOnline: true,
+      timestamp: new Date().toISOString()
+    }));
+    return true;
+  }
+
+  // 7. Real-time Playback SSE events endpoint
+  if (pathname === '/api/playback/events' && req.method === 'GET') {
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache, no-transform',
+      'Connection': 'keep-alive',
+      'Access-Control-Allow-Origin': '*'
+    });
+    res.write(': connected\n\n');
+    res.write(`data: ${JSON.stringify({ isPlaybackActive: engine.isPlaybackActive, timestamp: new Date().toISOString() })}\n\n`);
+    playbackSseClients.add(res);
+    req.on('close', () => { playbackSseClients.delete(res); });
+    return true;
+  }
+
   return false;
+}
+
+const playbackSseClients = new Set();
+
+export function notifyPlaybackChange(activeStreamCount, isActive) {
+  const payload = JSON.stringify({
+    isPlaybackActive: !!isActive,
+    activeStreamCount: activeStreamCount || 0,
+    timestamp: new Date().toISOString()
+  });
+  const msg = `data: ${payload}\n\n`;
+  for (const client of playbackSseClients) {
+    try {
+      client.write(msg);
+    } catch (_) {
+      playbackSseClients.delete(client);
+    }
+  }
 }
 
 export function getEngineInstance() {

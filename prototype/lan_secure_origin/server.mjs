@@ -13,7 +13,7 @@ import {
   getCachedVideos
 } from './src/server/cert-helper.mjs';
 import { streamVideo, getRecentRangeLifecycles, onActiveStreamCountChange } from './src/media/video-streamer.mjs';
-import { handlePreflightRoutes, getEngineInstance } from './src/server/preflight-router.mjs';
+import { handlePreflightRoutes, getEngineInstance, notifyPlaybackChange } from './src/server/preflight-router.mjs';
 import { handleProfileRoutes } from './src/server/profile-router.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -27,6 +27,7 @@ const CERTS_DIR = path.join(__dirname, 'certs');
 const engine = getEngineInstance();
 onActiveStreamCountChange(count => {
   engine.notifyPlaybackState(count > 0);
+  notifyPlaybackChange(count, count > 0);
 });
 
 // Calibration SSE live event streaming to connected devices (PC <-> iPhone)

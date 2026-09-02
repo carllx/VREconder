@@ -22,6 +22,38 @@ export function getDiskFreeSpace(targetPath) {
 }
 
 /**
+ * Evaluates free disk space safety for a candidate media path.
+ * Reuses the authoritative formula: requiredFree = ceil(fileSizeBytes * 1.2).
+ * Fails closed if free space is unknown (< 0) or insufficient.
+ * 
+ * @param {string} targetPath 
+ * @param {object} [options]
+ * @returns {{ ok: boolean, reason?: string, available: number, requiredFree: number }}
+ */
+export function evaluateDiskFreeSpaceSafety(targetPath, options = {}) {
+  try {
+    const fileOps = options.fileOps || {};
+    const statFn = fileOps.statSync || fs.statSync;
+    const freeSpaceFn = options.getDiskFreeSpace || getDiskFreeSpace;
+    const stat = statFn(targetPath);
+    const requiredFree = typeof options.requiredBytes === 'number'
+      ? options.requiredBytes
+      : Math.ceil(stat.size * 1.2);
+    const available = freeSpaceFn(targetPath);
+
+    if (available < 0) {
+      return { ok: false, reason: 'BLOCKED_SPACE_UNKNOWN', available, requiredFree };
+    }
+    if (available < requiredFree) {
+      return { ok: false, reason: 'BLOCKED_NO_SPACE', available, requiredFree };
+    }
+    return { ok: true, available, requiredFree };
+  } catch (err) {
+    return { ok: false, reason: 'BLOCKED_SPACE_STAT_FAILED', error: err.message, available: -1, requiredFree: -1 };
+  }
+}
+
+/**
  * Scans directories recursively and collects media files.
  * 
  * @param {string[]} rootDirs 
