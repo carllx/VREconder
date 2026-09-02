@@ -17,9 +17,20 @@ async function main() {
   const dryRunOnly = args.includes('--dry-run') || !authorizeExecution;
 
   let inventoryPath = DEFAULT_INVENTORY;
+  let customInventorySpecified = false;
   const invIdx = args.indexOf('--inventory');
   if (invIdx !== -1 && args[invIdx + 1]) {
     inventoryPath = path.resolve(args[invIdx + 1]);
+    if (path.normalize(inventoryPath) !== path.normalize(DEFAULT_INVENTORY)) {
+      customInventorySpecified = true;
+    }
+  }
+
+  if (authorizeExecution && customInventorySpecified) {
+    console.error('❌ SAFETY VIOLATION: Custom --inventory override is strictly prohibited in destructive authorization mode.');
+    console.error('   Human authorization scope is locked to the accepted canonical universe:');
+    console.error(`   ${DEFAULT_INVENTORY}`);
+    process.exit(1);
   }
 
   let serverUrl = DEFAULT_SERVER_URL;

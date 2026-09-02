@@ -5,8 +5,10 @@ import { NormalizationEngine, EngineStatus } from './normalization-engine.mjs';
 import { NormalizationJournal, NormalizationState } from './journal.mjs';
 import { probeMediaFacts } from './ffprobe-facts.mjs';
 import { classifyMedia, isDerivativeFile, MediaClass } from './classification.mjs';
-import { findRepairCandidate } from './repair-rules.mjs';
+import { findRepairCandidate, matchNormalizedCertifiedBucket } from './repair-rules.mjs';
 import { evaluateDiskFreeSpaceSafety } from './inventory-scanner.mjs';
+
+export const CANONICAL_ACCEPTED_INVENTORY = 'scanned_raw_library.json';
 
 export const BatchStatus = {
   IDLE: 'IDLE',
@@ -20,16 +22,68 @@ export const BatchStatus = {
  * Authoritative Server Playback Monitor.
  * Subscribes via SSE to the running media server and polls playback status
  * to ensure playback-active priority yields are respected across processes.
+ * Fails closed if the signal is unavailable, invalid, disconnected, or stale.
  */
 export class ServerPlaybackMonitor {
   constructor(options = {}) {
     this.serverUrl = options.serverUrl || 'http://127.0.0.1:8080';
     this.pollIntervalMs = options.pollIntervalMs || 500;
+    this.freshnessTimeoutMs = options.freshnessTimeoutMs || 3000;
     this.isPlaybackActive = false;
+    this.isHealthy = false;
+    this.healthReason = 'UNINITIALIZED';
+    this.lastHealthyAt = 0;
     this.listeners = new Set();
     this.pollTimer = null;
     this.sseReq = null;
     this.isClosed = false;
+  }
+
+  async checkHealth() {
+    return new Promise((resolve) => {
+      try {
+        const url = new URL('/api/playback/status', this.serverUrl);
+        const req = http.get(url, { timeout: 2000 }, (res) => {
+          if (res.statusCode !== 200) {
+            this.isHealthy = false;
+            this.healthReason = `HTTP_STATUS_${res.statusCode}`;
+            res.resume();
+            return resolve({ ok: false, reason: this.healthReason });
+          }
+          let body = '';
+          res.on('data', (c) => { body += c; });
+          res.on('end', () => {
+            try {
+              const parsed = JSON.parse(body);
+              if (typeof parsed.isPlaybackActive !== 'boolean') {
+                this.isHealthy = false;
+                this.healthReason = 'INVALID_PLAYBACK_RESPONSE_PAYLOAD';
+                return resolve({ ok: false, reason: this.healthReason });
+              }
+              this.isHealthy = true;
+              this.healthReason = 'HEALTHY';
+              this.lastHealthyAt = Date.now();
+              this._updateState(parsed.isPlaybackActive);
+              return resolve({ ok: true, isPlaybackActive: this.isPlaybackActive });
+            } catch (err) {
+              this.isHealthy = false;
+              this.healthReason = `JSON_PARSE_ERROR: ${err.message}`;
+              return resolve({ ok: false, reason: this.healthReason });
+            }
+          });
+        });
+        req.on('timeout', () => { req.destroy(); this.isHealthy = false; this.healthReason = 'SERVER_TIMEOUT'; resolve({ ok: false, reason: this.healthReason }); });
+        req.on('error', (err) => { this.isHealthy = false; this.healthReason = `SERVER_UNAVAILABLE: ${err.message}`; resolve({ ok: false, reason: this.healthReason }); });
+      } catch (e) {
+        this.isHealthy = false;
+        this.healthReason = `INVALID_URL: ${e.message}`;
+        resolve({ ok: false, reason: this.healthReason });
+      }
+    });
+  }
+
+  isSignalHealthy() {
+    return this.isHealthy && this.lastHealthyAt > 0 && (Date.now() - this.lastHealthyAt) <= this.freshnessTimeoutMs;
   }
 
   start() {
@@ -53,23 +107,18 @@ export class ServerPlaybackMonitor {
               try {
                 const data = JSON.parse(line.slice(5).trim());
                 if (typeof data.isPlaybackActive === 'boolean') {
+                  this.isHealthy = true;
+                  this.healthReason = 'HEALTHY';
+                  this.lastHealthyAt = Date.now();
                   this._updateState(data.isPlaybackActive);
                 }
               } catch (_) {}
             }
           }
         });
-        res.on('close', () => {
-          if (!this.isClosed) {
-            setTimeout(() => this._connectSse(), 1000);
-          }
-        });
+        res.on('close', () => { if (!this.isClosed) { this.isHealthy = false; this.healthReason = 'SSE_DISCONNECTED'; setTimeout(() => this._connectSse(), 1000); } });
       });
-      this.sseReq.on('error', () => {
-        if (!this.isClosed) {
-          setTimeout(() => this._connectSse(), 2000);
-        }
-      });
+      this.sseReq.on('error', () => { if (!this.isClosed) { this.isHealthy = false; this.healthReason = 'SSE_ERROR'; setTimeout(() => this._connectSse(), 2000); } });
     } catch (_) {}
   }
 
@@ -77,22 +126,7 @@ export class ServerPlaybackMonitor {
     if (this.isClosed) return;
     this.pollTimer = setInterval(async () => {
       if (this.isClosed) return;
-      try {
-        const url = new URL('/api/playback/status', this.serverUrl);
-        const req = http.get(url, (res) => {
-          let body = '';
-          res.on('data', (c) => { body += c; });
-          res.on('end', () => {
-            try {
-              const parsed = JSON.parse(body);
-              if (typeof parsed.isPlaybackActive === 'boolean') {
-                this._updateState(parsed.isPlaybackActive);
-              }
-            } catch (_) {}
-          });
-        });
-        req.on('error', () => {});
-      } catch (_) {}
+      await this.checkHealth();
     }, this.pollIntervalMs);
   }
 
@@ -203,8 +237,21 @@ export async function derivePendingQueue(options = {}) {
         const rule = findRepairCandidate(currentFacts, ext);
 
         if (!rule) {
-          // Media has already been normalized (e.g. tag is already hvc1)
-          alreadyCompleted.push({ path: fullPath, reason: 'CURRENT_FACTS_ALREADY_NORMALIZED' });
+          // Check if it's cleanly the exact certified envelope normalized to hvc1
+          const normalizedBucket = matchNormalizedCertifiedBucket(currentFacts, ext);
+          if (normalizedBucket) {
+            alreadyCompleted.push({
+              path: fullPath,
+              reason: 'CURRENT_FACTS_ALREADY_NORMALIZED',
+              matchedBucket: normalizedBucket.bucketId
+            });
+          } else {
+            // Current-fact drift! Do NOT count as completed!
+            skippedOrExcluded.push({
+              path: fullPath,
+              reason: 'CURRENT_FACTS_DRIFT_EXCLUDED'
+            });
+          }
           continue;
         }
 
@@ -242,6 +289,17 @@ export class BatchNormalizationRunner {
     this.fileOps = options.fileOps || {};
     this.playbackMonitor = options.playbackMonitor || null;
     this.onProgress = options.onProgress || null;
+
+    // Scope lock: In destructive mode, forbid custom inventory override
+    if (this.executionEnabled && options.inventoryPath) {
+      const base = path.basename(options.inventoryPath);
+      if (base !== CANONICAL_ACCEPTED_INVENTORY) {
+        this.status = BatchStatus.BLOCKED;
+        this.isBlocked = true;
+        this.blockReason = `DESTRUCTIVE_AUTHORIZATION_SCOPE_VIOLATION: Custom inventory override prohibited in destructive mode. Must use ${CANONICAL_ACCEPTED_INVENTORY}`;
+        throw new Error(this.blockReason);
+      }
+    }
 
     this.engine = options.engine || new NormalizationEngine({
       journal: this.journal,
@@ -290,15 +348,14 @@ export class BatchNormalizationRunner {
   }
 
   formatProgress(progress = this.getProgress()) {
-    const lines = [
+    return [
       `Total: ${progress.total}`,
       `Completed: ${progress.completed}`,
       `Remaining: ${progress.remaining}`,
       `Failed Safe: ${progress.failedSafe}`,
       `Blocked: ${progress.blocked ? `yes (${progress.blockReason || 'UNKNOWN'})` : 'no'}`,
       `Current: ${progress.current || '--'}`
-    ];
-    return lines.join('\n');
+    ].join('\n');
   }
 
   _emitProgress() {
@@ -341,6 +398,18 @@ export class BatchNormalizationRunner {
     this.blockReason = null;
     this._emitProgress();
 
+    // 0. Playback monitor initial health check (fail-closed if monitor exists but is unhealthy)
+    if (this.playbackMonitor && typeof this.playbackMonitor.checkHealth === 'function') {
+      const initialHealth = await this.playbackMonitor.checkHealth();
+      if (!initialHealth.ok) {
+        this.status = BatchStatus.BLOCKED;
+        this.isBlocked = true;
+        this.blockReason = `PLAYBACK_SIGNAL_UNHEALTHY: ${initialHealth.reason}`;
+        this._emitProgress();
+        return this._generateReport();
+      }
+    }
+
     // 1. Initial health and journal integrity check
     const journalValidation = this.journal.validateJournal();
     if (!journalValidation.ok) {
@@ -363,6 +432,22 @@ export class BatchNormalizationRunner {
 
     // 3. Sequential Execution Loop (Concurrency = 1)
     while (this.pendingQueue.length > 0 && !this.isBlocked && !this.isStopped) {
+      // Playback health check before starting a candidate
+      if (this.playbackMonitor) {
+        if (typeof this.playbackMonitor.isSignalHealthy === 'function' && !this.playbackMonitor.isSignalHealthy()) {
+          const recheck = await this.playbackMonitor.checkHealth();
+          if (!recheck.ok) {
+            console.error(`[BatchNormalizationRunner] FATAL: Playback signal unhealthy: ${recheck.reason}`);
+            this.status = BatchStatus.BLOCKED;
+            this.isBlocked = true;
+            this.blockReason = `PLAYBACK_SIGNAL_UNHEALTHY: ${recheck.reason}`;
+            this.activeJobPath = null;
+            this._emitProgress();
+            break;
+          }
+        }
+      }
+
       // Playback yield gate before starting a candidate
       if (this.engine.isPlaybackActive || (this.playbackMonitor && this.playbackMonitor.isPlaybackActive)) {
         this.status = BatchStatus.PAUSED_FOR_PLAYBACK;

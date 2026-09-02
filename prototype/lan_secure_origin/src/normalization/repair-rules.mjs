@@ -150,3 +150,37 @@ export function findCertifiedRepairRule(facts, ext) {
 
 export const findRepairCandidate = findCertifiedRepairRule;
 
+/**
+ * Verifies if probed facts represent a cleanly normalized derivative
+ * of an exact certified bucket (i.e. identical envelope, but hvc1 tag).
+ * 
+ * @param {object} facts 
+ * @param {string} ext 
+ * @returns {object | null} Matched bucket or null
+ */
+export function matchNormalizedCertifiedBucket(facts, ext) {
+  if (!facts || !facts.video) return null;
+  if (facts.videoCount && facts.videoCount > 1) return null;
+  const v = facts.video;
+  const extLower = (ext || '').toLowerCase();
+  if (extLower !== '.mp4') return null;
+  if ((v.codec || '').toLowerCase() !== 'hevc') return null;
+  if ((v.codecTag || '').toLowerCase() !== 'hvc1') return null;
+  if (v.bitDepth !== 8) return null;
+  if (v.profile !== 'Main') return null;
+
+  for (const b of EXACT_CERTIFIED_BUCKETS) {
+    if (
+      v.width === b.width &&
+      v.height === b.height &&
+      v.level === b.level &&
+      v.profile === b.profile &&
+      v.rFps === b.rFps &&
+      v.avgFps === b.avgFps
+    ) {
+      return b;
+    }
+  }
+  return null;
+}
+
