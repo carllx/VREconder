@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "authorizationVersion": "1.0",
-  "purpose": "Human-authorized exact-certified universe for Safari media normalization (#21)",
+  "authorizationVersion": "1.1",
+  "purpose": "Human-authorized exact-certified universe for Safari media normalization (#21) with file-object identity binding",
   "acceptedUniverseCount": 235,
   "bucketBreakdown": {
     "BUCKET_A1_4K_59FPS_SIVR033": 1,
@@ -9,1183 +9,1888 @@
     "BUCKET_B_8K_60FPS_KAMIKI": 1
   },
   "digestAlgorithm": "sha256",
-  "canonicalizationMethod": "sorted_by_canonical_path_sha256_record_tuples_v1",
-  "universeDigest": "c45ee10b964735bb8fc2d224be8fd63614c1649bbfe4aa7d79d828f63de4da4a",
+  "canonicalizationMethod": "sorted_by_canonical_path_sha256_record_tuples_v2",
+  "universeDigest": "578622165112bb69c57fed49a1fc9aa87b43acae798429d8aeefbc9e509abc94",
   "candidateIdentities": [
     {
       "path": "G:/Media/VR/Render/4096_2048_crf18_avc1- Kouka Rin - VRKM01464.mp4 - (HEVC_23.0).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "26d628d477f75d0bc62001cb75d1479c3360308e5bf1faeac5fc4a235f23cf60"
+      "sizeBytes": 5045421323,
+      "mtimeMs": 1739735803789,
+      "fingerprintId": "0bca88c3c40697e2",
+      "fingerprint": "7bc1de4b87e17eb12edc11cb605136acb3e9b26cafd33fd3fcb518cb4cdaa84b"
     },
     {
       "path": "G:/Media/VR/Render/4096_2048_crf18_avc1-Haruhi Moka - VRKM01388.mp4 - (HEVC_23.0).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "a994e74da564555f30aada36fd6e15b07ef3dc66c873a0286a13a31d3cdeb2b0"
+      "sizeBytes": 6317298158,
+      "mtimeMs": 1739740740965,
+      "fingerprintId": "3ca031517bb7a357",
+      "fingerprint": "84dfd68243b3c9c8311140edeed01946bb8474b06f21be5e9cacfa671ae58092"
     },
     {
       "path": "G:/Media/VR/Render/4096_2048_crf18_avc1-Kosaka Himari - KIWVR730 - (HEVC_19).mp4.mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "6c64f89b9ab2974e36f0da84b1d4b0d92de1a50ebb847545409b8cd44df32f32"
+      "sizeBytes": 2255947029,
+      "mtimeMs": 1739855490474,
+      "fingerprintId": "c5c2089a48d4a873",
+      "fingerprint": "37f210aa21d86e58f8cc5aa0e45d074cb3b4345342050ee5eb2c7eda22c29ae6"
     },
     {
       "path": "G:/Media/VR/Render/4096_2048_crf18_avc1-Matsuoka Mio - KAVR356 - (HEVC_19).mp4.mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "20abe9c89de6b3b26c51514d88d1876a09e6226aeb943e4bb9049614a1fa29ee"
+      "sizeBytes": 1772805002,
+      "mtimeMs": 1739920844697,
+      "fingerprintId": "b2fd97ed129b912f",
+      "fingerprint": "b8c22ef2681fbca92f8825c2a38768442e22a0889d4f202e693434750ee6ab05"
     },
     {
       "path": "G:/Media/VR/Render/4096_2048_crf18_avc1-Misono Waka - VRKM1498.mp4 - (HEVC_18.0).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "c74ff923a1699b020be9269330a80f1b9ff235f3759eb5a0204f32df95d15909"
+      "sizeBytes": 3855832977,
+      "mtimeMs": 1739743972131,
+      "fingerprintId": "920ec607ae61b802",
+      "fingerprint": "8ac29ef29c5a8eac3fc98b3b36fd377bcc11ed58be8685f9da589503967d539a"
     },
     {
       "path": "G:/Media/VR/Render/4096_2048_crf18_avc1-Miyanishi Hikaru - VRKM1342 - (HEVC_19).mp4.mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "a9292c46eae92dc5f8aa209e46fb63c03228fd5de97aac08b6e4d01e09e90e9f"
+      "sizeBytes": 3866318639,
+      "mtimeMs": 1739955556261,
+      "fingerprintId": "bff3348fad9ebc63",
+      "fingerprint": "eda6578d0c66d4e387d499b488c7903b8f30ddbf54551462c7d96e60fddd52ef"
     },
     {
       "path": "G:/Media/VR/Render/4096_2048_crf18_avc1-Nagahama Mitsuri - IPVR276_p1 - (HEVC_19).mp4.mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "c53f2b7b52b898ece8225155829cc3f0877b798a8e22e93a0a68a58619e0e19a"
+      "sizeBytes": 4960947973,
+      "mtimeMs": 1739995873014,
+      "fingerprintId": "8957784836322516",
+      "fingerprint": "20e84446f957f425fd0cd8d711ea7ccc32b59e7dc758c4057c9ba3ba127f8547"
     },
     {
       "path": "G:/Media/VR/Render/4096_2048_crf18_avc1-Nagahama Mitsuri - IPVR276_p2 - (HEVC_19).mp4.mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "ebebec321d7bc1becca1ddf16112c036d62c2d1a415d62b4414ae5bdabf7f1d9"
+      "sizeBytes": 4102996525,
+      "mtimeMs": 1740032285076,
+      "fingerprintId": "0b2b01666f19cdfc",
+      "fingerprint": "e2211f3cc40c6f0c0efb79998628a4a4081ad8eee17fc7b06aec7e4c90e035df"
     },
     {
       "path": "G:/Media/VR/Render/4096_2048_crf18_avc1-Seta Ichika - EBVR065 - (HEVC_19).mp4.mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "058987544e443e687f0e4406de8b6c38ca8a459022ce392f4573143dd868e82d"
+      "sizeBytes": 2767112499,
+      "mtimeMs": 1740907068373,
+      "fingerprintId": "1d9a57eee804e814",
+      "fingerprint": "503cdc984cf6f1c43d9fc647a6de86cde8bef594118ab1b74f4f4581148ca96b"
     },
     {
       "path": "G:/Media/VR/Render/4096_2048_crf18_avc1-Suzumiya Haruka(Konami Aya_Sazanami Aya) - VRKM-01377 - (HEVC_19).mp4.mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "42be599fd0a0ce7cd3a517974f96295fad2d1fe86223b85576a9c4b3b451434e"
+      "sizeBytes": 3916977420,
+      "mtimeMs": 1740955034963,
+      "fingerprintId": "11bca9eb29220f78",
+      "fingerprint": "6fd1933ee5e10feff1a0a623c9b09a78bdc8ac1490df7926c5aac99c4aee7618"
     },
     {
       "path": "G:/Media/VR/Render/4096_2048_crf18_avc1-URVRSP405 - Shizuka - (HEVC_19).mp4.mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "aee5cce2ac1961a89837b4e3ca916c517e929c65db09ad0bd5323b7a6712dd8a"
+      "sizeBytes": 3192622035,
+      "mtimeMs": 1740986468504,
+      "fingerprintId": "f14e04c936c31c06",
+      "fingerprint": "a2d29072de6cc07a247d819affaeaf5a5761bab5453911e50393fcd59f4b9d53"
     },
     {
       "path": "G:/Media/VR/Render/4096_2048_crf18_avc1-Wakana Hono - VRPRD063 - (HEVC_19).mp4.mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "0e982b88494a3dc0061b4107a4ffe1d861b3317eff1e585a7b5f6365b9d87139"
+      "sizeBytes": 3585711309,
+      "mtimeMs": 1741021466480,
+      "fingerprintId": "0f4fe03b562e9ec0",
+      "fingerprint": "771e870e08104f45d9465a13d2dafd4bd4caf00e453c6cf7c20d5110fcc9b26a"
     },
     {
       "path": "G:/Media/VR/Render/4096_2048_crf18_avc1-Wakui Mito(Wakui Mito) - DSVR01546 - (HEVC_19).mp4.mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "4341b2ec6d288f424039763da28f478439c49d8c9ff2f9640b90972262a83776"
+      "sizeBytes": 5550082180,
+      "mtimeMs": 1741060848181,
+      "fingerprintId": "3ef4c8b6912bf240",
+      "fingerprint": "cb8177b263d8d77007a0dedc6eb6590004abb965d66f425fa51a26efb8a09b93"
     },
     {
       "path": "G:/Media/VR/Render/4096_2048_crf18_avc1-Yumino Rimu - KIWVR586 - (HEVC_19).mp4.mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "4975ec269f4c8086efefdc0c187f397881148bef549d0b08b52f27aaeec3a57a"
+      "sizeBytes": 2438886098,
+      "mtimeMs": 1741090312619,
+      "fingerprintId": "bc983f357eda2e0b",
+      "fingerprint": "371466d0a7e4b8671729dfa23a9f83fdf2563ea7d24a02986b8df6c7279c36ba"
     },
     {
       "path": "G:/Media/VR/Render/4096_2048_crf21_avc1 - Ichii_Yuka - NHVR220.mp4 - (HEVC_23.0).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "8776a87bb58626685ddf4692a27a9fda5af02218d137b83d1de9ba0032a18f6c"
+      "sizeBytes": 972470634,
+      "mtimeMs": 1739745207826,
+      "fingerprintId": "207480bdf136452d",
+      "fingerprint": "735347ad9de029712435f03d5e09782cc088f37f6dd4983630e2554a78d48c30"
     },
     {
       "path": "G:/Media/VR/Render/4096_2048_crf21_avc1 - Iori_Hinano - NHVR220-3.mp4 - (HEVC_23.0).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "6f109b0c3a6ae34372de5d7f4bf06477e630f96ace21d80d3d303aee3c806981"
+      "sizeBytes": 233887633,
+      "mtimeMs": 1739745503482,
+      "fingerprintId": "b4997f9076502fe9",
+      "fingerprint": "0499ad001909b60b2e5b6b94240da51e07abd250c4af92db3a63b6576ad940ac"
     },
     {
       "path": "G:/Media/VR/Render/4096_2048_crf21_avc1_Mochizuki Tsubomi  - KIWVR713.mp4 - (HEVC_21.0).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "b9392789ff9086750336068e441df8eef48d153cbce373c43dc051f3394d28dc"
+      "sizeBytes": 3189140400,
+      "mtimeMs": 1739749300649,
+      "fingerprintId": "840ec36ee6ca4852",
+      "fingerprint": "2f0d7c6d8c1e9c351e55c28f6bbe188c7c69938dd7c3d6ba41f44349da43e4e1"
     },
     {
       "path": "G:/Media/VR/Render/4096_2048_crf21_avc1- Minase Akari - NHVR220.mp4 - (HEVC_21.0).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "16b13d36b76cfd3f6b5389cbaf8691561af919f5b49b5ebd1bcf338df624b7fd"
+      "sizeBytes": 1769430896,
+      "mtimeMs": 1739753143698,
+      "fingerprintId": "a7000f3d4f4d5445",
+      "fingerprint": "3fc53b9f64ea03371269e92d7a96717a1dd5380eb37de77b24d5c40ee4322c3a"
     },
     {
       "path": "G:/Media/VR/Render/4096_2048_crf21_avc1-Fujita kozue - NHVR220.mp4 - (HEVC_21.0).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "177a2c661da797089b13f42629d053d8ced8265faf653e8823146550d8c2b177"
+      "sizeBytes": 1326837955,
+      "mtimeMs": 1739758449442,
+      "fingerprintId": "fe1230f90e69c0eb",
+      "fingerprint": "2690bddada189817e1a806cc5ea23caf50ed52200f0c080323cbad92ba99648e"
     },
     {
       "path": "G:/Media/VR/Render/4096_2048_crf21_avc1-Haruna Noa - KAVR398.mp4 - (HEVC_23.0).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "e29bfd3ab2f3d85d9b58bf2591ee2a11b691dc3197db481669f8f1c2b726ba28"
+      "sizeBytes": 3791354052,
+      "mtimeMs": 1739763033539,
+      "fingerprintId": "6a32f0cc2d624d4e",
+      "fingerprint": "7654df5dea543c03bc1f296f759a2062851b4d830861d31e861f4b7a0d234ecc"
     },
     {
       "path": "G:/Media/VR/Render/4096_2048_crf21_avc1-Inaba_Ruka - VOSM064-1 - (HEVC_19).mp4.mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "4a382d31ff93bd1406ea38b59be7c23c1f4a22104e7a1f41e33ccced7922a1c7"
+      "sizeBytes": 1112787538,
+      "mtimeMs": 1741104612738,
+      "fingerprintId": "448bf4b10961259a",
+      "fingerprint": "3b59adecf076cc29b9fcba6310e83fb39e9c2707ebbe27f95330a7c4fa18ce1c"
     },
     {
       "path": "G:/Media/VR/Render/4096_2048_crf21_avc1-Kojima Miko - NHVR220 - (HEVC_19).mp4.mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "a29be0964fa2ced560327d09cfbace6c408495729d0eb2ccb28ae2943177e185"
+      "sizeBytes": 5105732466,
+      "mtimeMs": 1741142493140,
+      "fingerprintId": "30b69c580d667725",
+      "fingerprint": "ae7d4e5d54c9b10fd80440f957b69115f83babdbdf99ef83ea9ecb15c8d1decb"
     },
     {
       "path": "G:/Media/VR/Render/4096_2048_crf21_avc1-Koume_Ena - VOSM064-2 - (HEVC_19).mp4.mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "441080d70153e75ab7ea9c442835b7babeec54446cb751c7ae3cecc69c222d70"
+      "sizeBytes": 634298166,
+      "mtimeMs": 1741147850708,
+      "fingerprintId": "35ac414b33db7c29",
+      "fingerprint": "e3e23cc73bd09288475083993aefb51376523bb3fa40ec17221bbb57c612fa72"
     },
     {
       "path": "G:/Media/VR/Render/4096_2048_crf21_avc1-Kurata Mao - VOSM064 - (HEVC_19).mp4.mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "3160628ec3a10f446f80ff9ab786910dddf6f47cc0c641d8a3de888363cac8f1"
+      "sizeBytes": 4717082480,
+      "mtimeMs": 1741352525127,
+      "fingerprintId": "b67048872d967c9d",
+      "fingerprint": "fba9ff339114c155ec1ec81a5866737ab21e67dd5ff94f0dcc452b9692e64368"
     },
     {
       "path": "G:/Media/VR/Render/4096_2048_crf21_avc1-Lauren Karen - URVRSP199(UNVRSP002) - (HEVC_19).mp4.mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "64175ef43a5a2b4e154e4ce0d1d96c214caebdbe5ed4e31d265efae8450e6e24"
+      "sizeBytes": 2750252262,
+      "mtimeMs": 1741386969934,
+      "fingerprintId": "1cb215b33d0ff6ac",
+      "fingerprint": "da9b2b8a6a38d0738f950955a177391049d8771b46e1ef0e291b5591ade0db3b"
     },
     {
       "path": "G:/Media/VR/Render/4096_2048_crf21_avc1-Minase Akari - UNVRSP002 - (HEVC_19).mp4.mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "eb3872a16ef363df13f997b519dd6e1f4d521d7b35685b8dfea207cf17ea6ca6"
+      "sizeBytes": 4190386491,
+      "mtimeMs": 1741429657516,
+      "fingerprintId": "cc8f27cea3bec338",
+      "fingerprint": "f43b0bb11a4ae0c60aaab0eef058527b7c44f8f459444d65aff04ad37792a340"
     },
     {
       "path": "G:/Media/VR/Render/4096_2048_crf21_avc1-Mio Megu - URVRSP138(UNVRSP002) - (HEVC_19).mp4.mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "9f79c687c0000020a0a6480c98c96272081be517bf664e3f8e7e3043325c0e34"
+      "sizeBytes": 5082193467,
+      "mtimeMs": 1741482532243,
+      "fingerprintId": "0cbf3d3db47ef6f3",
+      "fingerprint": "feccf70e248d49065e23a9b5e940c6e02e602f584d08121cd7f0541514f49b62"
     },
     {
       "path": "G:/Media/VR/Render/4096_2048_crf21_avc1-Mochizuki_Ayaka - VOSM064 - (HEVC_19).mp4.mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "4819ebf179adb12fb6ac4f081e7b2854811e4a3688dc3d01d404d33077d60494"
+      "sizeBytes": 821790499,
+      "mtimeMs": 1741490830095,
+      "fingerprintId": "3e7be992378b869b",
+      "fingerprint": "5cbbd8b7dc2c0e333007495b13cf2855d2b7deab57d951b40a52687184176d91"
     },
     {
       "path": "G:/Media/VR/Render/4096_2048_crf21_avc1-Nagano Suzu - PXVR227 - (HEVC_19).mp4.mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "5026f2aeb265e397082f959254ef721be2e2c8cfe953a1ba34f4e7dafd91b479"
+      "sizeBytes": 2138445372,
+      "mtimeMs": 1741515807179,
+      "fingerprintId": "ed053bd6b0466a9f",
+      "fingerprint": "14ed9a11fa1d26b73c7a61078cb041455ca0b59dcdf9cb93462e9c88b5d2e953"
     },
     {
       "path": "G:/Media/VR/Render/4096_2048_crf21_avc1-Ootsuki Hibiki(Andou Eri) - SAVR525 - (HEVC_19).mp4.mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "c901919f1089fe369dfb9521532e10eca43164bd08a44208f24dd9fd318708a7"
+      "sizeBytes": 4932394628,
+      "mtimeMs": 1741554662463,
+      "fingerprintId": "82f79a56312ef03b",
+      "fingerprint": "f1915329e1d8323bef4ca7ef29fd73cfbb05c1ade8a69a8843c738861bb75f39"
     },
     {
       "path": "G:/Media/VR/Render/4096_2048_crf21_avc1-Otomi Rina(Kawami Yuuka_Sakasai Tomomi) - VOSM064 - (HEVC_19).mp4.mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "0fac1a05f6290765013d3bf931f5ce72efc254aaf29f39420c12dc0e4081a75b"
+      "sizeBytes": 621964935,
+      "mtimeMs": 1741561056335,
+      "fingerprintId": "3970c332871bdd49",
+      "fingerprint": "223f68b43e2f19d7610da57891956ad93db510241adee7425b536d79a48a843f"
     },
     {
       "path": "G:/Media/VR/Render/4096_2048_crf21_avc1-Riho Shishido-SAVR532_p1 - (HEVC_19).mp4.mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "42d74a1f8a270e508deab952b5be214688e693a9122344be4b8a94a98115e09d"
+      "sizeBytes": 1013863585,
+      "mtimeMs": 1741571289807,
+      "fingerprintId": "f43e4eb8eb5fb98c",
+      "fingerprint": "28e22b6fce6af7bb7b175b57d66b28a67cad1164bd9c6fd8e5ea97a41e687e4b"
     },
     {
       "path": "G:/Media/VR/Render/4096_2048_crf21_avc1-Riho Shishido-SAVR532_p2 - (HEVC_19).mp4.mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "52ac4460ef40216127679f2052dc21af8fc07a4bd1e8f18db438175b1870475f"
+      "sizeBytes": 2243185147,
+      "mtimeMs": 1741596922915,
+      "fingerprintId": "39c13643531492a1",
+      "fingerprint": "321e9f2831f2be0640fb4e5a119c17a80f3fa5f5a1991019984126618d283afb"
     },
     {
       "path": "G:/Media/VR/Render/4096_2048_crf21_avc1-Seina Arisa(Otsu Alice_Mizushima Arisu) - VRPRD060 - (HEVC_19).mp4.mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "58006c9c0255e70179fa71cc1570485610b5cc2dd9dbba24bd045d02e2fb2eb3"
+      "sizeBytes": 2670378138,
+      "mtimeMs": 1741625384807,
+      "fingerprintId": "7656a2f82ef81f02",
+      "fingerprint": "4ccfa989c4c85d296a804f3186ad630880b39432890595ce0c3a07b0c0cec56e"
     },
     {
       "path": "G:/Media/VR/Render/4096_2048_crf21_avc1-Seta Ichika - VRKM1534 - (HEVC_19).mp4.mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "1e45e642a6ee6d9b36bcaba7f385a51de22e2acb9e752d8bf43862c8fe0a4322"
+      "sizeBytes": 2633819803,
+      "mtimeMs": 1741647439050,
+      "fingerprintId": "cb3f4c12087a58d7",
+      "fingerprint": "9d388c93305cc1d6ca862900851772bf9ad2955b1ad4190ba66ca4101df92d32"
     },
     {
       "path": "G:/Media/VR/Render/4096_2048_crf21_avc1-Shiina Koharu - DSVR1690 - (HEVC_19).mp4.mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "65e8bbca918d11d93a03b53a8bd7c9dac2e62ee2e0b00c8e51dfb7c946c749f7"
+      "sizeBytes": 3388470944,
+      "mtimeMs": 1741684730674,
+      "fingerprintId": "857bbec729b1c378",
+      "fingerprint": "f9bfd1b138723e254c87062f542265e95d67588c81c9072f64d20fca8baeb783"
     },
     {
       "path": "G:/Media/VR/Render/4096_2048_crf21_avc1-Shiina Koharu - SAVR527 - (HEVC_19).mp4.mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "f0a7e5c75b8c77693751e966df940810d9c74858db884acaa9498605a1ab137b"
+      "sizeBytes": 2785233578,
+      "mtimeMs": 1741716563277,
+      "fingerprintId": "dd743f04b2567839",
+      "fingerprint": "cd6b4ff4fa7a1884e7b55d1d0633640fddb5c896cf3b1146e44f13e729d06e0d"
     },
     {
       "path": "G:/Media/VR/Render/4096_2048_crf21_avc1-Suehiro Jun(末広純) - NHVR220 - (HEVC_19).mp4.mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "d327525d2559d22baef616e2a1a9bb42dedec88ad2a8d68ebe4776d9564ee896"
+      "sizeBytes": 2661493347,
+      "mtimeMs": 1741744901489,
+      "fingerprintId": "48c0bad2c6bb33e7",
+      "fingerprint": "d6efda53e6baf25a470920989b162b32c2cc2af82b4d971b1fac3001c9302b78"
     },
     {
       "path": "G:/Media/VR/Render/4096_2048_crf21_avc1-Suzuki Mayu - VRPRD066 - (HEVC_19).mp4.mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "87f0b837de7e9444ecd49bd461c7260f92b3f84d4345f383c02eada4fde473f6"
+      "sizeBytes": 2473684664,
+      "mtimeMs": 1741769520072,
+      "fingerprintId": "e194df688176fc2e",
+      "fingerprint": "6521f20d19bf70b969d5a27a7369d7e6ab39ced51016789d6c21acbef4a6cce4"
     },
     {
       "path": "G:/Media/VR/Render/4096_2048_crf21_avc1-Takase Rina - VRKM01504 - (HEVC_19).mp4.mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "850038abb5783caa6dac094c06f1302187a22ef0a8dfcaef25475ee39d0b4eb0"
+      "sizeBytes": 2326648516,
+      "mtimeMs": 1741797978699,
+      "fingerprintId": "e5b11ec939b8f968",
+      "fingerprint": "030f0b6710bca9f6f670a6cf7607266d51ac51ecd529b2b0a5f4bae669a954ca"
     },
     {
       "path": "G:/Media/VR/Render/4096_2048_crf21_avc1-Tano Yu - SIVR389 - (HEVC_19).mp4.mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "87f8383e637646f3924a1ede5fec9e93f663f528cd2191de10f4e2f617f9046e"
+      "sizeBytes": 2925931987,
+      "mtimeMs": 1741825443218,
+      "fingerprintId": "a8071e783b67770e",
+      "fingerprint": "b5bffbc50d9693bbf4d88a2b40741160cf225349072ce8af6f8b25f0ed391b08"
     },
     {
       "path": "G:/Media/VR/Render/4096_2048_crf21_avc1-Tsuji Imaru - NKKVR143 - (HEVC_19).mp4.mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "10c7d317f05f8a182c7a10d146bb4cbf3cbbdbf1abb9677cf99b3ac5874aaebe"
+      "sizeBytes": 1885412513,
+      "mtimeMs": 1741854062678,
+      "fingerprintId": "3fc99e1a361043eb",
+      "fingerprint": "37e67897b07cf6270024c67bab70f3cbf6892e113a4b6d1a1ce3194871896031"
     },
     {
       "path": "G:/Media/VR/Render/4096_2048_crf21_avc1-URVRSP203(UNVRSP002) - p1 - (HEVC_19).mp4.mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "7b25f0cb15149c81485c9149ffc57aef6a24cb22b996e346b891bcbab11e2e04"
+      "sizeBytes": 3675387568,
+      "mtimeMs": 1741876250306,
+      "fingerprintId": "1e16afb12f7a660c",
+      "fingerprint": "eb54fd07f3fb190db7aa079739fde2f248e53c7250f2751bb0b3d4148c59f312"
     },
     {
       "path": "G:/Media/VR/Render/4096_2048_crf21_avc1-URVRSP203(UNVRSP002) - p2 - (HEVC_19).mp4.mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "c510e639f61fc54bceaae23279ddeb699641780d94507855dc078d1312758db9"
+      "sizeBytes": 3590001033,
+      "mtimeMs": 1741902482584,
+      "fingerprintId": "8e5334ef1f0f0563",
+      "fingerprint": "36587929cf161d555316bb203da28a2ec16794b24d04ffb648d445a32ed63bc3"
     },
     {
       "path": "G:/Media/VR/Render/4096_2048_crf21_avc1-URVRSP228(UNVRSP002) -p1 - (HEVC_19).mp4.mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "6d6980d0808b91cbea8f1aae834497bdef5624708e6c475e3cbff53ee421e80d"
+      "sizeBytes": 2390886309,
+      "mtimeMs": 1741922192651,
+      "fingerprintId": "010edb0a04d5e8b6",
+      "fingerprint": "f4c93affb8ae30ddbbddc942382e41b049754783e99c7106e55835ba3c44baf8"
     },
     {
       "path": "G:/Media/VR/Render/4096_2048_crf21_avc1-URVRSP228(UNVRSP002) -p2 - (HEVC_27).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "440315482659639d6e127a8b607a3521fa9d20bbc1d5310147b57540e416afdc"
+      "sizeBytes": 863240197,
+      "mtimeMs": 1743146630047,
+      "fingerprintId": "f37b29e0a72fecb4",
+      "fingerprint": "b68f7f2920eaa7db3ce26d9ec828c1cc81d9322aa4d5ff90fd2739f49f5eef11"
     },
     {
       "path": "G:/Media/VR/Render/4096_2048_crf21_avc1-VRKM1519 - Haruna Noa - (HEVC_27).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "4e50757e3f877db35e809150b3fb24c5c5f9dea7205aa28ae97ff39859a6f40b"
+      "sizeBytes": 953483964,
+      "mtimeMs": 1743212078488,
+      "fingerprintId": "501f582cd4bd939f",
+      "fingerprint": "02d5ea1ae4cd55bc0c19d4432eb1ea10361f4d1ab114f413cb791e0f6c2021b6"
     },
     {
       "path": "G:/Media/VR/Render/4096_2048_crf21_avc1-Yoshine_Yuria - VOSM064-1 - (HEVC_27).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "721b8fafa978a589252d13da8f4938cef5f9f5980476f51ac645c738fa34b440"
+      "sizeBytes": 176491984,
+      "mtimeMs": 1743229059703,
+      "fingerprintId": "269ca95132f9ef56",
+      "fingerprint": "f4e964cf7210ae36df914ed221a1b4673697c7fb9a00274bd8c6f8f3a8442128"
     },
     {
       "path": "G:/Media/VR/Render/4096_2048_crf21_avc1-Yura_Kana - NHVR220 - (HEVC_27).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "413acc07403dc106b56e15d4373d6ddf811ce504509c75b36fca5970e5317117"
+      "sizeBytes": 636365532,
+      "mtimeMs": 1743258570851,
+      "fingerprintId": "c50f5ea948d60029",
+      "fingerprint": "b36755ee9df0d8479f0d1e25c273bbf19c8ccc55aa2cd9237987ac18693e95eb"
     },
     {
       "path": "G:/Media/VR/Render/4096_2048_crf21_avc1-Yuzuki Marina - VOSM064 - (HEVC_27).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "a952c80ff24394b585ac4a2caf302950794122369255569fe2f4ca90e80fc13c"
+      "sizeBytes": 794094827,
+      "mtimeMs": 1743302917242,
+      "fingerprintId": "f1d2d23d19259f39",
+      "fingerprint": "e38834c3041d7d77cd57d1cc1c6244ad874a0f25940fe87e4edf49f9e495db4d"
     },
     {
       "path": "G:/Media/VR/Render/4096_2048_crfun_avc1-Suzuki Mayu - SAVR514 - (HEVC_27).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "e6f901936fb20fb3d4ef6cd11b58b4271bbf4c9eeb90b733920d5fa6c4360cec"
+      "sizeBytes": 616395723,
+      "mtimeMs": 1743358731974,
+      "fingerprintId": "2c4b47d84bd4a15a",
+      "fingerprint": "3e5fc86d0ee5da4735a619d521e8ed2c03398c3b9a782a400bbd9821d563df3b"
     },
     {
       "path": "G:/Media/VR/Render/4096_2048_crfun_avc1-Takase Rina - SAVR526 - (HEVC_27).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "2f4c32a844c3d1b6a60179970e1267a5f06fd3c1a66fc1ece3ed9c0c7dfc9ee0"
+      "sizeBytes": 869595455,
+      "mtimeMs": 1743427373140,
+      "fingerprintId": "fcce1221bd65b504",
+      "fingerprint": "5d42b855c625b55763b79d49162bf1ed160479c564cde8c3f3af8cc12c2eaf3c"
     },
     {
       "path": "G:/Media/VR/Render/4320_2160_crfunknown_vp09-Satsuki Mei - URVRSP127.mp4 - (HEVC_23.0).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "7c99502484cbd44e339f6b1dd7c9368748ca8b9cdb6bcdcb3e7d4277363658dd"
+      "sizeBytes": 5168909469,
+      "mtimeMs": 1739693918999,
+      "fingerprintId": "5a8b9e24ad018291",
+      "fingerprint": "185610e681a731ad7e1dec7369b338c7a4b62cecbf47752097abfb0ed2cfe0fe"
     },
     {
       "path": "G:/Media/VR/Render/4320_2160_crfunknown_vp09-Toumi Kanata(Hasumi Kaede) - KIWVR666.mp4 - (HEVC_23.0).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "73a8df9320d5a69227c32eaad92df191e86476a8de219428ef1716764f584c7d"
+      "sizeBytes": 5527796413,
+      "mtimeMs": 1739700079558,
+      "fingerprintId": "11e6e4f1f5647e36",
+      "fingerprint": "d3435296b14755838b30236fac092497dce12705624915273966ea7599fcb707"
     },
     {
       "path": "G:/Media/VR/Render/Aiga Mizuki - URVRSP271-(HEVC_18).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "e6185b6e411d4ee59bbfb38763fd0e9158c56f6c6821fa142a98290606d3f289"
+      "sizeBytes": 3504421818,
+      "mtimeMs": 1722262702318,
+      "fingerprintId": "9ddf92fc77985729",
+      "fingerprint": "774649b2c5259415d29d64e43e5bd00384ecceff6a990128881e370bcd62f376"
     },
     {
       "path": "G:/Media/VR/Render/AIKA - VRKM01353(VRKM712)-(HEVC_18).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "e6e42c808eab126896acffa80a91c8957e8e3313655d46d86cc7b882118b1caa"
+      "sizeBytes": 665183707,
+      "mtimeMs": 1720451176241,
+      "fingerprintId": "798fe01ae528f475",
+      "fingerprint": "69e2c3a5a99fbf31e8380aedd37db253ef2635c52ba61118b6c1aee9462d5f6a"
     },
     {
       "path": "G:/Media/VR/Render/Aizuki Himari - URVRSP255-(HEVC_18).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "153ff8a9f84dbb997e680ae153a2945b6ac243eb604cc66173cfde815b6fd96a"
+      "sizeBytes": 2695356578,
+      "mtimeMs": 1719946026209,
+      "fingerprintId": "4eea25c9d5c6855f",
+      "fingerprint": "6cde4ef6aa096f076f12f17446a7c86d2b817af58c2aff76a155d96a7f5adffb"
     },
     {
       "path": "G:/Media/VR/Render/Amane Koa - BIBIVR111-(HEVC_18).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "5872af9a88da025edc51656cf8d952a0986c4b37a0ceade89e38695d81de6d8d"
+      "sizeBytes": 2978069025,
+      "mtimeMs": 1719247583585,
+      "fingerprintId": "f054876a31de0e00",
+      "fingerprint": "92cce81b859afac09d6de7637b6f93dec4882092656fd910b98f15f9185c1f8a"
     },
     {
       "path": "G:/Media/VR/Render/Amane Yui - BIBIVR058(BIBIVR074)-(HEVC_21).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "d6b9e4e7da8d1bd44f6953cb7c29b76f29ac4c2eccacedccaf685a15ed3bf10a"
+      "sizeBytes": 2271346877,
+      "mtimeMs": 1719768153939,
+      "fingerprintId": "0c53a64d05fbb77a",
+      "fingerprint": "2ff4cad4503eae220af2e0fcad642b7a9d213b3283a141238697e9c142eef0f1"
     },
     {
       "path": "G:/Media/VR/Render/Amemiya Hibiki - EBVR097-(HEVC_18).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "41d443e3a4b3864db9cbe6ce76ae5ee9b656ea6d1d5eb95a0433e13c089b7f69"
+      "sizeBytes": 3366936694,
+      "mtimeMs": 1719247606504,
+      "fingerprintId": "d31207f497ce0636",
+      "fingerprint": "4a2ce56a767d0b16bd17e02a779ca717ae2ef5c830564d90cf7796031886fd09"
     },
     {
       "path": "G:/Media/VR/Render/Andou Haruno - URVRSP322-(HEVC_18_videotoolbox).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "3014e8185d2144cb800ff863cf5e96e95f59bbde71998c339e186e040264836a"
+      "sizeBytes": 4008585814,
+      "mtimeMs": 1722362054298,
+      "fingerprintId": "a1c05c0573cfe3e3",
+      "fingerprint": "a72120827a1c24c4b2661fd0e03364db8fbbda158c97425687cbde7f4a11236a"
     },
     {
       "path": "G:/Media/VR/Render/Aoi Rena - VRKM423(VRKM1354)-(HEVC_18_videotoolbox).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "eb0190496fcc9c8bb5347c9dd5f408a24155ed78a380549373f614ba2d7ff7e5"
+      "sizeBytes": 1198838009,
+      "mtimeMs": 1721212099998,
+      "fingerprintId": "e1e08d537a37ad88",
+      "fingerprint": "d59b7662cac9c2671feaa3dfa58f2a5163770bdb870247baf6a32d6b101df5f1"
     },
     {
       "path": "G:/Media/VR/Render/Arai Rima - HNVR126 - (HEVC_18).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "5c1654c738dfa2e5220d41dd6074e9c5e34c5a558f1ed94c86d66c602ff53363"
+      "sizeBytes": 4654423227,
+      "mtimeMs": 1720451218893,
+      "fingerprintId": "06f71c13cba64b6b",
+      "fingerprint": "34b945a4df37a7a76b7882dfaf8ba544b1689c6451c95b055e6eba6929b9f665"
     },
     {
       "path": "G:/Media/VR/Render/Arai Rima - VRKM01353(VRKM541) - (HEVC_18).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "e1bcb6f20bee0dbea36eebd577fc83a0d69e518170f38d51e279f12357e4f3e7"
+      "sizeBytes": 1133738742,
+      "mtimeMs": 1720451602894,
+      "fingerprintId": "317f02c4a03e7861",
+      "fingerprint": "198eddabf9b43b293be76d7834b9f56e6f80be61615ba5a3589cddede6cfe343"
     },
     {
       "path": "G:/Media/VR/Render/Arioka Miu(Shiiba Mikuru) - PXVR118 - (HEVC_21.0).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "b5284d99429883c1939302706be4bbdad4a23e54b2b4ed5548dad3ecdc1febbb"
+      "sizeBytes": 1275321170,
+      "mtimeMs": 1719247621204,
+      "fingerprintId": "23f01c8eb01a111a",
+      "fingerprint": "7cb1fba7fc4660dc586e099ceb91b66897edd479ff99538811efa232068d4251"
     },
     {
       "path": "G:/Media/VR/Render/Arioka Miu(Shiiba Mikuru) - SAVR376-(HEVC_18).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "c87c12dcb310bba832d03dc191bf1caf7fdc2c80902529cd7aa974d4b0498177"
+      "sizeBytes": 3850528991,
+      "mtimeMs": 1719247633542,
+      "fingerprintId": "af7b240b42cddd26",
+      "fingerprint": "715c04d3e4ffc3ded62a9c5fd3fd3ed1ba4e865e5f218a2d439465baae4d22e4"
     },
     {
       "path": "G:/Media/VR/Render/Arisaka Miyuki - VRKM01353(KMVR697)-(HEVC_18).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "f03f731110f0f7b9cd9d7fda95f0a5593ca148aee7aa34581e75eb0ffa095d15"
+      "sizeBytes": 599820524,
+      "mtimeMs": 1720451614351,
+      "fingerprintId": "6ad5b0dcabfaebf8",
+      "fingerprint": "51b37cb3dbf4adb2a62b262855fb2d0be5affca1ce03092846bab6212c6e3b00"
     },
     {
       "path": "G:/Media/VR/Render/Arisu Mai - DSVR01462-(HEVC_18).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "d45306fb55d8522aa6064acefa412d988b301610485559a194cd1eb6d0810fd7"
+      "sizeBytes": 5287853666,
+      "mtimeMs": 1721212052159,
+      "fingerprintId": "a993f83277cf725d",
+      "fingerprint": "a0149a998f8d8b0225bef5356c67e2e4412e8e9f6cc17989eb3916bbfd5ed032"
     },
     {
       "path": "G:/Media/VR/Render/Asuka Rin - BIBIVR092(KMVR788) - (HEVC_18.0).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "f80713b1ceb22c772c6bed6101662e2497138f4a3d5a441271452c0f754e2d16"
+      "sizeBytes": 1235720242,
+      "mtimeMs": 1717589597792,
+      "fingerprintId": "83fe4649a58952a3",
+      "fingerprint": "888f0b2de65da4ec5319573f0f35f43b1684aa79f20ff93acc85044ffe4670d2"
     },
     {
       "path": "G:/Media/VR/Render/Asumi Mirai - KAVR321-(HEVC_18).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "297fd0a5fe9bf20b7237111c163028d9cd7154d8e4ce718c5c733ce70c47f0e1"
+      "sizeBytes": 4166976095,
+      "mtimeMs": 1719421260467,
+      "fingerprintId": "f6e7ff0a541952a7",
+      "fingerprint": "33a3414dd8e4efe7551d8efb18c305431fc346e4853917e34b4b1b759385b8c2"
     },
     {
       "path": "G:/Media/VR/Render/Atomi Shuri - VRKM01353(SAVR026)-(HEVC_18).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "1fa90169362c682add141b08875c74ccd9c050457bfcaaa3d07fc1c0c7b83f3b"
+      "sizeBytes": 631850541,
+      "mtimeMs": 1720451626286,
+      "fingerprintId": "8a326e2b75c20050",
+      "fingerprint": "c230b611fc097c0fc72a9554c53c00f8c9497049797a253abdf6fdec27688670"
     },
     {
       "path": "G:/Media/VR/Render/Ayase Kokoro - HNVR131-(HEVC_18).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "87e5a92fce2a84d85bddecb896499fb67a44f3b75b3d83ab447b0e49a97adbf2"
+      "sizeBytes": 3287399639,
+      "mtimeMs": 1719421227872,
+      "fingerprintId": "840104b9746539e1",
+      "fingerprint": "1a1e7f75ab7c886f79ecd9f1beb8f15734cd1badc5a076b9cfe31946ad8d634a"
     },
     {
       "path": "G:/Media/VR/Render/Ayumi Ryou(Miura Ayumi) - JUVR182(p1)-(HEVC_18_videotoolbox).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "95aa0f9434079964f36b579cf76ce55b28468818cd762f3155601a7aec368fb1"
+      "sizeBytes": 3396749433,
+      "mtimeMs": 1722362069351,
+      "fingerprintId": "051f4f9b8045602e",
+      "fingerprint": "1873fc2344a0a80c967aa3713381f91083fba619bc69fc2c3a480cf727fce9b6"
     },
     {
       "path": "G:/Media/VR/Render/Ayumi Ryou(Miura Ayumi) - JUVR182(p2)-(HEVC_18_videotoolbox).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "0ed7c68a158c3dfe79266af3a738506c1d3624e8e098ad761500e388704fdbe2"
+      "sizeBytes": 1230522941,
+      "mtimeMs": 1722362083072,
+      "fingerprintId": "9242d56170ac5f27",
+      "fingerprint": "5cc9746990fd948bd2d756d1c1a5d78f3dad847f0922af905df9f32f8a1d2876"
     },
     {
       "path": "G:/Media/VR/Render/Azusa Hikari - IPVR199-(HEVC_18).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "acdf84564e7b46b7149cd6cba351d70ec64fb9a35625eb49445c45a9613b07bb"
+      "sizeBytes": 2643817684,
+      "mtimeMs": 1719247670973,
+      "fingerprintId": "e7d54a635251b20e",
+      "fingerprint": "69b81c85a94413d4e9756e6218c45271b578ba6bb9eeb842f971d8a14e9cfdf7"
     },
     {
       "path": "G:/Media/VR/Render/Eikawa Marina - AQULA038 - (HEVC_21.0).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "a1e41a9a71b83306084de5b6d393e2a93137005077adb8ab4c41f720b8f18892"
+      "sizeBytes": 2301070210,
+      "mtimeMs": 1717589613383,
+      "fingerprintId": "d7c724b238f23bb4",
+      "fingerprint": "928ba1022fd6c05aebd57047ad3cc03da65ccfbdfa62c9cf32903f9012b9e818"
     },
     {
       "path": "G:/Media/VR/Render/Fujimori Riho(Maeda Yumi_Yamamoto Shuri_Haruka Mirai) - VRKM01353(VRKM032)-(HEVC_18).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "1d9f81a033c1298c0cf7959fcdd24dee5fb9d153852cddfdbfd39f38bb386133"
+      "sizeBytes": 703415984,
+      "mtimeMs": 1720451685360,
+      "fingerprintId": "ca6ccd0d9e5d2f05",
+      "fingerprint": "20003718d81dac506133d483091122a17aab0f5ac6a272e592fa8c5d291a7a85"
     },
     {
       "path": "G:/Media/VR/Render/Fujinami Satori(Kouda Yuma) - SAVR100(BIBIVR074)-(HEVC_18).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "f048c58724b8fa6902730fe394b0fd2cc09bd98e074b10126ec9ffa15f404f02"
+      "sizeBytes": 1739773752,
+      "mtimeMs": 1719768211915,
+      "fingerprintId": "00efb55b5f103cfe",
+      "fingerprint": "530e956785d5f4eeefef6232c1d5ff39222e8486acce9294d9c11abd75e89d8c"
     },
     {
       "path": "G:/Media/VR/Render/Fujita Kozue - SAVR-279-(HEVC_18).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "68235deb288632d3cda20bda0e9638e2fbf9715338d1785e0ac2f62861eb1b3e"
+      "sizeBytes": 3516519002,
+      "mtimeMs": 1721056319153,
+      "fingerprintId": "cb6ae3835441ad17",
+      "fingerprint": "80077125317b60971a06ceb176221678d982e0997ebc092a58743b5a8a6ee7f9"
     },
     {
       "path": "G:/Media/VR/Render/Fujita Kozue - VRKM01353(VRKM865)-(HEVC_18).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "3a2e3b6bbe9e2dab912821ba4d6b64038add954f51e348e2865fed0fb5db78d3"
+      "sizeBytes": 753595968,
+      "mtimeMs": 1720451730562,
+      "fingerprintId": "996ddf5162153069",
+      "fingerprint": "4e8ead5f5183f4858311eae6373b5d2e8ec2c02719551983f763c2e66e2be3ed"
     },
     {
       "path": "G:/Media/VR/Render/Fujita Kozue - VRKM1351-(HEVC_18).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "8b1821ccb16804199d93a90bbf3ce26ffcb9eae5369ac08b024b1855a87bab7e"
+      "sizeBytes": 4156797381,
+      "mtimeMs": 1720451718745,
+      "fingerprintId": "756a50330a6ef791",
+      "fingerprint": "271b7970ec84ce0d6a08c82b29f18b4f5da200c398c1cd2c3c42834d2ff67fe8"
     },
     {
       "path": "G:/Media/VR/Render/Fukada Yuuri(Asada Yuuri) - BIBIVR092(VRKM068) - (HEVC_21.0).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "e3b1f8a9b58482c185b52ddb25b9787c4c1ae93c623e2415f058627c76a4ddda"
+      "sizeBytes": 742901147,
+      "mtimeMs": 1717589751019,
+      "fingerprintId": "dd589059837bb603",
+      "fingerprint": "ed434023780b802278372d75764bb1668b975dea09aa1ba4bf822854df287ecf"
     },
     {
       "path": "G:/Media/VR/Render/Gojou Ren - SIVR343-(HEVC_18_videotoolbox).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "5b08f76f0683ba99de34427503236c9d38da4294ef6ebd2087266bf61aceb2a6"
+      "sizeBytes": 5351428539,
+      "mtimeMs": 1721410491090,
+      "fingerprintId": "ea593f04d5b4e423",
+      "fingerprint": "cc5a0d909c8f8476db45c90f02bee927fa2a3559dca48a394b34860d7dea3e7c"
     },
     {
       "path": "G:/Media/VR/Render/Hachino Tsubasa - SAVR179(VRKM1354)-(HEVC_18_videotoolbox).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "1c74776529a56dd554a61de1ce03f869d8e2bb123b69aa78b0339b58c8d5a6f4"
+      "sizeBytes": 1374513403,
+      "mtimeMs": 1721212141768,
+      "fingerprintId": "04a1945475fc3826",
+      "fingerprint": "3f474c8cc6edf74c4701677c3de583a447bcec65320842652f66f9659bf4765b"
     },
     {
       "path": "G:/Media/VR/Render/Hachino Tsubasa - VRKM01353(VRKM028)-(HEVC_18).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "060827da24f988e4fbbe4b1650442fa6f4466aa238cd63e79a3bb307da5eab9f"
+      "sizeBytes": 1270719178,
+      "mtimeMs": 1720205831030,
+      "fingerprintId": "c8e5ae8b226d1fad",
+      "fingerprint": "225cffaa7f7d101c9311f1bda7d96b9cc17deb38fc0591da1dd51ab3647177c9"
     },
     {
       "path": "G:/Media/VR/Render/Hamasaki Mao - SAVR153(VRKM1354)-(HEVC_18_videotoolbox).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "bfeaa3faddd3680f964f2331cb6035783fa06a429edc3715404d5e6e5f3b2b4a"
+      "sizeBytes": 1086825090,
+      "mtimeMs": 1721212154392,
+      "fingerprintId": "867c7557c97a8b66",
+      "fingerprint": "bff2cb295ed8aa4ad9101009d868ca66ad0853ed1054bfff3c49e484aade466b"
     },
     {
       "path": "G:/Media/VR/Render/Harukaze Hikaru - CBIKMV049(VRKM1354)-(HEVC_18_videotoolbox).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "260b2db6cd453a7ac64d209469dc5efe1399fc521e27ae02d01eaf42895b0a35"
+      "sizeBytes": 808051177,
+      "mtimeMs": 1721212177526,
+      "fingerprintId": "ad1d3af2b4b4cfe2",
+      "fingerprint": "6cf72131e34856cd5f65ddec34dff3c4f71c45456ac2239c92b932b5ac76af07"
     },
     {
       "path": "G:/Media/VR/Render/Hasumi Kurea(Adachi Ami) - VRKM01353(CBIKMV110)-(HEVC_18).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "3f777048863f38b808fa8e0387d97bddf91d8050c8454a58c9df29c582936884"
+      "sizeBytes": 860435484,
+      "mtimeMs": 1720451745947,
+      "fingerprintId": "cc2bb33236acc95d",
+      "fingerprint": "983be23a52c661d5c34757eb958d4cd8728dc587f215b6352943b632d77a1248"
     },
     {
       "path": "G:/Media/VR/Render/Hatano Yui - VRKM01353(VRKM530)-(HEVC_18).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "ce22ec71ef60e0674f5215f60388217b741069b5341c56ef9d982e25ea20f643"
+      "sizeBytes": 1145619955,
+      "mtimeMs": 1720451760313,
+      "fingerprintId": "79298297b2254c6f",
+      "fingerprint": "1ea741989a54352254275a4db2b96c707e63cb3d95d6159f6c34238215f19204"
     },
     {
       "path": "G:/Media/VR/Render/Hatori Misaki(Aizawa_Riina Shyuka) - AJVR045-(HEVC_18).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "74cc8c869662b5c59bc539b905b67fe1a929f9d2a2c9d229ab5d78052e0f7331"
+      "sizeBytes": 1987748016,
+      "mtimeMs": 1720451770805,
+      "fingerprintId": "4f2e6f1981480b85",
+      "fingerprint": "3b93608bb8e66af50b3ddd45bc59ff57a4ae360eee69b4a62e07325bc826c976"
     },
     {
       "path": "G:/Media/VR/Render/Hazuki Miria(2022) - VRKM01353(VRKM841)-(HEVC_18).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "8fbe5e73afc683548e38c62324999d8c33fdb95b1ed8bdea528f219edcaee7f1"
+      "sizeBytes": 956942349,
+      "mtimeMs": 1720451830790,
+      "fingerprintId": "3fdd6c982b38225a",
+      "fingerprint": "ea1ed627474778123ad56ec4f6718e97da0fa162528da1706e3222f9878a6bed"
     },
     {
       "path": "G:/Media/VR/Render/Hibiki Ren - KAVR309-(HEVC_18).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "88980540e88126e3c49d198ce625fc0abfd660c0dda5c1d5c0b59c77dbdc7508"
+      "sizeBytes": 2676244566,
+      "mtimeMs": 1719247684296,
+      "fingerprintId": "16bc3bea491ee138",
+      "fingerprint": "0fed988d4b0f369e5839dd229cd09125d6598c2bee42634038f0b0aa6e75cb01"
     },
     {
       "path": "G:/Media/VR/Render/Himesaki Hana - VRKM01119-(HEVC_18).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "f6b357a78f3dac281df2d6317e7471d798cc017dd1b0c6bf42f616f96d8b029d"
+      "sizeBytes": 3181322374,
+      "mtimeMs": 1719421338231,
+      "fingerprintId": "76ee58f2a2fc9ded",
+      "fingerprint": "7da205909a37ee0608738200611f3e7df54c72d67a15258864d90792efac0361"
     },
     {
       "path": "G:/Media/VR/Render/Hinata Yura(Hirose Mitsuki) - BIBIVR092 (BIBIVR045) - (HEVC_18.0).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "d09eef965b4e5e298ea9159359c0d5974ea3fcfca8fb264ed4afc3b499666c46"
+      "sizeBytes": 1166051694,
+      "mtimeMs": 1717589786091,
+      "fingerprintId": "415aef0add70eff8",
+      "fingerprint": "4f94a22a1df96ba15d8a9f270a0fbea16fe638a6130de2a510b67af2640b48d8"
     },
     {
       "path": "G:/Media/VR/Render/Hongou Ai(Nikaidou Yume)  - SIVR292-(HEVC_18).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "67d30d6984c9cb00a1914926b5bc75476e1c5831dde02cb218266fb93ee35790"
+      "sizeBytes": 3098249851,
+      "mtimeMs": 1719421364714,
+      "fingerprintId": "e104885a05e51e1f",
+      "fingerprint": "fb506b101cb34ae95d74309d1a066b94bb2be148cfb57a57466b7281549adee2"
     },
     {
       "path": "G:/Media/VR/Render/Hongou Ai(Nikaidou Yume) - SIVR291-(HEVC_18).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "9c6b8e92a59df806d4e1fbef6b01e1cca1b663e0898ed2d217c49a3982dad957"
+      "sizeBytes": 4140325209,
+      "mtimeMs": 1719421379486,
+      "fingerprintId": "551835ac94390f3a",
+      "fingerprint": "be6974ec63b0735043422ec71f749edd9a5c9c72c513822588186120963f06ed"
     },
     {
       "path": "G:/Media/VR/Render/Hongou Ai(Nikaidou Yume) - SIVR349-(HEVC_18).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "c6e166d156948e9f0e168cf8972e5f5c743a611e5a585589fd5d501d5cae3a78"
+      "sizeBytes": 3180249515,
+      "mtimeMs": 1719421427598,
+      "fingerprintId": "5a7a45c45788c752",
+      "fingerprint": "7fd72df4b243030aa1a513db8ed78f809751fbfb1091c236224acd9613cd5843"
     },
     {
       "path": "G:/Media/VR/Render/Honma Yuri(Aiuchi Tsukasa) - CBIKMV103(VRKM1354)-(HEVC_18_videotoolbox).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "28dff4e793cf7543c1770fb21efab573304cdc4434acf9b8f201002d31daab40"
+      "sizeBytes": 1639664348,
+      "mtimeMs": 1721212263419,
+      "fingerprintId": "2dd284dc98369820",
+      "fingerprint": "32767dffc15635905d36e47452b6f309f9dc8874acfc11e9625a301d4e35a617"
     },
     {
       "path": "G:/Media/VR/Render/Honma Yuri(Aiuchi Tsukasa) - PXVR118_merged - (HEVC_21.0).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "90ffd30c2d5a256f2b7593730ebf1556a1069462197bc2de34402db775dde9a9"
+      "sizeBytes": 868348280,
+      "mtimeMs": 1717432467488,
+      "fingerprintId": "da3ec1b15f06705a",
+      "fingerprint": "7533584c8c905ac288602f40493039021ce0eb8e4928df6fbb43f9c2045eed54"
     },
     {
       "path": "G:/Media/VR/Render/Hoshino Natsuki -  URVRSP255-(HEVC_18).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "3fd6d6b2646a09114ba06d8f2c0b51010e1ef06ba5acd2fe425f8cb26d89558c"
+      "sizeBytes": 2359943997,
+      "mtimeMs": 1719421859816,
+      "fingerprintId": "96f58b64a662bc71",
+      "fingerprint": "450329a92a6f8ff455e1467bd53095b014a5f219406c4eeca321ee3a3fe040a6"
     },
     {
       "path": "G:/Media/VR/Render/Ichii Yuka - TMAVR201-(HEVC_18).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "e958797120520121d1be37ac40d857259154070ac5ba2ff48434f70ff9d5d8d2"
+      "sizeBytes": 2188706635,
+      "mtimeMs": 1719593753705,
+      "fingerprintId": "5a58f0a06ad1ceeb",
+      "fingerprint": "ae72043e2db1131635b38f63599a873c20977e0fde0597f24777338b2db2ec84"
     },
     {
       "path": "G:/Media/VR/Render/Iioka Kanako - SAVR179(VRKM1354)-(HEVC_18_videotoolbox).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "51be99820f22c8e3305bb62172e625b7ff6e4db955b729575cc5fe11e8e35722"
+      "sizeBytes": 972472950,
+      "mtimeMs": 1721212291377,
+      "fingerprintId": "8b28c9bf980ba790",
+      "fingerprint": "2273ebe6a4d6bd0d379ca56c687994086bf82200a1f9c1de73801b59ca419c2d"
     },
     {
       "path": "G:/Media/VR/Render/Imai Kaho - KMVR689(BIBIVR074)-(HEVC_21).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "8d00951bc948e72e4ea8098a6e3d0df25043c31d951940c39697f5128df6d782"
+      "sizeBytes": 2330940477,
+      "mtimeMs": 1719768240750,
+      "fingerprintId": "002b1cb1412b9def",
+      "fingerprint": "ed64c84565378723de195ad2c795dacc60195bea6ac6979a7f63b7be2517d551"
     },
     {
       "path": "G:/Media/VR/Render/Inaba Ruka - KBVR024(BIBIVR074)-(HEVC_21).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "83e889b07cf902d1f7c64daa7361e9db3613ff287484355fdb4c28f6670c92be"
+      "sizeBytes": 2289987470,
+      "mtimeMs": 1719768286485,
+      "fingerprintId": "4d2b7cd2d2f2945a",
+      "fingerprint": "11d28b1f0a3ab14397040888c3b4d595d8ca014ba9cba13eab70216687058748"
     },
     {
       "path": "G:/Media/VR/Render/Inaba Ruka - KBVR043(VRKM1354)-(HEVC_18_videotoolbox).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "e538005cc78f2ba49134122dab71af803efa79dabc55fe691953784de59c1711"
+      "sizeBytes": 1225786201,
+      "mtimeMs": 1721212331975,
+      "fingerprintId": "ad10d6398daeaa8a",
+      "fingerprint": "28a55e93f4fddf32d25f1532bafc98a49c5a4fbcf493049dfe784b3845fc609e"
     },
     {
       "path": "G:/Media/VR/Render/Inaba Ruka - VRKM456(VRKM1354)-(HEVC_18_videotoolbox).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "2ae1cf60bb038c8304c10a34d0309c95d1b74b8082c1268a4245c4234dce9342"
+      "sizeBytes": 645598585,
+      "mtimeMs": 1721212319814,
+      "fingerprintId": "9d2378ac808ab7be",
+      "fingerprint": "4c16cfa01af95e6ee179920d32375a6d6134af2960ac58e1515bcdc4b27f742c"
     },
     {
       "path": "G:/Media/VR/Render/Ishihara Nozomi - VRKM01353(SAVR085)-(HEVC_18).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "8f578d81dd406f6ffc1762dbb8d5f7f7f0a9c6cc08e094c71c84857971eecd9f"
+      "sizeBytes": 822740724,
+      "mtimeMs": 1720451880988,
+      "fingerprintId": "8f580c2e429cf387",
+      "fingerprint": "8c9a524bd05a3ede154d0d7a105fa8780a5a2f212fb82b7fd8bb80ccdf74b38f"
     },
     {
       "path": "G:/Media/VR/Render/Kaede Karen - IPVR039-(HEVC_18_videotoolbox).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "abb94a7838fa1f323c84b012edb898cd55d1da8e57c9ebed6b9c897a59c4131a"
+      "sizeBytes": 3134444975,
+      "mtimeMs": 1722362101570,
+      "fingerprintId": "612e2b1fc80d9635",
+      "fingerprint": "f82b97c54985c606d5ab48ea279bc0a045bd7f72372302b327a0f5b735ee0472"
     },
     {
       "path": "G:/Media/VR/Render/Kaede Karen - IPVR045-(HEVC_18_videotoolbox).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "3f5b9809f88827b0e6e96156fc7894db7832f351cd2071de466c6c9479d5d728"
+      "sizeBytes": 4653106136,
+      "mtimeMs": 1722362115559,
+      "fingerprintId": "b090415b990f079a",
+      "fingerprint": "360b4d0c286225ede4608b8e1f57f719f43571b622b1a8098f7c2d23506ad40e"
     },
     {
       "path": "G:/Media/VR/Render/Kanade Kanon - VRKM01353(VRKM264)-(HEVC_18).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "2da59265e6867283f1159d1d33b1722d7647c444c59343b61704db359db67ab6"
+      "sizeBytes": 1122427441,
+      "mtimeMs": 1720451894168,
+      "fingerprintId": "02a5d60f4618c5cc",
+      "fingerprint": "0c5cf6d634a9664a8dfc392149fb7a3935ac3e3303ba08153304b5b2151021bb"
     },
     {
       "path": "G:/Media/VR/Render/Kanon Urara - VRKM01353(BIBIVR032)-(HEVC_18).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "fb4850a82ad33f7f8528c2b4cfd0b6a12ee995db1d7dbcd383a190c5ea2e79f6"
+      "sizeBytes": 1185970462,
+      "mtimeMs": 1720451908831,
+      "fingerprintId": "51566bceef95a069",
+      "fingerprint": "ac95201a455e16b9d4e926bcde4c2432ffcc859b7261c6cbe11202b6aacc865f"
     },
     {
       "path": "G:/Media/VR/Render/Kashiwagi Konatsu - DSVR01533-(HEVC_18).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "d3c56cd6633cfe97fbe528e04eb6612cabe2c39690f11bd620fab6aafd04f044"
+      "sizeBytes": 2235917636,
+      "mtimeMs": 1718652964428,
+      "fingerprintId": "3a6411d40432f30f",
+      "fingerprint": "75fbdd723b1b23bc31cc8a05744b0c1cc77fbf2dab01f9dfb8bc9876f9ba4ad2"
     },
     {
       "path": "G:/Media/VR/Render/Kashiwagi Konatsu - VRKM01353(VRKM779)-(HEVC_18).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "e8d70362de4ce095135deaaa1e7c96b2148214298e8a8c3a83628f5be364f892"
+      "sizeBytes": 727155691,
+      "mtimeMs": 1720209929035,
+      "fingerprintId": "8445124ea0f08c9b",
+      "fingerprint": "1eaa7b47717ec7b783540b1381a2bfaa2d501e8d7946004980e8adba8096874b"
     },
     {
       "path": "G:/Media/VR/Render/Kashiwagi Konatsu - VRPRD018-(HEVC_18).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "253c988354c401479a4c1122463b70c036eb5aa2ec62ccdaf79bc3c837588115"
+      "sizeBytes": 3188524821,
+      "mtimeMs": 1721056338284,
+      "fingerprintId": "28a3f4f72725ae60",
+      "fingerprint": "94c58114c9cd6d26dea72545e034f7105a9019afb116eb2726203dae5940ab6c"
     },
     {
       "path": "G:/Media/VR/Render/Kashiwagi Konatsu - VRPRD018(p2)-(HEVC_18).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "b7ad48a550b67fbd30c79f1157783a75651ae308711210c66fe578bb757af903"
+      "sizeBytes": 1887052907,
+      "mtimeMs": 1721056351863,
+      "fingerprintId": "3dd14dd54e903703",
+      "fingerprint": "b64d448e90086df522b58b8104d5b065b3c54f35a971cc3e60fd471532a10695"
     },
     {
       "path": "G:/Media/VR/Render/Kashiwagi Kurumi(Onose Miu_Nagai Mariya_Igawa Nanoka) - VRKM01353(CBIKMV053)-(HEVC_18).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "030fb33d13ade0ed7a4a838fc06eabcfde87338a0685531f87cec7c7cf49d88a"
+      "sizeBytes": 1271764944,
+      "mtimeMs": 1720451935222,
+      "fingerprintId": "f8fbd9ca277323f9",
+      "fingerprint": "cf3451a92017f530942c9eb1518c300040139039a84ac1e132e2b4776060fdc8"
     },
     {
       "path": "G:/Media/VR/Render/Katou Momoka(Satou Nonoka) - PXVR118(HEVC_21.0).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "4006d67b5218003290c30c34825ed1f7a91741a0f4e356b328234ccdff113e69"
+      "sizeBytes": 886736894,
+      "mtimeMs": 1718652326123,
+      "fingerprintId": "99fa59cc97119681",
+      "fingerprint": "617d10a173462682f01f72f31039105da936607ede68d36ce82d1900ee7d2967"
     },
     {
       "path": "G:/Media/VR/Render/Katou Momoka(Satou Nonoka) - VRKM423(VRKM1354)-(HEVC_18_videotoolbox).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "64a316f689feb6ce01cd69a4edcd5a087ca4e00b23b32b9b4a19989c3b070ae8"
+      "sizeBytes": 1053479981,
+      "mtimeMs": 1721212379805,
+      "fingerprintId": "d0dc010952ae5340",
+      "fingerprint": "9a8ad47704e0ddd974edebe696cb7191ef824404784c82a09ebcb9c639068fdf"
     },
     {
       "path": "G:/Media/VR/Render/Kawagoe Niko - SIVR340(p1)-(HEVC_18_videotoolbox).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "85ff7499c10b8648e064eadea6e05ab1a29caf1bc222b473c0cfee48e43ab730"
+      "sizeBytes": 2774555845,
+      "mtimeMs": 1721212391266,
+      "fingerprintId": "4a775e50341916a1",
+      "fingerprint": "b1733086877eaaac6a7817ebdb901950284c13d039455d5d187bdbee74004bf2"
     },
     {
       "path": "G:/Media/VR/Render/Kawagoe Niko - SIVR340(p2)-(HEVC_18_videotoolbox).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "419b54ea0cac75ef72f299778a16d0b63736045e0e43a970cf7ec616e9d38447"
+      "sizeBytes": 2899304071,
+      "mtimeMs": 1721212402842,
+      "fingerprintId": "269a6e8eef3e6af7",
+      "fingerprint": "4946a88395d41cc649d30aff66fbb5774938853db1bd18cd703298efe9d5a077"
     },
     {
       "path": "G:/Media/VR/Render/Kawakita Haruna - VRKM01353(KMVR847)-(HEVC_18).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "ff0b4fc43106641eb7081b99fd1f141413ece504ec97da151b761d201bcac880"
+      "sizeBytes": 368767940,
+      "mtimeMs": 1720451946540,
+      "fingerprintId": "6514d6c14db5af67",
+      "fingerprint": "4e51fa9f79ed21803d1e75fc654ad0756b73e4ce7d1e6351bd141d45f93a57ec"
     },
     {
       "path": "G:/Media/VR/Render/Kawakita Saika - SIVR302-(HEVC_18).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "2a287b2fe7049fbf80cefc86e2d323333b29d068377e4a17ee9c27112bacf6e3"
+      "sizeBytes": 2420096933,
+      "mtimeMs": 1719593788621,
+      "fingerprintId": "50d67cc590148da7",
+      "fingerprint": "d6f3e67a76a72fec5eeaf9e365f6358f6d90064d30f67e51aea389fd860b8b30"
     },
     {
       "path": "G:/Media/VR/Render/Kawana Ai - VRKM01353(KMVR768)-(HEVC_18).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "12ce3155ed06b4208f2d79f92af48dae603bc9b756d1b7a681f5cb241cd83841"
+      "sizeBytes": 1059240646,
+      "mtimeMs": 1720451961462,
+      "fingerprintId": "143d6c4919af01f0",
+      "fingerprint": "8f17b99589b146cf0d6aab595460a1c8807cd5a860973e21d420ebd5baf728c6"
     },
     {
       "path": "G:/Media/VR/Render/Kawana Misuzu - VRKM01353(SAVR098)-(HEVC_18).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "07d4b148e09ad88186fd7ba2d9d98f1aebe235a6b26da24ce4236289152dabbd"
+      "sizeBytes": 1425454828,
+      "mtimeMs": 1720211699232,
+      "fingerprintId": "2caca61c07c55164",
+      "fingerprint": "39371f84a0249245cfa5f008528375d3c10131b33aeec07a98067a4381d22f3f"
     },
     {
       "path": "G:/Media/VR/Render/Kawane Kurumi - BIKMVR055(BIBIVR074)-(HEVC_18).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "085af6cd06b6720fdf6ad5e856f802558b8bcc1aa92e7f5dd3b5c6ff62bda9a2"
+      "sizeBytes": 2117880401,
+      "mtimeMs": 1719768311881,
+      "fingerprintId": "2f12ebda6ec7830c",
+      "fingerprint": "33a12f8dfd3b9d62d919bd3b1665ba0c4ef7d666d4acab4196d8eccfaf46f19c"
     },
     {
       "path": "G:/Media/VR/Render/Kikuchi Maya - DSVR01546-(HEVC_18_videotoolbox).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "250f25565f87bca5789da441780d3184041735d75627ff4fb7d97d4145ade078"
+      "sizeBytes": 877193724,
+      "mtimeMs": 1722362187607,
+      "fingerprintId": "f5737204eb968435",
+      "fingerprint": "ba356c7d07115f1fec0aa488620d17f5b8cc89e358adc941e8140ba577eaadaa"
     },
     {
       "path": "G:/Media/VR/Render/Kinoshita Himari(Hanazawa Himari) - VRKM01053(VRKM1354)-(HEVC_18_videotoolbox).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "0b0ae6b4c3a885fc6fc68546f0bd2facee6585bddd58733c2125e837a625d8a0"
+      "sizeBytes": 1314779882,
+      "mtimeMs": 1722262881821,
+      "fingerprintId": "220b14dfdff86eb2",
+      "fingerprint": "43e802b7e94e5383649c742438302103e7474612c6b48c71c87f62e15d355e72"
     },
     {
       "path": "G:/Media/VR/Render/Kiyohara Miyuu - SIVR289-(HEVC_18).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "34b74d81e997f733395f9ce2ede75d3a1206960012f3120271707f5a84a1c71b"
+      "sizeBytes": 3803197542,
+      "mtimeMs": 1719593799714,
+      "fingerprintId": "3b3b7f3c1f424ca4",
+      "fingerprint": "fc9607c2d199735f718478b35fd9ccd5497ac270db1d6ff950c5087f203ab9bf"
     },
     {
       "path": "G:/Media/VR/Render/Komine Hinata(Hanyuu Arisa) - VRKM01353(SAVR135)-(HEVC_18).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "d49fbe581e903594edf51094f580d7fab3b8006956e622ec02a18bbc8332f08c"
+      "sizeBytes": 679468872,
+      "mtimeMs": 1720451986561,
+      "fingerprintId": "10b119f7355f8f77",
+      "fingerprint": "6d928c6e74d7411dc5b81644a3c75aa8e6c8c79092729ab2cc54a8309c10a294"
     },
     {
       "path": "G:/Media/VR/Render/Konno Miina - DSVR01546-(HEVC_18_videotoolbox).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "7f265e14fe96b3fd618970f6436d0d0dc0157ecdf1e294b38b47a5e65b04fa51"
+      "sizeBytes": 659092418,
+      "mtimeMs": 1722362201547,
+      "fingerprintId": "0b88aaca71510987",
+      "fingerprint": "b72851f8ce982632c0112f869511bac66a93e0d4d1e734c5e297efc76c36cf56"
     },
     {
       "path": "G:/Media/VR/Render/Kudou Rara(Itou Haru) - DSVR01546-(HEVC_18_videotoolbox).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "f5bd799471d146e5a2457b14676d004a5ecbdf309573916743e0fd3e8668fe2b"
+      "sizeBytes": 1205956343,
+      "mtimeMs": 1722362215646,
+      "fingerprintId": "1533c7456731e0d3",
+      "fingerprint": "4eb52a0c9a5d35c6a7c504f82c3ba76732cab65f175de07e3646c9bd2bda6663"
     },
     {
       "path": "G:/Media/VR/Render/Kurata Mao - VRKM456(VRKM1354)-(HEVC_18_videotoolbox).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "865c59cbbf31f51de156a054807d02a506d173c8bc776495c5a1e4e97b38b36e"
+      "sizeBytes": 1330771482,
+      "mtimeMs": 1721212451131,
+      "fingerprintId": "63f93e0d38c19172",
+      "fingerprint": "c6c9af1d581e3997ae09e548a26e9ef32f43f0b3c963c9e82f8aaaa4416d8edd"
     },
     {
       "path": "G:/Media/VR/Render/Kuroshima Rei - SIVR301(p1)-(HEVC_18).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "b3384735a64201d7735545c91c19a9ccc19554b2b7fc8333c279de2f01dec386"
+      "sizeBytes": 3056127600,
+      "mtimeMs": 1719946171492,
+      "fingerprintId": "b760eb9b281dd9c2",
+      "fingerprint": "f69be9cd48723074603d07bfdc6cd21b2cee86fad690682f34276b7294a39cd2"
     },
     {
       "path": "G:/Media/VR/Render/Kuroshima Rei - SIVR301(p2)-(HEVC_18).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "38e6c8617c7fd54d8b0c55d9d76613b5f40226eefb9d7687e9a2e6b280b0ee2b"
+      "sizeBytes": 3227960788,
+      "mtimeMs": 1719946183840,
+      "fingerprintId": "656a778d16fcb2ff",
+      "fingerprint": "1b2acc9e005d028dd54b27adb9151817fb992122a9b4c2a2d98d3be72ad6c1fa"
     },
     {
       "path": "G:/Media/VR/Render/Kurumi Sakura - URVRSP322-(HEVC_18_videotoolbox).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "a151ce1fb400f4e945a62336e0137e8707acfbed61253a708607181437445b9a"
+      "sizeBytes": 3858788699,
+      "mtimeMs": 1721410534155,
+      "fingerprintId": "0704dd1a202c1b36",
+      "fingerprint": "cbbbec901a79297481f5b5e374c84d5f533182a75285045e6c0a6671141873da"
     },
     {
       "path": "G:/Media/VR/Render/Kurumi Sakura - VRKM01353(VRKM986)-(HEVC_18).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "320fa47b26535fc83a4923d84c8f312d50d22a0d411d40484cbd91fd18982a18"
+      "sizeBytes": 593147087,
+      "mtimeMs": 1721410875149,
+      "fingerprintId": "592b9c825089813f",
+      "fingerprint": "797b208f1805df8e96e4a9df17be77ae378d8dfd66b1eac90a213e80dfb320d0"
     },
     {
       "path": "G:/Media/VR/Render/Kururugi Aoi - SAVR164(VRKM1354)-(HEVC_18_videotoolbox).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "2a14bdb5ef719ae111b1fad70ff15f1b8bc8688957db886518fceb1e0bb8ef0c"
+      "sizeBytes": 1478198206,
+      "mtimeMs": 1721212463226,
+      "fingerprintId": "8774ec4686480fcf",
+      "fingerprint": "746d4da32c57e670a8acebc91e7873e0c4259836a24fb1f50a18ca601a2e0ce0"
     },
     {
       "path": "G:/Media/VR/Render/Kururugi Aoi - VRKM-901(VRKM1354)-(HEVC_18_videotoolbox).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "528a12a4d4bb9737bf5eae1ebd23fe543d11cb01b1b4d726d1c5df6296211952"
+      "sizeBytes": 1354816426,
+      "mtimeMs": 1721212477369,
+      "fingerprintId": "d27138843c2e3c6f",
+      "fingerprint": "5372963db66c16cd573a6f4460fd374c5e8d04889fd6ea07a7af76b8c8efcb55"
     },
     {
       "path": "G:/Media/VR/Render/Mari Rika(Narumi Urumi_Nagisa Urumi_Hirose Riria) - VRKM01353(KMVR608)-(HEVC_18).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "5796950f4311d1a4f27a8db1eb3f36254b8678b52509d2219cba9bb2d0c3a309"
+      "sizeBytes": 434172569,
+      "mtimeMs": 1720452000370,
+      "fingerprintId": "11fe90bef0c1080a",
+      "fingerprint": "b80afba0b1a8ec12d6abd918d38c3a7c365e00e6ae96b3d30a97f44f5e7648da"
     },
     {
       "path": "G:/Media/VR/Render/Matsumoto Ichika - BIBIVR092(CBIKMV082) - (HEVC_21.0).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "56df8275c05759c903b4377d368ee953e4b29fb458355332d70c2aa55fda955a"
+      "sizeBytes": 527153152,
+      "mtimeMs": 1719593842770,
+      "fingerprintId": "5416dbac53abbae1",
+      "fingerprint": "745dc6514cd4f55d38a39b21fec19539c43556f7272d451d788eb0633e0e406c"
     },
     {
       "path": "G:/Media/VR/Render/Matsumoto Ichika - DSVR039-(HEVC_18).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "578308cd83ac4bf528dbbf4a5cdb2f6f366c3620f3fda964497f658f7bd4d0b5"
+      "sizeBytes": 3201546719,
+      "mtimeMs": 1719593832831,
+      "fingerprintId": "654e0be81446c9b2",
+      "fingerprint": "2371cc7b2c08a3d000e52cd4389d679c3eb14c4299e6cfb7cb1b08ba7c077ad3"
     },
     {
       "path": "G:/Media/VR/Render/Matsumoto Ichika - SAVR164(VRKM1354)-(HEVC_18_videotoolbox).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "0e33006db20fe77d98be0ef37e67e2372af75d3ae34b4353416504b5424ddb92"
+      "sizeBytes": 1922578826,
+      "mtimeMs": 1721212490602,
+      "fingerprintId": "cdca3b6c13dc41dd",
+      "fingerprint": "a597f2f8a7468f2a56d2580b9be28f41367080977154a1f644e8d18ad677fe1d"
     },
     {
       "path": "G:/Media/VR/Render/Matsumoto Ichika - VRKM642(VRKM1354)-(HEVC_18_videotoolbox).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "8e9e8aa77d617ebcb346bf8b50fcb7d00a5decba0bc4bef87fa9469c7662f5ed"
+      "sizeBytes": 1160555850,
+      "mtimeMs": 1721212512875,
+      "fingerprintId": "cda897ccf1eb41ef",
+      "fingerprint": "1913927de5a070c5cd7d5fc54739b3a739e72ed9460120893ccaa75057b967b9"
     },
     {
       "path": "G:/Media/VR/Render/Matsumoto Rio - MDVR293 - (HEVC_21.0).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "ee665194f75d4eb7c4b7b413fa82eb9ecf906fa3a25631795749409320241185"
+      "sizeBytes": 1480297679,
+      "mtimeMs": 1717589942094,
+      "fingerprintId": "cfe75a090a3318d5",
+      "fingerprint": "7b631edc4c565afab7fd426b55a6a85f846203e62e27ffd396300dc171df5911"
     },
     {
       "path": "G:/Media/VR/Render/Mikami Yua - SIVR272(p1)-(HEVC_18_videotoolbox).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "81683fdc743f3406d587cb3bdcdd164c2720d2f9c54803e9899048243b6bda18"
+      "sizeBytes": 2365802866,
+      "mtimeMs": 1722362234085,
+      "fingerprintId": "cbf60405126e7a6f",
+      "fingerprint": "4ac7a4fb46d6d833dcb5026368fe9a21cdb1d46a4d44999a03abeb165281f8e3"
     },
     {
       "path": "G:/Media/VR/Render/Mikami Yua - SIVR272(p2)-(HEVC_18_videotoolbox).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "f8bbf0d3b8121b924835e85246f52e396b53dc1881aa8dbd7017430230479d57"
+      "sizeBytes": 3585044635,
+      "mtimeMs": 1722362246983,
+      "fingerprintId": "34d73d057027629d",
+      "fingerprint": "f0fbb0158dead5416cfd60d150e739f00e7fb05491395f55e6bd68bb8f6b4b2e"
     },
     {
       "path": "G:/Media/VR/Render/Minase Akari - VRKM01353(VRKM711)-(HEVC_18).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "1b2349b7c62ba50ebad055c0637cc4197d6c8a495ae37757109d1af899dac646"
+      "sizeBytes": 514470831,
+      "mtimeMs": 1720452035347,
+      "fingerprintId": "822c2397059c8235",
+      "fingerprint": "733d3f41be09e079696d98c9014efcff540178ab7256a0a2fd371b3e7277910c"
     },
     {
       "path": "G:/Media/VR/Render/Minasuki Hikaru - VRKM642(VRKM1354)-(HEVC_18_videotoolbox).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "965a5a4c679d5ec8d18af41ed96e44a92337c11ec4eecc72215bae1e30a9bbef"
+      "sizeBytes": 1291148582,
+      "mtimeMs": 1721212529978,
+      "fingerprintId": "4b882e9a2338b454",
+      "fingerprint": "30bfb26aab97ab852df7ac147aaf15419c7ffc8c8be287bfdd604145839595aa"
     },
     {
       "path": "G:/Media/VR/Render/Misono Waka - BIBIVR118 - (HEVC_21.0).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "6cd173879da7ddcbb50ea528c5c099a7313011a5a6795e2b5017761fec61bd05"
+      "sizeBytes": 1624788079,
+      "mtimeMs": 1717384892498,
+      "fingerprintId": "83414dc309b03700",
+      "fingerprint": "35fd07be89c1843a47cdec2db5627751c19390eb0b33dc8ad4ba997e2789a163"
     },
     {
       "path": "G:/Media/VR/Render/Misono Waka - KBVR043(VRKM1354)-(HEVC_18_videotoolbox).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "30a02fe7fe7f9742028a5ebb2d53fd0e8f91676f1f2e776f04b19ccc66fb6c17"
+      "sizeBytes": 1009742633,
+      "mtimeMs": 1721212546955,
+      "fingerprintId": "42c43ae713f7010e",
+      "fingerprint": "74a8f1519d3aa8dd938d38117506c77990a6f5b1ec0b9aa85ea30c8654fdb6ba"
     },
     {
       "path": "G:/Media/VR/Render/Misono Waka - SAVR376-(HEVC_18).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "fab9064749cc57c58c0740c542f8c81c52369ac8f7f1fdabe1e3140ac399d2a8"
+      "sizeBytes": 4466061826,
+      "mtimeMs": 1719168298773,
+      "fingerprintId": "3f02d050fd71c220",
+      "fingerprint": "6fb2c1162f6217aa6b56767f7557291edac40bba91d760d9ed1991dda0fbdf12"
     },
     {
       "path": "G:/Media/VR/Render/Misono Waka - VRKM01353(VRKM593)-(HEVC_18).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "a1b7324437835ab5a9be6e5cb859be758c5af7d4a65383602489b0bc5e53faef"
+      "sizeBytes": 840954103,
+      "mtimeMs": 1720213777634,
+      "fingerprintId": "bf1f12ae5d20d7e0",
+      "fingerprint": "fed4928a82e241d552220c599f53495981eee120320598bbde15e0b98d13c8c8"
     },
     {
       "path": "G:/Media/VR/Render/Mita Sakura - VRKM01353(SAVR216)-(HEVC_18).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "267612a4c6ee875085aa7b7afd08b482fa62a8b23f1f23877364802043716351"
+      "sizeBytes": 732909098,
+      "mtimeMs": 1720452083579,
+      "fingerprintId": "f33b1020343f4715",
+      "fingerprint": "ad494b51e7501f5dbd3a68c6d7fa1ca49be257c6db5d8cc003d00b4ac7affcc3"
     },
     {
       "path": "G:/Media/VR/Render/Miyashita Rena - MDVR286-(HEVC_18).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "657dff4f03f293c4600b8e6eb7fd0c9979d65fa8b9662bcc4aead34416467985"
+      "sizeBytes": 2503669008,
+      "mtimeMs": 1719247880084,
+      "fingerprintId": "8442b158870253b2",
+      "fingerprint": "f9fae6b6d89eeb378e4b170bc831e6dc2f8115f37f912dc81248a42cb48862eb"
     },
     {
       "path": "G:/Media/VR/Render/Momonaga Sarina(Kurokawa Sarina) - SAVR153(VRKM1354)-(HEVC_18_videotoolbox).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "44f6353b78512e9366f152c152742ef0d467cb1cc2adf71f36c5218ad11b5d38"
+      "sizeBytes": 1220764299,
+      "mtimeMs": 1721212607539,
+      "fingerprintId": "7a1d3d68e4e82328",
+      "fingerprint": "8eaa6cb09f0745ee1938f817ed66d3efefc63d5422b9aca7318bd0719fa399f0"
     },
     {
       "path": "G:/Media/VR/Render/Momonaga Sarina(Kurokawa Sarina) - VRKM01053(VRKM1354)-(HEVC_18_videotoolbox).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "285efaae54003037b396ba18f3faccba4c5922c305c101d3205a51499594a9e5"
+      "sizeBytes": 998240399,
+      "mtimeMs": 1721212630361,
+      "fingerprintId": "d243d898e139dff6",
+      "fingerprint": "de360826fd6646fe1c8fb8a14e7b0876ae57fc0eba6bdc3fef74a462ef22c642"
     },
     {
       "path": "G:/Media/VR/Render/Momonaga Sarina(Kurokawa Sarina) - VRKM491(VRKM1354)-(HEVC_18_videotoolbox).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "34a399083dd53bea5d869906dbc8054b6a3bc1c31badb1d87f31766303b9a678"
+      "sizeBytes": 702162378,
+      "mtimeMs": 1721212619471,
+      "fingerprintId": "b634c51478961e5f",
+      "fingerprint": "926eeb4ca514288948e68b50c9be4acd531213af228a5806cab5d658e10c6dfb"
     },
     {
       "path": "G:/Media/VR/Render/Momono Rin - VRKM01353(BIBIVR072)-(HEVC_18).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "64851323f708b346576ad7cf42e22e0e8a606039dc4b56c01660f4ea7132b069"
+      "sizeBytes": 1268825416,
+      "mtimeMs": 1720452095121,
+      "fingerprintId": "fe7111ad17066140",
+      "fingerprint": "5d84a8b166f0ae19af44bc418dbd9b1a01e3f5c0c2a6d428c2303a1916d45f94"
     },
     {
       "path": "G:/Media/VR/Render/Momosaki Miiro(Nanasaki Miiro) - VRKM01213-(HEVC_18_videotoolbox).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "ecc11593635b82bb3f872545ec5515ded383415957879cba063bcdb0d2338ba6"
+      "sizeBytes": 2875248890,
+      "mtimeMs": 1722362264239,
+      "fingerprintId": "1221cfabf82755cf",
+      "fingerprint": "f199356dc6431c39ee6f9cf1a9fcd9916903f4797a9b8e466a7993c4a2e0e401"
     },
     {
       "path": "G:/Media/VR/Render/Mori Hinako - VRKM01353(VRKM696)-(HEVC_18).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "add0e7ee0e20ef9017de0a347625bdeb7c0dbb11f88bb082c3dc1f2cc7c10f62"
+      "sizeBytes": 907260291,
+      "mtimeMs": 1720452118017,
+      "fingerprintId": "92392175e172f8a9",
+      "fingerprint": "777f5099987bec10a5ecd19fe09a520e1a8a1f3857ac48d15a7d3c823db725da"
     },
     {
       "path": "G:/Media/VR/Render/Mori Hinako - VRKM491(VRKM1354)-(HEVC_18_videotoolbox).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "6ce54226ad6cc31ae464d3cbcc05d2171a7054b1e59efc743f96a03274111337"
+      "sizeBytes": 1282727336,
+      "mtimeMs": 1721212643207,
+      "fingerprintId": "99657ea2bfe7054b",
+      "fingerprint": "d7fb30e5559acc831c584c7e8abeeb1dfcf3c540e9a0c9a2dd739408f1217063"
     },
     {
       "path": "G:/Media/VR/Render/Mukai Ai - VRKM324(BIBIVR074)-(HEVC_18).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "0e8ddb338bf54403b5de22776cdbcc6c25274b2d54062fb96922f792d335d151"
+      "sizeBytes": 1200655083,
+      "mtimeMs": 1719768381558,
+      "fingerprintId": "6207805792d06fa3",
+      "fingerprint": "aa415453c473f866e862fe7faf6a8716c226b35ff47e77d469395f1775b0c7bd"
     },
     {
       "path": "G:/Media/VR/Render/Nagai Mihina(Azumi Hina) - VRKM897(p1)-(HEVC_18_videotoolbox).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "7fb08791e0a747acf74502416c07fb7503a639cb8e329d7d3f6d2b3d69b50e51"
+      "sizeBytes": 3372299311,
+      "mtimeMs": 1721212670949,
+      "fingerprintId": "ceb79706adfdc4d8",
+      "fingerprint": "372a707e4119c62f1391a1423265e77555baaa72cc5572ed73a95b15e65686e4"
     },
     {
       "path": "G:/Media/VR/Render/Nagai Mihina(Azumi Hina) - VRKM897(p2)-(HEVC_18_videotoolbox).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "95ab74dc6727faf7e033b97cff50839be2336307be7e5f0d690ec11194a7ade4"
+      "sizeBytes": 3664791476,
+      "mtimeMs": 1721212686300,
+      "fingerprintId": "e3ea5e2bbdba64f9",
+      "fingerprint": "5b4af4ab30043d2cb6664db4944e1452613ee39591d1b3e9bcbdd46d1090dbcd"
     },
     {
       "path": "G:/Media/VR/Render/Nagase Mami(Nagase Asami) - VRKM01353(VRKM529)-(HEVC_18).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "5c9ae0877035417f5cd2d2077ed243df6ae1ed73a3db810b861d41e018407011"
+      "sizeBytes": 720133408,
+      "mtimeMs": 1720452129984,
+      "fingerprintId": "a3c1ad0ab3d3d44a",
+      "fingerprint": "3e57e7df26ccffa2f9cd8d124c0f9baf43aa189821e6358fb3652b78f9132c4d"
     },
     {
       "path": "G:/Media/VR/Render/Nagisa Mitsuki - MNSVR001-(HEVC_18).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "87c37df84447ed8ebba7897f0b150e97393d177b2aebfa0f43f62361b8d89a70"
+      "sizeBytes": 3229215861,
+      "mtimeMs": 1719946212758,
+      "fingerprintId": "c948c549a2393aa6",
+      "fingerprint": "a04b51d6951526bd3112a2fc937a5f55eaf74898d651d3b62f213b8f02a4e6b7"
     },
     {
       "path": "G:/Media/VR/Render/Nagisa Mitsuki - URVRSP322-(HEVC_18_videotoolbox).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "92280d2f6deb50a7052ae44484f7ea5112a5fe3884c5a35afdcb6233fb32bcff"
+      "sizeBytes": 4136302792,
+      "mtimeMs": 1721410973773,
+      "fingerprintId": "1e24d14a686ba8b6",
+      "fingerprint": "c0aa214d0c6baefab8089c6a0dc8feb1bbcb1dc76a02281511b8fd79382ed163"
     },
     {
       "path": "G:/Media/VR/Render/Nanase Arisu(Ichishima Ami) - VRKM01353(VRKM813)-(HEVC_18).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "091b215485c6d876ae69505c2e7a9413f2d22b8ad67ee9bf1119b756c4125ecd"
+      "sizeBytes": 899571970,
+      "mtimeMs": 1720452151583,
+      "fingerprintId": "c502223a92ca5f2e",
+      "fingerprint": "678031438e78940427d6f8a722f01352432b32206d8f62ea8eebb999981a24f1"
     },
     {
       "path": "G:/Media/VR/Render/Nanase Arisu(Ichishima Ami) DSVR044_merged - (HEVC_21.0).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "22551d5eab32ca19bf97c316568759deb907f347df3d7d1f187f98d973b8bd74"
+      "sizeBytes": 1009946611,
+      "mtimeMs": 1720452167163,
+      "fingerprintId": "85f8a92072aadcad",
+      "fingerprint": "43b394cb0d10141e99eb318a8a14588ddc8a3d4ab263e5849c1a6707ae83b3a7"
     },
     {
       "path": "G:/Media/VR/Render/Nanatsumori Riri - SIVR-295-(HEVC_18).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "c207f0a52c185955e7d8b962853a8d99f6d5b3f52ac0ef23465a2365db0a648a"
+      "sizeBytes": 1899948642,
+      "mtimeMs": 1719247927758,
+      "fingerprintId": "4b85105fc630c227",
+      "fingerprint": "79117d4cf15f67c40041a868726558035cd161563d2de34a43749b7d968d0467"
     },
     {
       "path": "G:/Media/VR/Render/Natsuya Eru(Natsuki Maron) - VRKM01353(VRKM487)-(HEVC_18).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "c5abb0e9244a8d1d9e59e88c357b8a347ba1aa0e470843cc22189c0f56b1a7c3"
+      "sizeBytes": 814918222,
+      "mtimeMs": 1720452195866,
+      "fingerprintId": "91bc7933177c8ee7",
+      "fingerprint": "3f89c8c5f64804c1423b3459f340007279778190ac04e0c64b059a28e074b28f"
     },
     {
       "path": "G:/Media/VR/Render/Niimura Akari - VRKM01353(VRKM564) - (HEVC_18).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "ea01a32c0dad36cf49d139bb52e5ec1ec30312e29cd9b0cacf630bf4d9671bc2"
+      "sizeBytes": 1197466857,
+      "mtimeMs": 1720452273039,
+      "fingerprintId": "6dfb56d4af2056e9",
+      "fingerprint": "63169bc8b1ee95c81a0a76202e8b0138eca2b489d210f0423772ad0a76f73a5b"
     },
     {
       "path": "G:/Media/VR/Render/Niimura Akari - VRKM452(VRKM1354)-(HEVC_18_videotoolbox).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "5ab148a7d30963bf0b113f3e3816e060f64c7fcb8ff3fdcf4ab9da6663fa1605"
+      "sizeBytes": 1326456013,
+      "mtimeMs": 1721212701919,
+      "fingerprintId": "86e0022fd86e6914",
+      "fingerprint": "86c91dbf60e7c311e726dcce1986bc87f080a54c93267290adaa4d27a58007c5"
     },
     {
       "path": "G:/Media/VR/Render/Nishino Emi - URVRSP256-(HEVC_18).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "f6f8593953a4c6870d5d4bf295a1f983d6052e9107f90f87ee74b06ff9d2bd4b"
+      "sizeBytes": 2915320542,
+      "mtimeMs": 1719421811058,
+      "fingerprintId": "c9dee39742b18493",
+      "fingerprint": "dc6f4b081b9e7b2262104146f2f4b546be0f92a1c50c0920ac5f1b13ceabc0cd"
     },
     {
       "path": "G:/Media/VR/Render/Ono Rikka - MDVR145(p3)-(HEVC_18).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "dfb6df1c722d76384ed52784bd470132fd0286916fb23462dae5a2ebd46593f4"
+      "sizeBytes": 2991229209,
+      "mtimeMs": 1719247977057,
+      "fingerprintId": "4fceaa0726b3d075",
+      "fingerprint": "b1cfb1df826f5b9f4a22c25716d391d23fa8c8c80cf8d2cb441491c306aefb8a"
     },
     {
       "path": "G:/Media/VR/Render/Ono Rikka - MDVR145(p6)-(HEVC_18).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "27316858da39026e0ac87ce414ec4517b2fde99c52d9139f9b73cb5a0bb61020"
+      "sizeBytes": 3041514957,
+      "mtimeMs": 1719247987689,
+      "fingerprintId": "506fd084b5571b2f",
+      "fingerprint": "1208846e76ec6668ed62ce3e01286f20bec275a87dbdceeedd11c275817305ba"
     },
     {
       "path": "G:/Media/VR/Render/Ootsuki Hibiki(Andou Eri) - SAVR158(VRKM1354)-(HEVC_18_videotoolbox).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "cf14789a89b48901b5195c32038720c4d755a155a6c9705f721c9367391bd6aa"
+      "sizeBytes": 1817109108,
+      "mtimeMs": 1721212716539,
+      "fingerprintId": "95fcf5f5c50136c5",
+      "fingerprint": "386ed3b549f88872e7e3690fdd0c70a109f27198154c49b52c7c2ebaa4b50c91"
     },
     {
       "path": "G:/Media/VR/Render/Ooura Manami - VRKM01353(KMVR648)-(HEVC_18).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "c201bb44853840105e64d488ed7eaa7e92a7a068f51f824053324411bc72b41d"
+      "sizeBytes": 1661496142,
+      "mtimeMs": 1720452310640,
+      "fingerprintId": "ed0138bf2224dfe8",
+      "fingerprint": "e1ba091580f191338434da6351bb8e4307f6dc616f4f007e54ab8383dae475d4"
     },
     {
       "path": "G:/Media/VR/Render/Ozaki Erika(Yoda Sakura) - SAVR376-(HEVC_18).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "e47740d4001827f149c72225099a04ff9c7a62188192c8c396bc4ef0277b93c4"
+      "sizeBytes": 3216305333,
+      "mtimeMs": 1719247998534,
+      "fingerprintId": "0c1e6dbf7be0c15e",
+      "fingerprint": "0c22a43488e1c04d7b8f935c0024e0769914b350a17090051692dbb20952cafa"
     },
     {
       "path": "G:/Media/VR/Render/Rinne Touka - PXVR003-(HEVC_18).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "bd684b0ecdcbb621ec11aa8662f3f2b2fb41c3c9a22576af2a2f47d9ae58de8e"
+      "sizeBytes": 1156283019,
+      "mtimeMs": 1719248008341,
+      "fingerprintId": "042550a1c38c8da7",
+      "fingerprint": "8c04ff5a6036bfbae11d536871a658dfbac943f1613d11313d9c5beedd408ec8"
     },
     {
       "path": "G:/Media/VR/Render/Rui(Amateurs) - VRKM01353(KMVR735)-(HEVC_18).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "2194ae6e51dea9fbb019827bdf1d073953f9058c66331c2b7af87b60684cd706"
+      "sizeBytes": 728880135,
+      "mtimeMs": 1720452324585,
+      "fingerprintId": "3302a2e31fafe7d3",
+      "fingerprint": "5ac432c7e55e373908ee9298a2a0511efbfd57dc4ab32336be3a50989aa34215"
     },
     {
       "path": "G:/Media/VR/Render/Saegusa Chitose(Yuki Chitose_Yura Chitose) - VRKM01353(VRKM746)-(HEVC_18).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "57451f6352064b7f44b2cfb6b937c379ae2a736f96fb15a48097035180ac99da"
+      "sizeBytes": 1029746269,
+      "mtimeMs": 1720452337958,
+      "fingerprintId": "16323601e608535c",
+      "fingerprint": "eab52d9c6bb6b3f651bddd9536a7ba6a209929b54477e0f0682dbb409a3a16fe"
     },
     {
       "path": "G:/Media/VR/Render/Saitou Amiri - URVRSP185-(HEVC_18).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "9be786f758d512fb5d76d13107d5ffe28e0e8c136b2b57315b09419c508942c3"
+      "sizeBytes": 4110217511,
+      "mtimeMs": 1719248041920,
+      "fingerprintId": "ed473a89c0488c40",
+      "fingerprint": "642207808aa2cfab55b64cc78d0c48501b5beed72ddf7bc80f2e582b39d13f91"
     },
     {
       "path": "G:/Media/VR/Render/Sanada Sana - MNSVR001-(HEVC_18).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "067c2d3f72bf6fed958171fe24b25719fd40bb3e2c609fe3f00931b42542dd10"
+      "sizeBytes": 2871482502,
+      "mtimeMs": 1719946251671,
+      "fingerprintId": "aa446b8299f16c0f",
+      "fingerprint": "fa02be58aca9245ec2a973a58751685c6b149d360c77264db640e0c47db75ae3"
     },
     {
       "path": "G:/Media/VR/Render/Satsuki Ena - BIBIVR118 - (HEVC_18.0).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "6d73b29f5eb42b262ec616e23184a65ec36875719907c14640e9de3978c89581"
+      "sizeBytes": 3181629642,
+      "mtimeMs": 1718653042830,
+      "fingerprintId": "42c6188304aacb65",
+      "fingerprint": "32ee1549e2fd6593e211bc9ffb3d76cb8d09871cb6ca498d2270e05990b9e286"
     },
     {
       "path": "G:/Media/VR/Render/Satsuki Ena - VRKM-901(VRKM1354)-(HEVC_18_videotoolbox).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "87a824c60dd7c3eb620775629704a0610b196c0c9157fdf68d6516230b6b4315"
+      "sizeBytes": 939389460,
+      "mtimeMs": 1721212752810,
+      "fingerprintId": "0c95162207cc8ab0",
+      "fingerprint": "8b5f5a1039966a15e7ba517ed4beb0f33c5a80d0358d3ff11eab1a60bb7de0a8"
     },
     {
       "path": "G:/Media/VR/Render/Satsuki Ena - VRKM01353(SAVR194)-(HEVC_18).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "c34ce847e19eab05679a9b26d781588a57494c728c98b70795cbefc8e9c47f75"
+      "sizeBytes": 752509998,
+      "mtimeMs": 1720218229032,
+      "fingerprintId": "31dc906b9284d9b5",
+      "fingerprint": "b95508d6684c0ce9ffcbaf94064d4f3bc39bab816a5adf9059c8629fca2e6091"
     },
     {
       "path": "G:/Media/VR/Render/Satsuki Mei - BIBIVR118 - (HEVC_21.0).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "75946f35d57ed002af898a7f28393d54ea65b4d36e678f737cbe69711d320770"
+      "sizeBytes": 1023205421,
+      "mtimeMs": 1718653137882,
+      "fingerprintId": "92c6946ba7f6474a",
+      "fingerprint": "e82c9986bd7d8b6469fb647fe4cf02ec4a2e1f034c91663c5595f466329555ad"
     },
     {
       "path": "G:/Media/VR/Render/Seina Arisa(Otsu Alice_Mizushima Arisu) - PXVR118_merged - (HEVC_18.0).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "b6575af4e4702683e8d0ea3649ecb66e5158ae214106977259f542eb3c9eded7"
+      "sizeBytes": 1488060486,
+      "mtimeMs": 1718064544455,
+      "fingerprintId": "8e564293ddbab8cd",
+      "fingerprint": "06b01eb0c2a5ab4f07bee5c4eb36e4122fb40f1beb8ce88f52006a4c8bc1ad12"
     },
     {
       "path": "G:/Media/VR/Render/Seina Arisa(Otsu Alice_Mizushima Arisu) - PXVR135_merged - (HEVC_21.0).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "1348bbdaaae0c0910a3658d359a20a86494b161cf36aa337a1962f1957df6a4b"
+      "sizeBytes": 2589496202,
+      "mtimeMs": 1718064556199,
+      "fingerprintId": "3041417462f5df9e",
+      "fingerprint": "297fc632438a2b8809136713f06cd22f46284effb76f3f7ee63165d6d2d3504a"
     },
     {
       "path": "G:/Media/VR/Render/Sengoku Monaka - URVRSP258-(HEVC_18).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "1ac9c558fae6a25610757014ea2d262f48feb21866c7461b959b72385c7672a9"
+      "sizeBytes": 2899847632,
+      "mtimeMs": 1719248055140,
+      "fingerprintId": "19edb0134a2d6731",
+      "fingerprint": "3abb764c9e754c1355bed11c38096d0b27bf3d65de500a6adcf8ebfa4c14afd7"
     },
     {
       "path": "G:/Media/VR/Render/Shinoda Yuu - KBVR034(VRKM1354)-(HEVC_18_videotoolbox).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "f60eb53866c46e35f2105a814639c9aebe020ceaa2c7e9190f95ae57d5018a27"
+      "sizeBytes": 799438677,
+      "mtimeMs": 1721212767314,
+      "fingerprintId": "66468b554d7268ba",
+      "fingerprint": "aaf64b7889459089d57f4161795a64682b9b6fbf75278459f11e70bcc460a6ef"
     },
     {
       "path": "G:/Media/VR/Render/Shiraishi Momo - VRKM1320-(HEVC_18).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "7023a5abf2ad454199fe6fc1147260238472298488ce976e4cfa293ba52796c0"
+      "sizeBytes": 4636900768,
+      "mtimeMs": 1721056418584,
+      "fingerprintId": "f568ac59558fbc54",
+      "fingerprint": "c0d73165d6b527db28a223ce04be33d0cb5ef1730d89605f59cb72eec2fa6871"
     },
     {
       "path": "G:/Media/VR/Render/Shirato Hana - DSVR959-(HEVC_18).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "0440352ebc10fd797bf5677e1894572fc7821eef87bf8dde5f5924a02eb469c1"
+      "sizeBytes": 1405987327,
+      "mtimeMs": 1719421560368,
+      "fingerprintId": "b3da8a8fd8d0298f",
+      "fingerprint": "a96fec26ea0d236c59f3ba7790d702f01fe97995eb739549827c18ab4c56b4f3"
     },
     {
       "path": "G:/Media/VR/Render/Shirato Hana - KAVR159-(HEVC_18).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "702a0fb4bf0a2acc636224a69a7b5e8334f9802f858f0a4b36388bf7a6bc33c3"
+      "sizeBytes": 4771715318,
+      "mtimeMs": 1719421587930,
+      "fingerprintId": "8405c1297c4bb646",
+      "fingerprint": "86de55684fb6c404965e2549120aee6fcb557cead0d5bddf55955f961d4013f3"
     },
     {
       "path": "G:/Media/VR/Render/Shirato Hana - URVRSP177-(HEVC_18).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "88594ab6844dbdd6c77c9286f7fdf23750ae503a0c8d980474a05f446327598f"
+      "sizeBytes": 4945056464,
+      "mtimeMs": 1719421603692,
+      "fingerprintId": "1e5e5a39b47eeee6",
+      "fingerprint": "89395a7980e1d15e0407cd2caa42c12da4a9930cdeec8a68d127962ed2b48c1d"
     },
     {
       "path": "G:/Media/VR/Render/Shirato Hana - URVRSP185-(HEVC_18).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "9c84f46cb148f58549b7b6c29e1b92d9e8fb54d702f58f93d2392218bffa1fa3"
+      "sizeBytes": 4307491811,
+      "mtimeMs": 1719421646159,
+      "fingerprintId": "a088a19282665f32",
+      "fingerprint": "4f9fec7b36fb4cbcad9a9eec1a26d7d776589905b08fb127708d0f39d88df5cf"
     },
     {
       "path": "G:/Media/VR/Render/Shirato Hana - VRKM738-(HEVC_18).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "dcecb408adbdc485a61fc89bd908cd4beb4e3dd3f6e5888f89888f7e393b0cdc"
+      "sizeBytes": 3693999792,
+      "mtimeMs": 1719406048503,
+      "fingerprintId": "18ec591fc6b8391b",
+      "fingerprint": "1e13246979c47f29f011101705df633584051db4a4232cd7a1dd283a717f9bf9"
     },
     {
       "path": "G:/Media/VR/Render/Suehiro Jun - DSVR01546-(HEVC_18_videotoolbox).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "e68de422dfb6c822e129933dd904964fff0d1f8d7dd2788d090ba8ec7489a814"
+      "sizeBytes": 1878602049,
+      "mtimeMs": 1722362296243,
+      "fingerprintId": "162e97a724fd4d43",
+      "fingerprint": "8df10c1df396020e30162daf7ded1be8a837ccc74b05143f07578e4e2b8ffff4"
     },
     {
       "path": "G:/Media/VR/Render/Suehiro Jun - VRKM01353(VRKM788)-(HEVC_18).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "686da3c8f96bdcb95087f55972746b368388180de6940ca1e4aa93052550ed61"
+      "sizeBytes": 669408874,
+      "mtimeMs": 1720218576844,
+      "fingerprintId": "eac5a44121a859a3",
+      "fingerprint": "cd584eb1d40b8d6bc16d1ec2ac325dc4c7884c6daa65a65486cf337c63bad8ce"
     },
     {
       "path": "G:/Media/VR/Render/Suehiro_Jun - DSVR01533-(HEVC_18).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "cfc3770acd159dea31861f00c496f1664e6bd8019cdadce36fac5dcee2178df2"
+      "sizeBytes": 2977330037,
+      "mtimeMs": 1719593931527,
+      "fingerprintId": "cd2670d90863ee67",
+      "fingerprint": "927954c1281971d050bcd8d75501dca79d7462afdf3342dd26f020d24a79233f"
     },
     {
       "path": "G:/Media/VR/Render/Suzuki Mayu - VRKM01108-(HEVC_18).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "27f875758d941cbf010de7c245112c966018e15a4a7c905f1f25108c84025eb0"
+      "sizeBytes": 2440766170,
+      "mtimeMs": 1719946267909,
+      "fingerprintId": "2d05108d976b744c",
+      "fingerprint": "7daab1d3f870cf850ea4e7ec47fce4e01f5b774700d878c234379d907654f01f"
     },
     {
       "path": "G:/Media/VR/Render/Tachibana Yuuka(Mioka Satomi_Manaka Michiru) - CBIKMV103(VRKM1354)-(HEVC_18_videotoolbox).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "f79935c6e788f68b7c496b682a94fc9782ab0797bcf41260f8e1e13ee76cb63a"
+      "sizeBytes": 704572379,
+      "mtimeMs": 1721212803629,
+      "fingerprintId": "f45514847b779077",
+      "fingerprint": "3c7995f6d5b4494ad6c4b482da9e34e1443f3091019d5f2afd190516c6523bae"
     },
     {
       "path": "G:/Media/VR/Render/Takarada Arisa(Wakamiya Hazuki_Hayakawa Mizuki) - VRKM207(BIBIVR074)-(HEVC_21).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "a24b2d755c43117ca0d33c01b0a7e95d80cde4fbd6b0eb0056c1f073d1d494f2"
+      "sizeBytes": 2056585426,
+      "mtimeMs": 1719768421811,
+      "fingerprintId": "1b52f9bc4191575b",
+      "fingerprint": "8e5ccdfcb0e241e945e3c3bd798f00ad9c5d1e611dbebbf2346e16d06e097d76"
     },
     {
       "path": "G:/Media/VR/Render/Takarada Arisa(Wakamiya Hazuki_Hayakawa Mizuki) - VRKM452(VRKM1354)-(HEVC_18_videotoolbox).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "92e08b27f91e3d71e14e0e4952de3ec70c711f0fe4e129e511400a87bb55ee8c"
+      "sizeBytes": 1334788249,
+      "mtimeMs": 1721212819116,
+      "fingerprintId": "ed9122cb905866e3",
+      "fingerprint": "4a699e353ff9e9fc29432b530e1b7f80ff26baebe34e1bd7de9cb3d8a4157500"
     },
     {
       "path": "G:/Media/VR/Render/Tenma Yui(Kamikawa Sora) - VRKM01353(BIBIVR055)-(HEVC_18).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "22bc9849d13af38eb014c7fc96af8f10592194f9940aa657cd4c021f4143c7b1"
+      "sizeBytes": 851840718,
+      "mtimeMs": 1720218987170,
+      "fingerprintId": "80afd9e84ab7cef9",
+      "fingerprint": "7fccc13f18d8da56f6fac7228078f29aefb0c8182c17295c4600c77976901045"
     },
     {
       "path": "G:/Media/VR/Render/Toujou Yuki - VRKM01353(KMVR857) - (HEVC_18).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "8f6a6b94db96cdfcf5d037613606bc339c7d7674c255987e3f86a59626f196c4"
+      "sizeBytes": 742558643,
+      "mtimeMs": 1720452453016,
+      "fingerprintId": "a15dd8fb73937c42",
+      "fingerprint": "2a07c08eacabfbacd17a700ea6bc2e8b21f9968388212fb6fe07fdc599791d03"
     },
     {
       "path": "G:/Media/VR/Render/Toumi Kanata(Hasumi Kaede) - KIWVR662-(HEVC_18).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "533b953c1807fcd9b98d30a940b64fe2153b25f0465a861e56bfa7f2be500207"
+      "sizeBytes": 3502269528,
+      "mtimeMs": 1719248080058,
+      "fingerprintId": "7820bbb530c7ef88",
+      "fingerprint": "36cdf91a38a2d8bdefd27cdfe84d8049aa0f0446c9d69cb617f11c98458221b4"
     },
     {
       "path": "G:/Media/VR/Render/Tsubaki Rika(Ooshima Hina) - JPSVR015_merged - (HEVC_21.0).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "bafd2779fe52d1b719fa7d247410773b44ea70469d9fc896cfb271993e4b286f"
+      "sizeBytes": 2308367661,
+      "mtimeMs": 1719946363050,
+      "fingerprintId": "325da95092125985",
+      "fingerprint": "c600470797dbc6e8da2af8d6546018eddb9e157be1d26d6f12e0c1e94eff90ab"
     },
     {
       "path": "G:/Media/VR/Render/Tsubaki Rika(Ooshima Hina) - VRKM01353(SAVR092)-(HEVC_18).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "fb665071cd0ce195595c2d1922aa44baa14a8ff52e6532f5cc39a99ec23eb850"
+      "sizeBytes": 1547940658,
+      "mtimeMs": 1720219809334,
+      "fingerprintId": "00f28067b8e4ac48",
+      "fingerprint": "52229977fb85b1c5a0dbb9baff51ff7ba680eda4c398f0d16ee6d267400b0e60"
     },
     {
       "path": "G:/Media/VR/Render/Tsuji Sakura(Tsuji Sakura) - MDVR165-(HEVC_18).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "6563e07f557f21972c2aa430bfe4b3e7483e96ec6b06348217f45aa9fec0ac17"
+      "sizeBytes": 3121984803,
+      "mtimeMs": 1719248134243,
+      "fingerprintId": "693403b6dcbf0b7c",
+      "fingerprint": "83b10b6a55684f0b2cbdcc94bda5a72ae0d22884fc8dbb964e930bf96113112e"
     },
     {
       "path": "G:/Media/VR/Render/Tsujii Honoka - VRKM01353(VRKM229)-(HEVC_18).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "df2e91f0cb46c7668d2f9d9c52fedf292570058603ad1b7e13f845f18c94c96d"
+      "sizeBytes": 950938162,
+      "mtimeMs": 1720220208816,
+      "fingerprintId": "c8f6b8993aeb8e12",
+      "fingerprint": "5a6d6729e0cc26507f6d7aa2848d5fa9e107190c53aa2c8a95e4bd7280feeda4"
     },
     {
       "path": "G:/Media/VR/Render/Tsukino Kasumi - VRKM01353(SAVR205)-(HEVC_18).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "8c0967d2b1acb65e2ad78950c2420f0362be9adff5bf29b76c899d1e845e4a39"
+      "sizeBytes": 910536838,
+      "mtimeMs": 1720220629756,
+      "fingerprintId": "0685601edfb7847f",
+      "fingerprint": "f26a89e75e1f324338adb5b3d2945a2cd0ceaefa5e4853075de2546c69eed612"
     },
     {
       "path": "G:/Media/VR/Render/Tsukino Kasumi -VRKM1079 - (HEVC_28.0).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "6e4124d92102cb39ab4bd0825e1b26b0eac619cda1caf42b7f41c0af01d44ffc"
+      "sizeBytes": 525142347,
+      "mtimeMs": 1717590034277,
+      "fingerprintId": "b5308da1786a12be",
+      "fingerprint": "e8197b450093489a9ff714aaa89b7bf8797d1caf1e4b02e6f6b054fd2c83a302"
     },
     {
       "path": "G:/Media/VR/Render/Tsukino Kasumi -VRKM1310 - (HEVC_21.0).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "e144d4699c6feecb6c3e217dd6901e17dabf74af115c51dcbae56959fc986ed1"
+      "sizeBytes": 1697734987,
+      "mtimeMs": 1717590051266,
+      "fingerprintId": "3e4eee3cc985cdc3",
+      "fingerprint": "9a32f3b4a5c8b6bfb675a89b2325a2f7763e990382227d53c4423da4373b3d3b"
     },
     {
       "path": "G:/Media/VR/Render/Usagi Aika - VRKM01353(KMVR801)-(HEVC_18).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "557e1575993008df37b54c073ed3db5460c4064f961402bf038edd681fb5d497"
+      "sizeBytes": 1011217303,
+      "mtimeMs": 1720452509571,
+      "fingerprintId": "e384602370a79434",
+      "fingerprint": "cf9c5b3c7e4df88af4dbc2813c587000054bb7713b5a5af4b95b4f71b5cff209"
     },
     {
       "path": "G:/Media/VR/Render/Wakamiya Hono - CBIKMV119(BIBIVR074)-(HEVC_21).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "8cf6a88cf4432eb0bb163decf85b231eba32e9cd25a5b8af681006baaf5508b5"
+      "sizeBytes": 1487581529,
+      "mtimeMs": 1719768450030,
+      "fingerprintId": "dae7bb0f1e485722",
+      "fingerprint": "caf2a8c89b664f1d4659c2e07cb081ddece96ced4775b98308164a0e7f9b3dc0"
     },
     {
       "path": "G:/Media/VR/Render/Wakatsuki Miina(Wakatsuki Mizuna) - VRKM399(BIBIVR074)-(HEVC_18).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "2b4d21e183207a2022a9d025e144478acc2ddcdd21b911218db526383c9cf65f"
+      "sizeBytes": 1894191096,
+      "mtimeMs": 1719768509380,
+      "fingerprintId": "f308d9942f4a9367",
+      "fingerprint": "26674ce887251f0e423ce0f8d9389c4899624eb7278d4b105379074480bcc315"
     },
     {
       "path": "G:/Media/VR/Render/Yamamoto Renka(Aihara Aoi) - CBIKMV049(VRKM1354)-(HEVC_18_videotoolbox).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "cd28cce3217fed224d40f45bf48b4c48fc76c9ab0013c1b32db542327310d990"
+      "sizeBytes": 751094078,
+      "mtimeMs": 1721212836795,
+      "fingerprintId": "f81d3bc47ae54ec5",
+      "fingerprint": "ce79f652ef993d3c77f112288bf7505056afa5a1d3ccf30568068e82a7cbfeb0"
     },
     {
       "path": "G:/Media/VR/Render/Yanai Hina(Yanai Meru) - BIBIVR092 (CBIKMV111) - (HEVC_21.0).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "b2d8b3b3e3bd5850b092c1a76ce0cd0274bfcdd777eb2aad29c4d6edd778d5c7"
+      "sizeBytes": 614924780,
+      "mtimeMs": 1722362425552,
+      "fingerprintId": "3d0ad16cf8960f8b",
+      "fingerprint": "bd03450caf67401548ff991c5e7a8caa555baf6f4615b3c6a31c16795ef1139f"
     },
     {
       "path": "G:/Media/VR/Render/Yayoi Mizuki - CJVR032-(HEVC_18).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "4093bb933e11f4b1752370d11bc71d2f8098b5d18c33a2e853c3ee42f81c5265"
+      "sizeBytes": 5697229359,
+      "mtimeMs": 1720452529552,
+      "fingerprintId": "ea2c286c993677b4",
+      "fingerprint": "7ac55833d63015e32d4c1b882ba7e3e01616a6dbf97ccf4cfffecb6b5135f203"
     },
     {
       "path": "G:/Media/VR/Render/Yayoi Mizuki - VRKM01353(SAVR235)-(HEVC_18).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "d0fc20aece3ffe489c81ee11ec859116abf735eaa72364a0f733106d2ca620c2"
+      "sizeBytes": 978155672,
+      "mtimeMs": 1720452541773,
+      "fingerprintId": "6cf06cfba406eee4",
+      "fingerprint": "0a42909026b12f0758be3cf19a866e00b0df2f5ca34d1776a05323846b7aaaba"
     },
     {
       "path": "G:/Media/VR/Render/Yokomiya Nanami - PXVR118_merged - (HEVC_21.0).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "8b2689e4c1a23a2d23b146ce9a213e693a322ecd30ecb045a899cdaf7652232d"
+      "sizeBytes": 1661952550,
+      "mtimeMs": 1720452553795,
+      "fingerprintId": "629ec5a6f87d2835",
+      "fingerprint": "3f756f28f8b509ec0585f1dd9fd9a14f06b4432febc1a28829cb01905acb2266"
     },
     {
       "path": "G:/Media/VR/Render/Yokomiya Nanami - VRKM01353(VRKM589)-(HEVC_18).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "ec843663b99d3bdad3b991689559bd3386e7a7f179e6e12c59b830e0b92dc0ef"
+      "sizeBytes": 537336796,
+      "mtimeMs": 1720452580583,
+      "fingerprintId": "302e64eb0e16a569",
+      "fingerprint": "f7c24a36502ed5f08a667c483bca056b5d8a7413b000828d22165c85e27c64af"
     },
     {
       "path": "G:/Media/VR/Render/Yoshine Yuria - SAVR360_merged - (HEVC_21.0).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "3dccecf4b3c6ebbde70ddd2b2c1e33e3b77d61d886ec893163f4c01aab6a0ec5"
+      "sizeBytes": 1722434686,
+      "mtimeMs": 1720452608561,
+      "fingerprintId": "a53299bc3c39c015",
+      "fingerprint": "3d7362189a570a6293022f350b5d7b2863601a74b21a6e73f9b6e4d59f2f315f"
     },
     {
       "path": "G:/Media/VR/Render/Yoshine Yuria - VRKM01353(CBIKMV084)-(HEVC_18).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "8a2bcc74230d975a6f6d4ba5e7f34613b2c9c559fd92b3e880029f94d5d80e8b"
+      "sizeBytes": 1156360381,
+      "mtimeMs": 1720452632311,
+      "fingerprintId": "e04b6c833331427c",
+      "fingerprint": "275a1eb4c85df3ff52fd5bf7404c88eea51bcf1430f39493af39af7810775380"
     },
     {
       "path": "G:/Media/VR/Render/Yuki Rino - VRKM01353(SAVR142)-(HEVC_18).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "7c6ddbff1944e3dd3ff73e68debaf4b6718d6217e6bef042d90e8fef5f323c8f"
+      "sizeBytes": 571269942,
+      "mtimeMs": 1720452675759,
+      "fingerprintId": "d210cce249cd0d72",
+      "fingerprint": "33ab6ab4f92e20def764cbc50f13c7ed3ab17c8a5d908635f6c083193f68a61e"
     },
     {
       "path": "G:/Media/VR/Render/Yumekawa Ria - DSVR01546-(HEVC_18_videotoolbox).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "dc23a26c31f40b48555daef8aef85099b27dcf977fa38a4361e69963cb6d21e9"
+      "sizeBytes": 2489961761,
+      "mtimeMs": 1722362314253,
+      "fingerprintId": "55b325aa9e3b23e9",
+      "fingerprint": "460ee22cb6833053dbc45b0d71679956ad7fcaa93951e935e5356f814e11cf51"
     },
     {
       "path": "G:/Media/VR/Render/Yumekawa Ria - URVRSP322-(HEVC_18_videotoolbox).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "b801d8be63a5e7aeddd3c826133bad26017ee2bf1fd43a8b542e56a267cf7ced"
+      "sizeBytes": 1783309963,
+      "mtimeMs": 1721411127369,
+      "fingerprintId": "6ae5be6a8642ee01",
+      "fingerprint": "2c60fef00a7ca40462008f8ec64919e2c6333f977cf35683e77d2d23eee65ae6"
     },
     {
       "path": "G:/Media/VR/Render/Yumemi Shouuta - BIBIVR092 (SAVR070) - (HEVC_21.0).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "efd9a08a4b8d4922e6f278ccf9c8bec1b357714cb4ae4b2ed51ffb50481b645a"
+      "sizeBytes": 521757068,
+      "mtimeMs": 1717776243392,
+      "fingerprintId": "e25ae76f7e96f3f0",
+      "fingerprint": "247608d631df63431db97b318a31043bb754466b4038d170f46e11130796bbb4"
     },
     {
       "path": "G:/Media/VR/Render/Yumeno Aika - SIVR294-(HEVC_18).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "b5ce9d4899c55e5cf7464531b5e77330c1b05539c57ecceb1fa0d3ede3ce0d68"
+      "sizeBytes": 4679902179,
+      "mtimeMs": 1719421768581,
+      "fingerprintId": "b9d92157d7f946ff",
+      "fingerprint": "28e27f78ad989589aa844645ad3366f13b20b4239ceea4241a6f0829416ffe5a"
     },
     {
       "path": "G:/Media/VR/Render/Yumino Rimu - URVRSP261-(HEVC_18).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "537bd26b20d4eb7aabdacfce21e0dad894efd526822b3725e93efe76c14edd17"
+      "sizeBytes": 3557696570,
+      "mtimeMs": 1719946437911,
+      "fingerprintId": "da5b50939a819e26",
+      "fingerprint": "6a1c04f3383205ebb31a8b5d3a1607f34dfc18e2fea9bc362a860e3efec250b2"
     },
     {
       "path": "G:/Media/VR/Render/Yuuri Maina - SAVR376-(HEVC_18).mp4",
       "bucketId": "BUCKET_A2_4K_60FPS_WAKUI",
-      "fingerprint": "a987c802aa1fbf619edbe4bb4ed8a0e5bc097d7412ba281a0858167dd97e3f9b"
+      "sizeBytes": 4625887163,
+      "mtimeMs": 1720452687556,
+      "fingerprintId": "d13e48b6bc57f648",
+      "fingerprint": "1fb9a20c8ea19beb0ddeb258941fb58ba504dc4adca8d95085ddb97485bed1c1"
     },
     {
       "path": "G:/Media/VR/VR_Video_Processing/01_Download_Completed/8K/Kamiki Rei - DSVR01433.mp4",
       "bucketId": "BUCKET_B_8K_60FPS_KAMIKI",
-      "fingerprint": "c76842dca3f78525f21362b50936721a8299349602d7b6e572ec63b6d54d7a86"
+      "sizeBytes": 6181465144,
+      "mtimeMs": 1786691138556,
+      "fingerprintId": "d7aee52dc03d8aef",
+      "fingerprint": "9b6b5a54e5ed7c02fb058e9d733db758459e260645fc23db9088db434353a241"
     },
     {
       "path": "G:/Media/VR/VR_Video_Processing/01_Download_Completed/New folder/Mikami Yua_Arata Arina (Hashimoto Arina) - SIVR033.mp4",
       "bucketId": "BUCKET_A1_4K_59FPS_SIVR033",
-      "fingerprint": "fafe59b51a58c3c47e4a5d90de6a95eca331feef459c793eef647f03cf4c6ddb"
+      "sizeBytes": 3267249717,
+      "mtimeMs": 1787802916086,
+      "fingerprintId": "79b1c97e42105e79",
+      "fingerprint": "50d488789d13ac30cc82cad260c1076c3cf01fd934889df696dcb3e981bed701"
     }
   ]
 }

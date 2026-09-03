@@ -14,7 +14,11 @@ import { NormalizationEngine, EngineStatus } from './src/normalization/normaliza
 import { NormalizationJournal, NormalizationState } from './src/normalization/journal.mjs';
 import { createSyntheticHevcFixture } from './test-fixtures-helper.mjs';
 import { classifyMedia, MediaClass } from './src/normalization/classification.mjs';
-import { verifyAuthorizationUniverse } from './src/normalization/authorization-manifest.mjs';
+import {
+  verifyAuthorizationUniverse,
+  verifyCandidatePreMutationAuthorization,
+  verifyPilotJournalDoneAuthorization
+} from './src/normalization/authorization-manifest.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -494,12 +498,57 @@ async function runTests() {
 
     // 7. Canonical Pilot currently hvc1/DONE preserves 235 universe identity & yields 234 pending queue
     const pilotJournal = new NormalizationJournal(path.join(__dirname, 'normalization_journal.json'));
-    const pilotPlan = await derivePendingQueue({ inventoryPath: rawInvPath, journal: pilotJournal });
+    const manifestObj = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+    const pilotPlan = await derivePendingQueue({ inventoryPath: rawInvPath, journal: pilotJournal, manifest: manifestObj });
     assert.strictEqual(pilotPlan.totalAcceptedUniverse, 235, 'Pilot is part of the 235 authorized universe');
     assert.strictEqual(pilotPlan.alreadyCompleted.length, 1, 'Pilot recognized as already DONE');
     assert.strictEqual(pilotPlan.pendingQueue.length, 234, 'Pending rollout queue is exactly 234');
 
-    // 8. BatchNormalizationRunner fail-closed with verifyAuthorizationManifest
+    // 8. Pilot journal initialFingerprint mismatch => BLOCK / excluded from alreadyCompleted
+    const corruptPilotEntry = {
+      originalPath: pilotPlan.alreadyCompleted[0].path,
+      currentState: NormalizationState.DONE,
+      initialFingerprint: { canonicalPath: pilotPlan.alreadyCompleted[0].path, sizeBytes: 999999, mtimeMs: 123456789, fingerprintId: 'mismatched_fp' }
+    };
+    const badPilotJournal = { getEntry: () => corruptPilotEntry };
+    const badPilotPlan = await derivePendingQueue({ inventoryPath: rawInvPath, journal: badPilotJournal, manifest: manifestObj });
+    assert.strictEqual(badPilotPlan.alreadyCompleted.length, 0, 'Pilot with mismatched initialFingerprint is strictly excluded from alreadyCompleted');
+    assert(badPilotPlan.skippedOrExcluded.some(s => s.reason.includes('PILOT_JOURNAL_FINGERPRINT_MISMATCH')), 'Mismatch recorded in skippedOrExcluded');
+
+    // 9. Per-item candidate authorization gate: exact file fingerprint => PASS
+    const firstAuth = manifestObj.candidateIdentities[0];
+    const exactFpCheck = verifyCandidatePreMutationAuthorization(firstAuth.path, manifestObj, () => ({
+      canonicalPath: firstAuth.path, sizeBytes: firstAuth.sizeBytes, mtimeMs: firstAuth.mtimeMs, fingerprintId: firstAuth.fingerprintId
+    }));
+    assert.strictEqual(exactFpCheck.ok, true, 'Exact candidate fingerprint succeeds');
+
+    // 10. Per-item candidate authorization gate: same path + same envelope but size changed => BLOCK
+    const sizeChangedCheck = verifyCandidatePreMutationAuthorization(firstAuth.path, manifestObj, () => ({
+      canonicalPath: firstAuth.path, sizeBytes: firstAuth.sizeBytes + 1024, mtimeMs: firstAuth.mtimeMs, fingerprintId: 'new_hash'
+    }));
+    assert.strictEqual(sizeChangedCheck.ok, false, 'Candidate size change is blocked');
+    assert(sizeChangedCheck.reason.includes('CANDIDATE_FINGERPRINT_MISMATCH'));
+
+    // 11. Per-item candidate authorization gate: mtime changed => BLOCK
+    const mtimeChangedCheck = verifyCandidatePreMutationAuthorization(firstAuth.path, manifestObj, () => ({
+      canonicalPath: firstAuth.path, sizeBytes: firstAuth.sizeBytes, mtimeMs: firstAuth.mtimeMs + 5000, fingerprintId: 'new_hash'
+    }));
+    assert.strictEqual(mtimeChangedCheck.ok, false, 'Candidate mtime change is blocked');
+    assert(mtimeChangedCheck.reason.includes('CANDIDATE_FINGERPRINT_MISMATCH'));
+
+    // 12. Per-item candidate authorization gate: fingerprint unavailable => BLOCK
+    const unavailCheck = verifyCandidatePreMutationAuthorization(firstAuth.path, manifestObj, () => null);
+    assert.strictEqual(unavailCheck.ok, false, 'Unavailable fingerprint is blocked');
+    assert(unavailCheck.reason.includes('CANDIDATE_FINGERPRINT_UNAVAILABLE'));
+
+    // 13. Per-item candidate authorization gate: substituted fixture => BLOCK
+    const substitutedCheck = verifyCandidatePreMutationAuthorization(firstAuth.path, manifestObj, () => ({
+      canonicalPath: firstAuth.path, sizeBytes: 123456, mtimeMs: 999999999, fingerprintId: 'sub_hash'
+    }));
+    assert.strictEqual(substitutedCheck.ok, false, 'Substituted candidate is blocked');
+    assert(substitutedCheck.reason.includes('CANDIDATE_FINGERPRINT_MISMATCH'));
+
+    // 14. BatchNormalizationRunner fail-closed with verifyAuthorizationManifest on corrupt manifest
     const blockedRunner = new BatchNormalizationRunner({
       executionEnabled: true,
       verifyAuthorizationManifest: true,
@@ -510,7 +559,22 @@ async function runTests() {
     assert.strictEqual(blockReport.status, BatchStatus.BLOCKED, 'Runner blocked on corrupt manifest');
     assert(blockReport.blockReason.includes('AUTHORIZATION_UNIVERSE_LOCK_FAILED'), 'Block reason notes authorization lock');
 
-    console.log('  ✅ [PASS] Authorization universe identity lock matrix strictly verified (exact allowed, all drifts fail-closed, pilot DONE preserved)');
+    // 15. BatchNormalizationRunner fail-closed on candidate fingerprint mismatch
+    const candMismatchRunner = new BatchNormalizationRunner({
+      executionEnabled: true,
+      verifyAuthorizationManifest: true,
+      manifestPath,
+      inventoryPath: rawInvPath,
+      fileOps: {
+        existsSync: () => true,
+        getMediaFingerprint: () => ({ sizeBytes: 1, mtimeMs: 2, fingerprintId: 'fake' })
+      }
+    });
+    const candBlockReport = await candMismatchRunner.runQueue([firstAuth.path]);
+    assert.strictEqual(candBlockReport.status, BatchStatus.BLOCKED, 'Runner blocked on candidate fingerprint mismatch');
+    assert(candBlockReport.blockReason.includes('CANDIDATE_AUTHORIZATION_LOCK_FAILED'), 'Block reason notes candidate authorization lock failed');
+
+    console.log('  ✅ [PASS] Authorization universe & file-object identity lock matrix strictly verified (all drifts & substitutions fail-closed)');
   }
 
   console.log('\n============================================================');

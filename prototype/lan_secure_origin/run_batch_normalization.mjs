@@ -70,7 +70,8 @@ async function main() {
   console.log('🔍 Deriving active pending queue from accepted exact-certified universe...');
   const queuePlan = await derivePendingQueue({
     inventoryPath,
-    journal
+    journal,
+    manifestPath: DEFAULT_MANIFEST_PATH
   });
 
   console.log(`\nCandidate Scope Analysis:`);

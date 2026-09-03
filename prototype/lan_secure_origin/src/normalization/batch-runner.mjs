@@ -7,7 +7,12 @@ import { probeMediaFacts } from './ffprobe-facts.mjs';
 import { classifyMedia, isDerivativeFile, MediaClass } from './classification.mjs';
 import { findRepairCandidate, matchNormalizedCertifiedBucket } from './repair-rules.mjs';
 import { evaluateDiskFreeSpaceSafety } from './inventory-scanner.mjs';
-import { verifyAuthorizationUniverse } from './authorization-manifest.mjs';
+import {
+  verifyAuthorizationUniverse,
+  verifyCandidatePreMutationAuthorization,
+  verifyPilotJournalDoneAuthorization,
+  DEFAULT_MANIFEST_PATH
+} from './authorization-manifest.mjs';
 
 export const CANONICAL_ACCEPTED_INVENTORY = 'scanned_raw_library.json';
 
@@ -35,9 +40,7 @@ export class ServerPlaybackMonitor {
     this.healthReason = 'UNINITIALIZED';
     this.lastHealthyAt = 0;
     this.listeners = new Set();
-    this.pollTimer = null;
-    this.sseReq = null;
-    this.isClosed = false;
+    this.pollTimer = null; this.sseReq = null; this.isClosed = false;
   }
 
   async checkHealth() {
@@ -168,6 +171,7 @@ export class ServerPlaybackMonitor {
  */
 export async function derivePendingQueue(options = {}) {
   const { inventoryPath, inventoryItems, journal, probeFacts = probeMediaFacts, fileOps = {} } = options;
+  const manifest = options.manifest || (options.manifestPath ? JSON.parse((fileOps.readFileSync || fs.readFileSync)(options.manifestPath, 'utf8')) : null);
   let items = inventoryItems || [];
 
   if (!items.length && inventoryPath && fs.existsSync(inventoryPath)) {
@@ -210,6 +214,13 @@ export async function derivePendingQueue(options = {}) {
       try {
         const entry = journal.getEntry(fullPath);
         if (entry && entry.currentState === NormalizationState.DONE) {
+          if (manifest) {
+            const pilotAuth = verifyPilotJournalDoneAuthorization(fullPath, entry, manifest);
+            if (!pilotAuth.ok) {
+              skippedOrExcluded.push({ path: fullPath, reason: pilotAuth.reason });
+              continue;
+            }
+          }
           alreadyCompleted.push({ path: fullPath, reason: 'JOURNAL_ALREADY_DONE' });
           continue;
         }
@@ -287,14 +298,11 @@ export class BatchNormalizationRunner {
     this.inventoryPath = options.inventoryPath || null;
 
     // Scope lock: In destructive mode, forbid custom inventory override
-    if (this.executionEnabled && options.inventoryPath) {
-      const base = path.basename(options.inventoryPath);
-      if (base !== CANONICAL_ACCEPTED_INVENTORY) {
-        this.status = BatchStatus.BLOCKED;
-        this.isBlocked = true;
-        this.blockReason = `DESTRUCTIVE_AUTHORIZATION_SCOPE_VIOLATION: Custom inventory override prohibited in destructive mode. Must use ${CANONICAL_ACCEPTED_INVENTORY}`;
-        throw new Error(this.blockReason);
-      }
+    if (this.executionEnabled && options.inventoryPath && path.basename(options.inventoryPath) !== CANONICAL_ACCEPTED_INVENTORY) {
+      this.status = BatchStatus.BLOCKED;
+      this.isBlocked = true;
+      this.blockReason = `DESTRUCTIVE_AUTHORIZATION_SCOPE_VIOLATION: Custom inventory override prohibited in destructive mode. Must use ${CANONICAL_ACCEPTED_INVENTORY}`;
+      throw new Error(this.blockReason);
     }
 
     this.engine = options.engine || new NormalizationEngine({
@@ -308,11 +316,8 @@ export class BatchNormalizationRunner {
     this.isBlocked = false;
     this.blockReason = null;
     this.activeJobPath = null;
-    this.completedItems = [];
-    this.failedSafeItems = [];
-    this.pendingQueue = [];
-    this.totalCandidates = 0;
-    this.isStopped = false;
+    this.completedItems = []; this.failedSafeItems = []; this.pendingQueue = [];
+    this.totalCandidates = 0; this.isStopped = false;
 
     // Hook playback monitor if provided
     if (this.playbackMonitor && typeof this.playbackMonitor.onActiveChange === 'function') {
@@ -408,6 +413,7 @@ export class BatchNormalizationRunner {
         this._emitProgress();
         return this._generateReport();
       }
+      this.authorizationManifest = authCheck.manifest;
     }
 
     // 0. Playback monitor initial health check (fail-closed if monitor exists but is unhealthy)
@@ -450,11 +456,9 @@ export class BatchNormalizationRunner {
           const recheck = await this.playbackMonitor.checkHealth();
           if (!recheck.ok) {
             console.error(`[BatchNormalizationRunner] FATAL: Playback signal unhealthy: ${recheck.reason}`);
-            this.status = BatchStatus.BLOCKED;
-            this.isBlocked = true;
+            this.status = BatchStatus.BLOCKED; this.isBlocked = true;
             this.blockReason = `PLAYBACK_SIGNAL_UNHEALTHY: ${recheck.reason}`;
-            this.activeJobPath = null;
-            this._emitProgress();
+            this.activeJobPath = null; this._emitProgress();
             break;
           }
         }
@@ -479,11 +483,9 @@ export class BatchNormalizationRunner {
       const spaceCheck = evaluateDiskFreeSpaceSafety(targetPath, { fileOps: this.fileOps });
       if (!spaceCheck.ok) {
         console.error(`[BatchNormalizationRunner] FATAL: Free space gate failed for ${targetPath}: ${spaceCheck.reason}`);
-        this.status = BatchStatus.BLOCKED;
-        this.isBlocked = true;
+        this.status = BatchStatus.BLOCKED; this.isBlocked = true;
         this.blockReason = `DISK_SPACE_GATE_STOPPED: ${spaceCheck.reason}`;
-        this.activeJobPath = null;
-        this._emitProgress();
+        this.activeJobPath = null; this._emitProgress();
         break;
       }
 
@@ -495,6 +497,20 @@ export class BatchNormalizationRunner {
         this.activeJobPath = null;
         this._emitProgress();
         continue;
+      }
+
+      // Pre-mutation per-item candidate authorization verification
+      if (this.executionEnabled && this.verifyAuthorizationManifest && this.authorizationManifest) {
+        const itemAuth = verifyCandidatePreMutationAuthorization(targetPath, this.authorizationManifest, this.fileOps?.getMediaFingerprint);
+        if (!itemAuth.ok) {
+          console.error(`[BatchNormalizationRunner] FATAL: Candidate authorization lock failed for ${targetPath}: ${itemAuth.reason}`);
+          this.status = BatchStatus.BLOCKED;
+          this.isBlocked = true;
+          this.blockReason = `CANDIDATE_AUTHORIZATION_LOCK_FAILED: ${itemAuth.reason}`;
+          this.activeJobPath = null;
+          this._emitProgress();
+          break;
+        }
       }
 
       // Execute single-file normalization transaction
@@ -512,13 +528,11 @@ export class BatchNormalizationRunner {
       }
 
       if (txResult.ok && txResult.state === NormalizationState.DONE) {
-        // Individual SUCCESS
         this.pendingQueue.shift();
         this.completedItems.push(item);
         this.activeJobPath = null;
         this._emitProgress();
       } else if (txResult.state === NormalizationState.PAUSED_FOR_PLAYBACK) {
-        // Playback Interruption: Do NOT remove from pendingQueue. Yield & retry.
         console.log(`[BatchNormalizationRunner] Transaction paused for active playback: ${targetPath}`);
         this.status = BatchStatus.PAUSED_FOR_PLAYBACK;
         this._emitProgress();
@@ -528,19 +542,13 @@ export class BatchNormalizationRunner {
         this.status = BatchStatus.RUNNING;
         this._emitProgress();
       } else if (txResult.state === NormalizationState.FAILED_SAFE) {
-        // Individual Safe Failure: engine confirmed safe idle, isolate and proceed
         if (this.engine.status === EngineStatus.SAFE_IDLE) {
           console.warn(`[BatchNormalizationRunner] Individual safe failure for ${targetPath}: ${txResult.error}`);
           this.pendingQueue.shift();
-          this.failedSafeItems.push({
-            path: targetPath,
-            error: txResult.error,
-            failedAt: new Date().toISOString()
-          });
+          this.failedSafeItems.push({ path: targetPath, error: txResult.error, failedAt: new Date().toISOString() });
           this.activeJobPath = null;
           this._emitProgress();
         } else {
-          // Engine left in unhealthy status
           this.status = BatchStatus.BLOCKED;
           this.isBlocked = true;
           this.blockReason = `ENGINE_UNHEALTHY_STATUS: ${this.engine.status}`;
@@ -549,7 +557,6 @@ export class BatchNormalizationRunner {
           break;
         }
       } else {
-        // Queue-Stopping Anomaly (RECOVERY_REQUIRED, RECOVERY_BLOCKED, etc.)
         console.error(`[BatchNormalizationRunner] FATAL: Queue-stopping anomaly for ${targetPath}: ${txResult.error}`);
         this.status = BatchStatus.BLOCKED;
         this.isBlocked = true;
