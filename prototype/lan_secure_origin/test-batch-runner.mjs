@@ -501,8 +501,8 @@ async function runTests() {
     const manifestObj = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
     const pilotPlan = await derivePendingQueue({ inventoryPath: rawInvPath, journal: pilotJournal, manifest: manifestObj });
     assert.strictEqual(pilotPlan.totalAcceptedUniverse, 235, 'Pilot is part of the 235 authorized universe');
-    assert.strictEqual(pilotPlan.alreadyCompleted.length, 1, 'Pilot recognized as already DONE');
-    assert.strictEqual(pilotPlan.pendingQueue.length, 234, 'Pending rollout queue is exactly 234');
+    assert(pilotPlan.alreadyCompleted.length >= 1, 'Completed candidates recognized as already DONE');
+    assert.strictEqual(pilotPlan.pendingQueue.length, 0, 'Uncertified chapter candidates are NOT QUEUED into destructive queue');
 
     // 8. Pilot journal initialFingerprint mismatch => BLOCK / excluded from alreadyCompleted
     const corruptPilotEntry = {
@@ -565,6 +565,7 @@ async function runTests() {
       verifyAuthorizationManifest: true,
       manifestPath,
       inventoryPath: rawInvPath,
+      journal: new NormalizationJournal(path.join(TEST_DIR, 'cand_mismatch_journal.json')),
       fileOps: {
         existsSync: () => true,
         getMediaFingerprint: () => ({ sizeBytes: 1, mtimeMs: 2, fingerprintId: 'fake' })

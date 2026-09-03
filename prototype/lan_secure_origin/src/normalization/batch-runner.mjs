@@ -248,12 +248,12 @@ export async function derivePendingQueue(options = {}) {
         const ext = path.extname(fullPath);
         const rule = findRepairCandidate(currentFacts, ext);
 
-        if (!rule) {
+        if (!rule || rule.status !== 'CERTIFIED_FOR_TESTED_ENVELOPE') {
           const normBucket = matchNormalizedCertifiedBucket(currentFacts, ext);
           if (normBucket) {
             alreadyCompleted.push({ path: fullPath, reason: 'CURRENT_FACTS_ALREADY_NORMALIZED', matchedBucket: normBucket.bucketId });
           } else {
-            skippedOrExcluded.push({ path: fullPath, reason: 'CURRENT_FACTS_DRIFT_EXCLUDED' });
+            skippedOrExcluded.push({ path: fullPath, reason: (rule && rule.status !== 'CERTIFIED_FOR_TESTED_ENVELOPE') ? 'UNCERTIFIED_CANDIDATE_EXCLUDED' : 'CURRENT_FACTS_DRIFT_EXCLUDED' });
           }
           continue;
         }

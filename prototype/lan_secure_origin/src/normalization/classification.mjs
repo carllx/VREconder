@@ -1,5 +1,5 @@
 import path from 'node:path';
-import { matchExactCertifiedBucket } from './repair-rules.mjs';
+import { matchExactCertifiedBucket, matchChapterAwareCandidate } from './repair-rules.mjs';
 
 export const MediaClass = {
   READY_DIRECT: 'READY_DIRECT',
@@ -115,11 +115,37 @@ export function classifyMedia(filePath, facts) {
       if (ext === '.mp4') {
         const exactBucket = matchExactCertifiedBucket(facts, ext);
         if (exactBucket) {
+          // Topology boundary check:
+          const hasOtherStreams = facts.otherStreams && facts.otherStreams.length > 0;
+          const hasChapters = typeof facts.chapterCount === 'number' && facts.chapterCount > 0;
+          const audioCount = facts.audioCount ?? 1;
+
+          // 1. Ordinary known topology (video + audio, no extra streams, no chapters)
+          if (!hasOtherStreams && !hasChapters && audioCount === 1) {
+            return {
+              classification: MediaClass.EXACT_CERTIFIED_NORMALIZATION_CANDIDATE,
+              reason: `Matches exact certified envelope (${exactBucket.name}) with standard A/V topology`,
+              repairCandidate: 'hevc-mp4-hev1-to-hvc1-streamcopy-v1',
+              matchedBucket: exactBucket.bucketId
+            };
+          }
+
+          // 2. Recognized chapter topology (video + audio + legacy data/text chapter representation + chapters)
+          const chapterCandidate = matchChapterAwareCandidate(facts, ext);
+          if (chapterCandidate) {
+            return {
+              classification: MediaClass.NEEDS_BUCKET_CERTIFICATION,
+              reason: `Matches certified video envelope with recognized legacy chapter topology (${facts.chapterCount} chapters)`,
+              repairCandidate: chapterCandidate.ruleId,
+              matchedBucket: exactBucket.bucketId
+            };
+          }
+
+          // 3. Unexpected topology on exact video envelope (subtitles, multi-audio, unknown data streams, malformed chapters, etc.)
           return {
-            classification: MediaClass.EXACT_CERTIFIED_NORMALIZATION_CANDIDATE,
-            reason: `Matches exact certified envelope (${exactBucket.name})`,
-            repairCandidate: 'hevc-mp4-hev1-to-hvc1-streamcopy-v1',
-            matchedBucket: exactBucket.bucketId
+            classification: MediaClass.UNSUPPORTED_UNKNOWN_FIX,
+            reason: `Untested stream topology on certified video envelope (otherStreams: ${facts.otherStreams?.length || 0}, audioCount: ${audioCount}, chapters: ${facts.chapterCount || 0})`,
+            repairCandidate: null
           };
         } else {
           return {

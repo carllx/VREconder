@@ -123,6 +123,7 @@ export async function probeMediaFacts(filePath, options = {}) {
       '-print_format', 'json',
       '-show_format',
       '-show_streams',
+      '-show_chapters',
       filePath
     ];
 
@@ -150,6 +151,15 @@ export async function probeMediaFacts(filePath, options = {}) {
         const videoStreams = streams.filter(s => s.codec_type === 'video');
         const audioStreams = streams.filter(s => s.codec_type === 'audio');
         const subtitleStreams = streams.filter(s => s.codec_type === 'subtitle');
+        const otherStreams = streams.filter(s => s.codec_type !== 'video' && s.codec_type !== 'audio');
+
+        const chapters = (raw.chapters || []).map(ch => ({
+          id: ch.id,
+          start: parseFloat(ch.start_time || '0'),
+          end: parseFloat(ch.end_time || '0'),
+          title: (ch.tags?.title || ch.tags?.TITLE || '').trim(),
+          tags: ch.tags || {}
+        }));
 
         const primaryVideo = videoStreams[0] || null;
         const primaryVideoFact = mapVideoStreamFact(primaryVideo);
@@ -162,6 +172,7 @@ export async function probeMediaFacts(filePath, options = {}) {
         const facts = {
           fingerprint: fp,
           containerFormat: format.format_name || path.extname(filePath).slice(1),
+          streamCount: streams.length,
           videoCount: videoStreams.length,
           videoStreams: videoStreams.map(v => mapVideoStreamFact(v)),
           video: primaryVideoFact,
@@ -172,6 +183,15 @@ export async function probeMediaFacts(filePath, options = {}) {
             sampleRate: a.sample_rate
           })),
           subtitleCount: subtitleStreams.length,
+          otherStreams: otherStreams.map(s => ({
+            index: s.index,
+            codecType: s.codec_type,
+            codecName: s.codec_name || 'unknown',
+            codecTag: (s.codec_tag_string || '').replace(/[^\x20-\x7E]/g, '').trim(),
+            handler: s.tags?.handler_name || ''
+          })),
+          chapterCount: chapters.length,
+          chapters,
           moovLocation,
           probedAt: new Date().toISOString()
         };

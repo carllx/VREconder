@@ -232,6 +232,134 @@ export async function verifyNormalizedOutput(originalPath, outputPath, expectedR
   if (!origStreams || !outStreams) {
     return { ok: false, reason: 'Failed to retrieve per-stream packet details (ffprobe unavailable or unparseable)', details: {} };
   }
+  if (expectedRule.isChapterAware) {
+    // 1. Check video packet counts
+    const origVStreams = origStreams.filter(s => s.codecType === 'video');
+    const outVStreams = outStreams.filter(s => s.codecType === 'video');
+    if (origVStreams.length !== outVStreams.length || origVStreams.length !== origVideoCount) {
+      return { ok: false, reason: `Video stream count mismatch in packet probe: ${origVStreams.length} vs ${outVStreams.length}`, details: {} };
+    }
+    for (let i = 0; i < origVStreams.length; i++) {
+      const oV = origVStreams[i];
+      const nV = outVStreams[i];
+      if (oV.packetCount <= 0 || nV.packetCount <= 0) {
+        return { ok: false, reason: `Video stream [${i}] packet count missing or non-positive: ${oV.packetCount} vs ${nV.packetCount}`, details: { oV, nV } };
+      }
+      if (oV.packetCount !== nV.packetCount) {
+        return { ok: false, reason: `Video stream [${i}] packet count mismatch: ${oV.packetCount} vs ${nV.packetCount}`, details: { oV, nV } };
+      }
+    }
+
+    // 2. Check audio packet counts
+    const origAStreams = origStreams.filter(s => s.codecType === 'audio');
+    const outAStreams = outStreams.filter(s => s.codecType === 'audio');
+    if (origAStreams.length !== outAStreams.length || origAStreams.length !== origFacts.audioCount) {
+      return { ok: false, reason: `Audio stream count mismatch in packet probe: ${origAStreams.length} vs ${outAStreams.length}`, details: {} };
+    }
+    for (let i = 0; i < origAStreams.length; i++) {
+      const oA = origAStreams[i];
+      const nA = outAStreams[i];
+      if (oA.packetCount <= 0 || nA.packetCount <= 0) {
+        return { ok: false, reason: `Audio stream [${i}] packet count missing or non-positive: ${oA.packetCount} vs ${nA.packetCount}`, details: { oA, nA } };
+      }
+      if (oA.packetCount !== nA.packetCount) {
+        return { ok: false, reason: `Audio stream [${i}] packet count mismatch: ${oA.packetCount} vs ${nA.packetCount}`, details: { oA, nA } };
+      }
+    }
+
+    // 3. Check for unauthorized extra streams in output container
+    const outOtherStreams = outStreams.filter(s => s.codecType !== 'video' && s.codecType !== 'audio');
+    if (outOtherStreams.length > 1) {
+      return { ok: false, reason: `Unexpected multiple non-A/V streams in output container: ${outOtherStreams.length}`, details: { outOtherStreams } };
+    }
+    if (outOtherStreams.length === 1) {
+      const s = outOtherStreams[0];
+      if (s.codecType !== 'data' && s.codecType !== 'text') {
+        return { ok: false, reason: `Unauthorized output stream type: ${s.codecType}`, details: { stream: s } };
+      }
+    }
+
+    // 4. Elementary payload MD5 equality for Video
+    for (let vIdx = 0; vIdx < origVideoCount; vIdx++) {
+      if (options.isCancelled?.()) return { ok: false, reason: 'Verification cancelled', details: {} };
+      const origVideoMd5 = await getStreamPayloadMD5(originalPath, `0:v:${vIdx}`, options);
+      const outVideoMd5 = await getStreamPayloadMD5(outputPath, `0:v:${vIdx}`, options);
+      if (!origVideoMd5 || !outVideoMd5) {
+        return { ok: false, reason: `Video stream [${vIdx}] payload MD5 could not be computed`, details: {} };
+      }
+      if (origVideoMd5 !== outVideoMd5) {
+        return { ok: false, reason: `Video stream [${vIdx}] elementary payload MD5 mismatch: ${origVideoMd5} vs ${outVideoMd5}`, details: {} };
+      }
+    }
+
+    // 5. Elementary payload MD5 equality for Audio
+    for (let aIdx = 0; aIdx < origFacts.audioCount; aIdx++) {
+      if (options.isCancelled?.()) return { ok: false, reason: 'Verification cancelled', details: {} };
+      const origAudioMd5 = await getStreamPayloadMD5(originalPath, `0:a:${aIdx}`, options);
+      const outAudioMd5 = await getStreamPayloadMD5(outputPath, `0:a:${aIdx}`, options);
+      if (!origAudioMd5 || !outAudioMd5) {
+        return { ok: false, reason: `Audio stream [${aIdx}] payload MD5 could not be computed`, details: {} };
+      }
+      if (origAudioMd5 !== outAudioMd5) {
+        return { ok: false, reason: `Audio stream [${aIdx}] elementary payload MD5 mismatch: ${origAudioMd5} vs ${outAudioMd5}`, details: {} };
+      }
+    }
+
+    // 6. Chapter Semantic Equality Verification
+    const origChapters = origFacts.chapters || [];
+    const outChapters = outFacts.chapters || [];
+    if (origChapters.length === 0) {
+      return { ok: false, reason: 'Chapter-aware rule requires chapters in source media, but none found', details: {} };
+    }
+    if (origChapters.length !== outChapters.length) {
+      return { ok: false, reason: `Chapter count mismatch: original ${origChapters.length} vs output ${outChapters.length}`, details: { origChapters, outChapters } };
+    }
+
+    const TOLERANCE_SEC = 0.005; // 5ms tolerance for container timebase quantization
+    for (let cIdx = 0; cIdx < origChapters.length; cIdx++) {
+      const oC = origChapters[cIdx];
+      const nC = outChapters[cIdx];
+
+      const startDiff = Math.abs(oC.start - nC.start);
+      if (startDiff > TOLERANCE_SEC) {
+        return { ok: false, reason: `Chapter [${cIdx}] start time drift: ${oC.start}s vs ${nC.start}s (drift: ${startDiff}s > ${TOLERANCE_SEC}s)`, details: { oC, nC } };
+      }
+      const endDiff = Math.abs(oC.end - nC.end);
+      if (endDiff > TOLERANCE_SEC) {
+        return { ok: false, reason: `Chapter [${cIdx}] end time drift: ${oC.end}s vs ${nC.end}s (drift: ${endDiff}s > ${TOLERANCE_SEC}s)`, details: { oC, nC } };
+      }
+
+      const oTitle = (oC.title || '').trim();
+      const nTitle = (nC.title || '').trim();
+      if (oTitle !== nTitle) {
+        return { ok: false, reason: `Chapter [${cIdx}] title drift: "${oTitle}" vs "${nTitle}"`, details: { oC, nC } };
+      }
+
+      const oLang = oC.tags?.language || oC.tags?.LANGUAGE;
+      const nLang = nC.tags?.language || nC.tags?.LANGUAGE;
+      if (oLang && nLang && oLang.toLowerCase() !== nLang.toLowerCase()) {
+        return { ok: false, reason: `Chapter [${cIdx}] language tag mismatch: ${oLang} vs ${nLang}`, details: { oC, nC } };
+      }
+    }
+
+    return {
+      ok: true,
+      reason: null,
+      details: {
+        originalFingerprint: origFacts.fingerprint,
+        outputFingerprint: outFacts.fingerprint,
+        codecTag: primaryOutVideo.codecTag,
+        demuxChecked: true,
+        videoStreamsVerified: origVideoCount,
+        audioStreamsVerified: origFacts.audioCount,
+        allRetainedStreamsVerified: outStreams.length,
+        chaptersVerified: origChapters.length,
+        chapterAware: true
+      }
+    };
+  }
+
+  // Fallback for Existing Normal Rule: strictly preserves 100% of existing behavior
   if (origStreams.length !== outStreams.length) {
     return { ok: false, reason: `Total stream count mismatch: ${origStreams.length} vs ${outStreams.length}`, details: {} };
   }

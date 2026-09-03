@@ -132,8 +132,87 @@ export function matchExactCertifiedBucket(facts, ext) {
   return null;
 }
 
+export const CANDIDATE_REPAIR_RULES = [
+  {
+    ruleId: 'hevc-mp4-hev1-to-hvc1-chapters-streamcopy-v1',
+    name: 'HEVC MP4 hev1 to hvc1 Lossless Stream-Copy Remux with Chapter Preservation',
+    policyVersion: 'v1.0.0-candidate-preflight',
+    status: RuleStatus.NEEDS_BUCKET_CERTIFICATION,
+    isChapterAware: true,
+    purpose: 'Safari Code 4 (MEDIA_ERR_SRC_NOT_SUPPORTED) compatibility for HEVC MP4 assets with legacy chapter/text tracks',
+    inputRequirements: {
+      containerExtensions: ['.mp4'],
+      videoCodec: 'hevc',
+      sampleEntryTags: ['hev1'],
+      colorDepth: [8],
+      profile: ['Main'],
+      certifiedBuckets: ['BUCKET_A1_4K_59FPS_SIVR033', 'BUCKET_A2_4K_60FPS_WAKUI', 'BUCKET_B_8K_60FPS_KAMIKI'],
+      requiresChapters: true,
+      allowedTopology: '1 video + 1 audio + 1 legacy chapter/data stream'
+    },
+    operation: {
+      type: 'stream-copy-chapters',
+      ffmpegArgs: ['-map', '0:v', '-map', '0:a', '-map_chapters', '0', '-c', 'copy', '-tag:v', 'hvc1'],
+      outputTag: 'hvc1',
+      requiresReencoding: false
+    },
+    provenBy: [],
+    doesNotClaim: [
+      'Universal hev1 failure across all hardware / OS combinations',
+      'Production batch authorization without physical device certification',
+      'FastStart container rearrangement',
+      'Fix for WebGL texture upload latency, memory pressure, or network stall'
+    ],
+    rationale: 'Extracts video and audio bitstreams while preserving chapter markers via container-level -map_chapters 0, shedding non-standard legacy data/text streams that cause container mismatch on Safari VideoToolbox routing.'
+  }
+];
+
+/**
+ * Matches candidate media against the narrow chapter-aware candidate topology.
+ * 
+ * @param {object} facts 
+ * @param {string} ext 
+ * @returns {object | null}
+ */
+export function matchChapterAwareCandidate(facts, ext) {
+  if (!facts || !facts.video) return null;
+  const extLower = (ext || '').toLowerCase();
+  if (extLower !== '.mp4') return null;
+
+  // Video envelope must match exact certified bucket
+  const bucket = matchExactCertifiedBucket(facts, ext);
+  if (!bucket) return null;
+
+  // Topology matching: strictly 1 video stream, 1 audio stream, and > 0 chapters
+  if ((facts.videoCount ?? 1) !== 1) return null;
+  if ((facts.audioCount ?? 1) !== 1) return null;
+  if (!facts.chapterCount || facts.chapterCount <= 0) return null;
+
+  // Must have legacy chapter representation: exactly 1 non-video/non-audio stream of data type
+  const otherStreams = facts.otherStreams || [];
+  if (otherStreams.length !== 1) return null;
+
+  const dataStream = otherStreams[0];
+  if (dataStream.codecType !== 'data') return null;
+  const cName = (dataStream.codecName || '').toLowerCase();
+  const cTag = (dataStream.codecTag || '').toLowerCase();
+  if (!['bin_data', 'text', 'unknown'].includes(cName)) return null;
+  if (!['text', 'bin_data', ''].includes(cTag)) return null;
+
+  // Subtitle streams strictly forbidden
+  if (facts.subtitleCount && facts.subtitleCount > 0) return null;
+
+  return {
+    ...CANDIDATE_REPAIR_RULES[0],
+    matchedBucket: bucket
+  };
+}
+
+export const findCandidateRepairRule = matchChapterAwareCandidate;
+
 /**
  * Finds a matching certified repair rule for a given media fact profile.
+ * Certified rules apply ONLY to ordinary 2-stream media (1 video + 1 audio, 0 other streams, 0 chapters).
  * 
  * @param {object} facts 
  * @param {string} ext 
@@ -142,13 +221,41 @@ export function matchExactCertifiedBucket(facts, ext) {
 export function findCertifiedRepairRule(facts, ext) {
   const bucket = matchExactCertifiedBucket(facts, ext);
   if (!bucket) return null;
+
+  // Enforce topology boundary: certified rule requires strictly ordinary topology
+  if ((facts.videoCount ?? 1) !== 1) return null;
+  if (facts.audioCount !== undefined && facts.audioCount !== 1) return null;
+  if (facts.otherStreams && facts.otherStreams.length > 0) return null;
+  if (facts.chapterCount && facts.chapterCount > 0) return null;
+
   return {
     ...CERTIFIED_REPAIR_RULES[0],
     matchedBucket: bucket
   };
 }
 
-export const findRepairCandidate = findCertifiedRepairRule;
+/**
+ * Finds repair candidate with strict certified-by-default safety gate.
+ * Uncertified candidates are strictly blocked unless explicit options.allowUncertified: true is passed.
+ * 
+ * @param {object} facts 
+ * @param {string} ext 
+ * @param {object} options - { allowUncertified: boolean }
+ * @returns {object | null}
+ */
+export function findRepairCandidate(facts, ext, options = {}) {
+  // 1. Try certified rule first
+  const certified = findCertifiedRepairRule(facts, ext);
+  if (certified) return certified;
+
+  // 2. Uncertified candidates only permitted when explicitly opted in (e.g. isolated staging tests)
+  if (options && options.allowUncertified) {
+    const candidate = matchChapterAwareCandidate(facts, ext);
+    if (candidate) return candidate;
+  }
+
+  return null;
+}
 
 /**
  * Verifies if probed facts represent a cleanly normalized derivative

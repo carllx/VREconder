@@ -25,6 +25,7 @@ export class NormalizationEngine {
   constructor(options = {}) {
     this.journal = options.journal || new NormalizationJournal(options.journalPath || path.join(process.cwd(), 'prototype/lan_secure_origin/normalization_journal.json'));
     this.executionEnabled = options.executionEnabled ?? false; // Hard safety gate: disabled by default
+    this.allowUncertifiedCandidate = options.allowUncertifiedCandidate ?? false; // Explicit candidate staging gate
     this.allowedRoots = options.allowedRoots || null; // Optional isolation guard
     this.fileOps = options.fileOps || {}; // Fault injection hook
     this.getMediaFingerprint = options.getMediaFingerprint || options.fileOps?.getMediaFingerprint || getMediaFingerprint;
@@ -305,12 +306,19 @@ export class NormalizationEngine {
       return this._handleJobCancellation(job);
     }
 
-    const rule = findRepairCandidate(facts, ext);
+    const rule = findRepairCandidate(facts, ext, { allowUncertified: this.allowUncertifiedCandidate });
     if (!rule) {
       this.activeJob = null;
       this.isProcessing = false;
       this.status = EngineStatus.SAFE_IDLE;
       return { ok: false, state: NormalizationState.FAILED_SAFE, error: 'No applicable repair candidate rule' };
+    }
+
+    if (!this.allowUncertifiedCandidate && rule.status !== 'CERTIFIED_FOR_TESTED_ENVELOPE') {
+      this.activeJob = null;
+      this.isProcessing = false;
+      this.status = EngineStatus.SAFE_IDLE;
+      return { ok: false, state: NormalizationState.FAILED_SAFE, error: 'Uncertified candidate rule blocked by production safety gate' };
     }
 
     this.journal.recordState(canonical, NormalizationState.PENDING, { ruleId: rule.ruleId, initialFingerprint });
@@ -322,7 +330,8 @@ export class NormalizationEngine {
     this.journal.recordState(canonical, NormalizationState.REMUXING, { partialPath });
 
     const remuxResult = await new Promise((resolve) => {
-      const args = ['-v', 'error', '-y', '-i', canonical, '-map', '0', '-c', 'copy', '-tag:v', rule.expectedOutputTag || 'hvc1', '-f', 'mp4', partialPath];
+      const opArgs = rule.operation?.ffmpegArgs || ['-map', '0', '-c', 'copy', '-tag:v', rule.expectedOutputTag || 'hvc1'];
+      const args = ['-v', 'error', '-y', '-i', canonical, ...opArgs, '-f', 'mp4', partialPath];
       const child = (this.spawn || spawn)('ffmpeg', args, { stdio: ['ignore', 'ignore', 'pipe'] });
       this._registerProcess(child);
       let stderr = '';
