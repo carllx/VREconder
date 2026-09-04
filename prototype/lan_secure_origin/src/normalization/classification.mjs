@@ -1,5 +1,5 @@
 import path from 'node:path';
-import { matchExactCertifiedBucket, matchChapterAwareCandidate } from './repair-rules.mjs';
+import { matchExactCertifiedBucket, matchChapterAwareCandidate, RuleStatus } from './repair-rules.mjs';
 
 export const MediaClass = {
   READY_DIRECT: 'READY_DIRECT',
@@ -134,12 +134,12 @@ export function classifyMedia(filePath, facts) {
             };
           }
 
-          // 2. Recognized chapter topology (video + audio + legacy data/text chapter representation + chapters)
+          // 2. Recognized certified chapter topology (video + audio + legacy data/text chapter representation + chapters)
           const chapterCandidate = matchChapterAwareCandidate(facts, ext);
-          if (chapterCandidate) {
+          if (chapterCandidate && chapterCandidate.status === RuleStatus.CERTIFIED_FOR_TESTED_ENVELOPE) {
             return {
-              classification: MediaClass.NEEDS_BUCKET_CERTIFICATION,
-              reason: `Matches certified video envelope with recognized legacy chapter topology (${facts.chapterCount} chapters)`,
+              classification: MediaClass.EXACT_CERTIFIED_NORMALIZATION_CANDIDATE,
+              reason: `Matches certified video envelope with certified chapter-aware topology (${facts.chapterCount} chapters)`,
               repairCandidate: chapterCandidate.ruleId,
               matchedBucket: exactBucket.bucketId
             };

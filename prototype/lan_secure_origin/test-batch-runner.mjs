@@ -497,13 +497,13 @@ async function runTests() {
     assert.strictEqual(corruptCheck.ok, false, 'Corrupt manifest is blocked');
     assert.strictEqual(corruptCheck.reason, 'MANIFEST_CORRUPT');
 
-    // 7. Canonical Pilot currently hvc1/DONE preserves 235 universe identity & yields 234 pending queue
+    // 7. Canonical Pilot currently hvc1/DONE preserves 235 universe identity & remaining certified candidates queue
     const pilotJournal = new NormalizationJournal(path.join(__dirname, 'normalization_journal.json'));
     const manifestObj = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
     const pilotPlan = await derivePendingQueue({ inventoryPath: rawInvPath, journal: pilotJournal, manifest: manifestObj });
     assert.strictEqual(pilotPlan.totalAcceptedUniverse, 235, 'Pilot is part of the 235 authorized universe');
     assert(pilotPlan.alreadyCompleted.length >= 1, 'Completed candidates recognized as already DONE');
-    assert.strictEqual(pilotPlan.pendingQueue.length, 0, 'Uncertified chapter candidates are NOT QUEUED into destructive queue');
+    assert.strictEqual(pilotPlan.pendingQueue.length, 79, 'Promoted certified chapter candidates are queued into pending queue');
 
     // 8. Pilot journal initialFingerprint mismatch => BLOCK / excluded from alreadyCompleted
     const corruptPilotEntry = {

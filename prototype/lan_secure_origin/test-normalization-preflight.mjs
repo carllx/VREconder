@@ -58,11 +58,13 @@ async function runAllTests() {
   // Test 2: Exact Certified-Bucket Matching
   console.log('\nTest 2: Exact Certified-Bucket Matching');
   const ruleBucketA1 = findCertifiedRepairRule({
+    videoCount: 1, audioCount: 1, otherStreams: [], chapterCount: 0,
     video: { codec: 'hevc', codecTag: 'hev1', bitDepth: 8, width: 3840, height: 1920, level: 153, profile: 'Main', rFps: '2997/50', avgFps: '262749987/4359446' }
   }, '.mp4');
   assert(ruleBucketA1 !== null && ruleBucketA1.status === RuleStatus.CERTIFIED_FOR_TESTED_ENVELOPE, 'Matches Bucket A1 (4K 59.94fps SIVR033)');
 
   const ruleBucketA2 = findCertifiedRepairRule({
+    videoCount: 1, audioCount: 1, otherStreams: [], chapterCount: 0,
     video: { codec: 'hevc', codecTag: 'hev1', bitDepth: 8, width: 4096, height: 2048, level: 153, profile: 'Main', rFps: '60000/1001', avgFps: '60000/1001' }
   }, '.mp4');
   assert(ruleBucketA2 !== null && ruleBucketA2.matchedBucket.bucketId === 'BUCKET_A2_4K_60FPS_WAKUI', 'Matches Bucket A2 (4K 60.00fps Wakui Mito)');

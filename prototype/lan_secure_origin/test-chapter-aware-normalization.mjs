@@ -45,7 +45,7 @@ function createMockVideoFact(overrides = {}) {
   };
 }
 
-function createMockOrdinaryFacts() {
+function createMockOrdinaryFacts(overrides = {}) {
   return {
     videoCount: 1,
     video: createMockVideoFact(),
@@ -53,7 +53,8 @@ function createMockOrdinaryFacts() {
     audioStreams: [{ codec: 'aac', channels: 2, sampleRate: 48000 }],
     otherStreams: [],
     chapterCount: 0,
-    chapters: []
+    chapters: [],
+    ...overrides
   };
 }
 
@@ -104,17 +105,18 @@ async function runAllTests() {
     assert.strictEqual(ordCand, null, 'Ordinary media must NOT match chapter-aware candidate');
     console.log('  ✅ [PASS] Ordinary 2-stream media matches existing certified normal rule only');
 
-    // 1.2 Recognized chapter topology -> chapter-aware candidate
+    // 1.2 Recognized chapter topology -> promoted certified rule
     const chFacts = createMockChapterFacts();
     const chMatch = matchChapterAwareCandidate(chFacts, '.mp4');
     assert(chMatch, 'Recognized chapter topology matches chapter candidate');
     assert.strictEqual(chMatch.ruleId, 'hevc-mp4-hev1-to-hvc1-chapters-streamcopy-v1');
-    assert.strictEqual(chMatch.status, RuleStatus.NEEDS_BUCKET_CERTIFICATION);
+    assert.strictEqual(chMatch.status, RuleStatus.CERTIFIED_FOR_TESTED_ENVELOPE);
     assert.strictEqual(chMatch.isChapterAware, true);
-    // Certified rule must reject chapter media
-    const certReject = findCertifiedRepairRule(chFacts, '.mp4');
-    assert.strictEqual(certReject, null, 'Certified rule must reject media with chapters / data streams');
-    console.log('  ✅ [PASS] Recognized chapter topology matches chapter candidate with NEEDS_BUCKET_CERTIFICATION');
+    // Certified repair rule resolver must return chapter-aware certified rule
+    const certChapterRule = findCertifiedRepairRule(chFacts, '.mp4');
+    assert(certChapterRule, 'Certified rule resolver must find promoted chapter rule');
+    assert.strictEqual(certChapterRule.ruleId, 'hevc-mp4-hev1-to-hvc1-chapters-streamcopy-v1');
+    console.log('  ✅ [PASS] Recognized chapter topology matches promoted certified chapter rule');
 
     // 1.3 No chapters -> rejected from chapter candidate
     const noChFacts = createMockChapterFacts({ chapterCount: 0, chapters: [] });
@@ -150,13 +152,13 @@ async function runAllTests() {
     assert.strictEqual(ordClass.repairCandidate, 'hevc-mp4-hev1-to-hvc1-streamcopy-v1');
 
     const chClass = classifyMedia('sample.mp4', chFacts);
-    assert.strictEqual(chClass.classification, MediaClass.NEEDS_BUCKET_CERTIFICATION);
+    assert.strictEqual(chClass.classification, MediaClass.EXACT_CERTIFIED_NORMALIZATION_CANDIDATE);
     assert.strictEqual(chClass.repairCandidate, 'hevc-mp4-hev1-to-hvc1-chapters-streamcopy-v1');
 
     const unexpClass = classifyMedia('sample.mp4', extraStreamFacts);
     assert.strictEqual(unexpClass.classification, MediaClass.UNSUPPORTED_UNKNOWN_FIX);
     assert.strictEqual(unexpClass.repairCandidate, null);
-    console.log('  ✅ [PASS] MediaClass routing strictly enforces topology boundaries');
+    console.log('  ✅ [PASS] MediaClass routing strictly classifies certified chapter topology as EXACT_CERTIFIED_NORMALIZATION_CANDIDATE');
 
     // 1.7 Missing topology evidence must fail closed (certified FAIL)
     const missingAudioFacts = { ...ordFacts, audioCount: undefined };
@@ -186,10 +188,11 @@ async function runAllTests() {
   console.log('\n--- Section 2: Operation & Production Engine Safety Gating ---');
   {
     // 2.1 Remux operation arguments
-    const candRule = CANDIDATE_REPAIR_RULES[0];
-    assert.deepStrictEqual(candRule.operation.ffmpegArgs, [
+    const chRule = CERTIFIED_REPAIR_RULES.find(r => r.ruleId === 'hevc-mp4-hev1-to-hvc1-chapters-streamcopy-v1');
+    assert(chRule, 'Promoted chapter rule exists in CERTIFIED_REPAIR_RULES');
+    assert.deepStrictEqual(chRule.operation.ffmpegArgs, [
       '-map', '0:v', '-map', '0:a', '-map_chapters', '0', '-c', 'copy', '-tag:v', 'hvc1'
-    ], 'Chapter-aware candidate operation args match exact requirement');
+    ], 'Chapter-aware certified operation args match exact requirement');
 
     const normRule = CERTIFIED_REPAIR_RULES[0];
     assert.deepStrictEqual(normRule.operation.ffmpegArgs, [
@@ -197,18 +200,27 @@ async function runAllTests() {
     ], 'Existing normal rule operation args remain unchanged');
     console.log('  ✅ [PASS] Candidate and normal remux ffmpeg args match specification');
 
-    // 2.2 Default NormalizationEngine blocks uncertified candidate
+    // 2.2 Promoted chapter rule is selected by default in production
     const chFacts = createMockChapterFacts();
-    // Default findRepairCandidate without allowUncertified returns null
     const defaultFound = findRepairCandidate(chFacts, '.mp4');
-    assert.strictEqual(defaultFound, null, 'findRepairCandidate default returns null for uncertified candidate');
+    assert(defaultFound, 'findRepairCandidate returns promoted certified chapter rule by default');
+    assert.strictEqual(defaultFound.ruleId, 'hevc-mp4-hev1-to-hvc1-chapters-streamcopy-v1');
+    assert.strictEqual(defaultFound.status, RuleStatus.CERTIFIED_FOR_TESTED_ENVELOPE);
+    console.log('  ✅ [PASS] Production findRepairCandidate selects promoted chapter rule by default');
 
-    // With explicit allowUncertified: true, findRepairCandidate returns candidate
-    const explicitFound = findRepairCandidate(chFacts, '.mp4', { allowUncertified: true });
-    assert(explicitFound, 'Explicit allowUncertified returns candidate');
-    assert.strictEqual(explicitFound.ruleId, 'hevc-mp4-hev1-to-hvc1-chapters-streamcopy-v1');
+    // 2.3 Uncertified candidate rules remain strictly blocked by default
+    // Test with hypothetical uncertified candidate rule
+    CANDIDATE_REPAIR_RULES.push({
+      ruleId: 'hypothetical-uncertified-candidate-v1',
+      status: RuleStatus.NEEDS_BUCKET_CERTIFICATION
+    });
+    const uncertBlocked = findRepairCandidate(createMockOrdinaryFacts({ video: createMockVideoFact({ width: 1920, height: 1080 }) }), '.mp4');
+    assert.strictEqual(uncertBlocked, null, 'Uncertified candidate rule strictly blocked by default');
+    // Pop hypothetical rule
+    CANDIDATE_REPAIR_RULES.pop();
+    console.log('  ✅ [PASS] Future uncertified candidate rules remain strictly blocked by default');
 
-    // NormalizationEngine with default options (allowUncertifiedCandidate = false) blocks uncertified rule
+    // 2.4 NormalizationEngine with default options (allowUncertifiedCandidate = false) processes certified chapter rule
     const journalPath = path.join(STAGING_ROOT, 'test_gate_journal.json');
     const defaultEngine = new NormalizationEngine({
       journal: new NormalizationJournal(journalPath),
@@ -216,18 +228,19 @@ async function runAllTests() {
       allowUncertifiedCandidate: false
     });
     assert.strictEqual(defaultEngine.allowUncertifiedCandidate, false, 'allowUncertifiedCandidate defaults to false');
-    console.log('  ✅ [PASS] Production engine strictly blocks uncertified candidates by default');
+    console.log('  ✅ [PASS] Production engine allows certified chapter rule with allowUncertifiedCandidate: false');
 
-    // 2.3 Batch queue derivation blocks uncertified candidate from destructive pendingQueue
-    const mockInv = [{ fullPath: 'G:/Media/VR/Render/sample_chapter.mp4', classification: MediaClass.NEEDS_BUCKET_CERTIFICATION }];
+    // 2.5 Batch queue derivation queues certified chapter candidate into pendingQueue
+    const mockInv = [{ fullPath: 'G:/Media/VR/Render/sample_chapter.mp4', classification: MediaClass.EXACT_CERTIFIED_NORMALIZATION_CANDIDATE }];
     const batchPlan = await derivePendingQueue({
       inventoryItems: mockInv,
       journal: new NormalizationJournal(journalPath),
-      probeFacts: async () => chFacts
+      probeFacts: async () => chFacts,
+      fileOps: { existsSync: () => true }
     });
-    assert.strictEqual(batchPlan.pendingQueue.length, 0, 'Uncertified candidate NOT queued in destructive pending queue');
-    assert.strictEqual(batchPlan.skippedOrExcluded.length, 1);
-    console.log('  ✅ [PASS] Batch runner excludes uncertified chapter candidates from destructive execution queue');
+    assert.strictEqual(batchPlan.pendingQueue.length, 1, 'Certified chapter candidate queued in pending queue');
+    assert.strictEqual(batchPlan.skippedOrExcluded.length, 0);
+    console.log('  ✅ [PASS] Batch runner correctly queues certified chapter candidates into pending queue');
   }
 
   // -------------------------------------------------------------
@@ -235,7 +248,7 @@ async function runAllTests() {
   // -------------------------------------------------------------
   console.log('\n--- Section 3: Chapter Verifier Contract Matrix ---');
   {
-    const candRule = CANDIDATE_REPAIR_RULES[0];
+    const candRule = CERTIFIED_REPAIR_RULES.find(r => r.ruleId === 'hevc-mp4-hev1-to-hvc1-chapters-streamcopy-v1');
     const dummySrc = path.join(STAGING_ROOT, 'dummy_src.mp4');
     const dummyOut = path.join(STAGING_ROOT, 'dummy_out.mp4');
     fs.writeFileSync(dummySrc, 'test');
@@ -401,14 +414,14 @@ async function runAllTests() {
     const origVMd5 = execSync(`ffmpeg -v error -i "${rep.src}" -map 0:v:0 -c copy -f md5 -`).toString().trim();
     const origAMd5 = execSync(`ffmpeg -v error -i "${rep.src}" -map 0:a:0 -c copy -f md5 -`).toString().trim();
 
-    // Set up dedicated staging engine with explicit allowUncertifiedCandidate and allowedRoots
+    // Set up dedicated staging engine with production default (allowUncertifiedCandidate: false) and allowedRoots
     const repJournalPath = path.join(stagingDir, 'staging_journal.json');
     const repJournal = new NormalizationJournal(repJournalPath);
     const repEngine = new NormalizationEngine({
       journal: repJournal,
       executionEnabled: true,
-      allowUncertifiedCandidate: true, // Explicitly authorized ONLY for isolated staging test
-      allowedRoots: [stagingDir]      // Strictly locked to staging directory
+      allowUncertifiedCandidate: false, // Production default: certified rules must execute without opt-in
+      allowedRoots: [stagingDir]       // Strictly locked to staging directory
     });
 
     const init = await repEngine.initialize();

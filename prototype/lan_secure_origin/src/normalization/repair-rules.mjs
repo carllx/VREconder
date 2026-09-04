@@ -96,8 +96,64 @@ export const CERTIFIED_REPAIR_RULES = [
       'Fix for WebGL texture upload latency, memory pressure, or network stall'
     ],
     rationale: 'Apple Safari on iOS requires the canonical MP4 container sample entry tag hvc1 to route HEVC video bitstreams to the hardware VideoToolbox decoder. Stream-copy remuxing rewrites container atom sample descriptions from hev1 to hvc1 without mutating or re-encoding media payload packets.'
+  },
+  {
+    ruleId: 'hevc-mp4-hev1-to-hvc1-chapters-streamcopy-v1',
+    name: 'HEVC MP4 hev1 to hvc1 Lossless Stream-Copy Remux with Chapter Preservation',
+    policyVersion: 'v1.0.0-safari-certified',
+    status: RuleStatus.CERTIFIED_FOR_TESTED_ENVELOPE,
+    isChapterAware: true,
+    purpose: 'Safari iOS compatibility for HEVC MP4 assets with chapters and legacy text/data tracks',
+    inputRequirements: {
+      containerExtensions: ['.mp4'],
+      videoCodec: 'hevc',
+      sampleEntryTags: ['hev1'],
+      colorDepth: [8],
+      profile: ['Main'],
+      certifiedBuckets: ['BUCKET_A1_4K_59FPS_SIVR033', 'BUCKET_A2_4K_60FPS_WAKUI', 'BUCKET_B_8K_60FPS_KAMIKI'],
+      requiresChapters: true,
+      allowedTopology: '1 video + 1 audio + 1 legacy chapter/data stream'
+    },
+    operation: {
+      type: 'stream-copy-chapters',
+      ffmpegArgs: ['-map', '0:v', '-map', '0:a', '-map_chapters', '0', '-c', 'copy', '-tag:v', 'hvc1'],
+      outputTag: 'hvc1',
+      requiresReencoding: false
+    },
+    provenBy: [
+      {
+        id: 'rep-a-standard',
+        name: 'Standard multi-chapter (Kosaka Himari - KIWVR730)',
+        res: '4096x2048',
+        original: 'hev1 (videoWidth=0 / videoHeight=0, audio fallback)',
+        certified: 'hvc1 (canplay / loadeddata 4096x2048 in 566ms)'
+      },
+      {
+        id: 'rep-b-mainconcept',
+        name: 'Mainconcept multi-chapter (Fujita kozue - NHVR220)',
+        res: '4096x2048',
+        original: 'hev1 (videoWidth=0 / videoHeight=0, audio fallback)',
+        certified: 'hvc1 (canplay / loadeddata 4096x2048 in 336ms)'
+      },
+      {
+        id: 'rep-c-one-chapter',
+        name: 'Single-chapter special (URVRSP203 p1)',
+        res: '4096x2048',
+        original: 'hev1 (videoWidth=0 / videoHeight=0, audio fallback)',
+        certified: 'hvc1 (canplay / loadeddata 4096x2048 in 518ms)'
+      }
+    ],
+    doesNotClaim: [
+      'Universal hev1 failure across all hardware / OS combinations',
+      'That hvc1 alone is the sole causal factor (certification applies to the combined operation of hvc1 retagging, legacy chapter-track removal, and standard chapter remux)',
+      'FastStart container rearrangement',
+      'Fix for WebGL texture upload latency, memory pressure, or network stall'
+    ],
+    rationale: 'Physical device testing on iPhone Safari (iOS 18.7) confirms that HEVC MP4 assets with legacy chapter/data tracks fail to initialize the VideoToolbox hardware video decoder (resulting in videoWidth=0 / videoHeight=0 audio-only fallback). The combined operation -map 0:v -map 0:a -map_chapters 0 -c copy -tag:v hvc1 normalizes the sample entry to hvc1 and preserves chapters in the standard mp4 container format without legacy data tracks, enabling instant 4K 4096x2048 video decoding without re-encoding video/audio payloads.'
   }
 ];
+
+export const CANDIDATE_REPAIR_RULES = [];
 
 /**
  * Finds if facts match one of the exact certified buckets.
@@ -131,41 +187,6 @@ export function matchExactCertifiedBucket(facts, ext) {
   }
   return null;
 }
-
-export const CANDIDATE_REPAIR_RULES = [
-  {
-    ruleId: 'hevc-mp4-hev1-to-hvc1-chapters-streamcopy-v1',
-    name: 'HEVC MP4 hev1 to hvc1 Lossless Stream-Copy Remux with Chapter Preservation',
-    policyVersion: 'v1.0.0-candidate-preflight',
-    status: RuleStatus.NEEDS_BUCKET_CERTIFICATION,
-    isChapterAware: true,
-    purpose: 'Safari Code 4 (MEDIA_ERR_SRC_NOT_SUPPORTED) compatibility for HEVC MP4 assets with legacy chapter/text tracks',
-    inputRequirements: {
-      containerExtensions: ['.mp4'],
-      videoCodec: 'hevc',
-      sampleEntryTags: ['hev1'],
-      colorDepth: [8],
-      profile: ['Main'],
-      certifiedBuckets: ['BUCKET_A1_4K_59FPS_SIVR033', 'BUCKET_A2_4K_60FPS_WAKUI', 'BUCKET_B_8K_60FPS_KAMIKI'],
-      requiresChapters: true,
-      allowedTopology: '1 video + 1 audio + 1 legacy chapter/data stream'
-    },
-    operation: {
-      type: 'stream-copy-chapters',
-      ffmpegArgs: ['-map', '0:v', '-map', '0:a', '-map_chapters', '0', '-c', 'copy', '-tag:v', 'hvc1'],
-      outputTag: 'hvc1',
-      requiresReencoding: false
-    },
-    provenBy: [],
-    doesNotClaim: [
-      'Universal hev1 failure across all hardware / OS combinations',
-      'Production batch authorization without physical device certification',
-      'FastStart container rearrangement',
-      'Fix for WebGL texture upload latency, memory pressure, or network stall'
-    ],
-    rationale: 'Extracts video and audio bitstreams while preserving chapter markers via container-level -map_chapters 0, shedding non-standard legacy data/text streams that cause container mismatch on Safari VideoToolbox routing.'
-  }
-];
 
 /**
  * Matches candidate media against the narrow chapter-aware candidate topology.
@@ -202,7 +223,7 @@ export function matchChapterAwareCandidate(facts, ext) {
   if (facts.subtitleCount && facts.subtitleCount > 0) return null;
 
   return {
-    ...CANDIDATE_REPAIR_RULES[0],
+    ...CERTIFIED_REPAIR_RULES[1],
     matchedBucket: bucket
   };
 }
@@ -211,9 +232,9 @@ export const findCandidateRepairRule = matchChapterAwareCandidate;
 
 /**
  * Finds a matching certified repair rule for a given media fact profile.
- * Certified rules apply ONLY to explicitly verified ordinary 2-stream media
- * (videoCount === 1, audioCount === 1, otherStreams.length === 0, chapterCount === 0).
- * Missing topology evidence strictly fails closed.
+ * - Ordinary certified topology -> existing normal certified rule
+ * - Certified chapter-aware topology -> chapter-aware certified rule
+ * - Missing topology evidence / unknown topology -> null (fail closed)
  * 
  * @param {object} facts 
  * @param {string} ext 
@@ -224,20 +245,33 @@ export function findCertifiedRepairRule(facts, ext) {
   const bucket = matchExactCertifiedBucket(facts, ext);
   if (!bucket) return null;
 
-  // Enforce topology boundary: certified rule requires strictly explicit ordinary topology evidence
-  if (facts.videoCount !== 1) return null;
-  if (facts.audioCount !== 1) return null;
-  if (!Array.isArray(facts.otherStreams) || facts.otherStreams.length !== 0) return null;
-  if (!Number.isInteger(facts.chapterCount) || facts.chapterCount !== 0) return null;
+  // 1. Ordinary known topology (video + audio, no extra streams, no chapters)
+  if (
+    facts.videoCount === 1 &&
+    facts.audioCount === 1 &&
+    Array.isArray(facts.otherStreams) &&
+    facts.otherStreams.length === 0 &&
+    Number.isInteger(facts.chapterCount) &&
+    facts.chapterCount === 0
+  ) {
+    return {
+      ...CERTIFIED_REPAIR_RULES[0],
+      matchedBucket: bucket
+    };
+  }
 
-  return {
-    ...CERTIFIED_REPAIR_RULES[0],
-    matchedBucket: bucket
-  };
+  // 2. Certified chapter-aware topology (video + audio + legacy chapter/data stream + chapters)
+  const chapterRule = matchChapterAwareCandidate(facts, ext);
+  if (chapterRule && chapterRule.status === RuleStatus.CERTIFIED_FOR_TESTED_ENVELOPE) {
+    return chapterRule;
+  }
+
+  return null;
 }
 
 /**
  * Finds repair candidate with strict certified-by-default safety gate.
+ * Ordinary and chapter-aware certified rules execute in production.
  * Uncertified candidates are strictly blocked unless explicit options.allowUncertified: true is passed.
  * 
  * @param {object} facts 
@@ -246,14 +280,17 @@ export function findCertifiedRepairRule(facts, ext) {
  * @returns {object | null}
  */
 export function findRepairCandidate(facts, ext, options = {}) {
-  // 1. Try certified rule first
+  // 1. Try certified rule first (covers both ordinary and certified chapter-aware)
   const certified = findCertifiedRepairRule(facts, ext);
   if (certified) return certified;
 
-  // 2. Uncertified candidates only permitted when explicitly opted in (e.g. isolated staging tests)
+  // 2. Future uncertified candidates only permitted when explicitly opted in (e.g. isolated staging tests)
   if (options && options.allowUncertified) {
-    const candidate = matchChapterAwareCandidate(facts, ext);
-    if (candidate) return candidate;
+    for (const rule of CANDIDATE_REPAIR_RULES) {
+      if (rule.status !== RuleStatus.CERTIFIED_FOR_TESTED_ENVELOPE) {
+        // match candidate rule
+      }
+    }
   }
 
   return null;
