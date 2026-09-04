@@ -115,13 +115,17 @@ export function classifyMedia(filePath, facts) {
       if (ext === '.mp4') {
         const exactBucket = matchExactCertifiedBucket(facts, ext);
         if (exactBucket) {
-          // Topology boundary check:
-          const hasOtherStreams = facts.otherStreams && facts.otherStreams.length > 0;
-          const hasChapters = typeof facts.chapterCount === 'number' && facts.chapterCount > 0;
-          const audioCount = facts.audioCount ?? 1;
+          // Topology boundary check: explicit evidence required
+          const isOrdinaryTopology =
+            facts.videoCount === 1 &&
+            facts.audioCount === 1 &&
+            Array.isArray(facts.otherStreams) &&
+            facts.otherStreams.length === 0 &&
+            Number.isInteger(facts.chapterCount) &&
+            facts.chapterCount === 0;
 
           // 1. Ordinary known topology (video + audio, no extra streams, no chapters)
-          if (!hasOtherStreams && !hasChapters && audioCount === 1) {
+          if (isOrdinaryTopology) {
             return {
               classification: MediaClass.EXACT_CERTIFIED_NORMALIZATION_CANDIDATE,
               reason: `Matches exact certified envelope (${exactBucket.name}) with standard A/V topology`,
@@ -141,10 +145,10 @@ export function classifyMedia(filePath, facts) {
             };
           }
 
-          // 3. Unexpected topology on exact video envelope (subtitles, multi-audio, unknown data streams, malformed chapters, etc.)
+          // 3. Unexpected or incomplete topology on exact video envelope (subtitles, multi-audio, missing topology facts, unknown data streams, etc.)
           return {
             classification: MediaClass.UNSUPPORTED_UNKNOWN_FIX,
-            reason: `Untested stream topology on certified video envelope (otherStreams: ${facts.otherStreams?.length || 0}, audioCount: ${audioCount}, chapters: ${facts.chapterCount || 0})`,
+            reason: `Untested or missing stream topology evidence on certified video envelope (videoCount: ${facts.videoCount}, audioCount: ${facts.audioCount}, otherStreams: ${facts.otherStreams?.length ?? 'none'}, chapterCount: ${facts.chapterCount ?? 'none'})`,
             repairCandidate: null
           };
         } else {

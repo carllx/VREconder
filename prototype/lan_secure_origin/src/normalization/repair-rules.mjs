@@ -183,20 +183,19 @@ export function matchChapterAwareCandidate(facts, ext) {
   const bucket = matchExactCertifiedBucket(facts, ext);
   if (!bucket) return null;
 
-  // Topology matching: strictly 1 video stream, 1 audio stream, and > 0 chapters
-  if ((facts.videoCount ?? 1) !== 1) return null;
-  if ((facts.audioCount ?? 1) !== 1) return null;
-  if (!facts.chapterCount || facts.chapterCount <= 0) return null;
+  // Topology matching: strictly 1 video stream, 1 audio stream, and integer chapters > 0
+  if (facts.videoCount !== 1) return null;
+  if (facts.audioCount !== 1) return null;
+  if (!Number.isInteger(facts.chapterCount) || facts.chapterCount <= 0) return null;
 
   // Must have legacy chapter representation: exactly 1 non-video/non-audio stream of data type
-  const otherStreams = facts.otherStreams || [];
-  if (otherStreams.length !== 1) return null;
+  if (!Array.isArray(facts.otherStreams) || facts.otherStreams.length !== 1) return null;
 
-  const dataStream = otherStreams[0];
+  const dataStream = facts.otherStreams[0];
   if (dataStream.codecType !== 'data') return null;
   const cName = (dataStream.codecName || '').toLowerCase();
   const cTag = (dataStream.codecTag || '').toLowerCase();
-  if (!['bin_data', 'text', 'unknown'].includes(cName)) return null;
+  if (!['bin_data', 'text'].includes(cName)) return null; // unknown strictly forbidden
   if (!['text', 'bin_data', ''].includes(cTag)) return null;
 
   // Subtitle streams strictly forbidden
@@ -212,21 +211,24 @@ export const findCandidateRepairRule = matchChapterAwareCandidate;
 
 /**
  * Finds a matching certified repair rule for a given media fact profile.
- * Certified rules apply ONLY to ordinary 2-stream media (1 video + 1 audio, 0 other streams, 0 chapters).
+ * Certified rules apply ONLY to explicitly verified ordinary 2-stream media
+ * (videoCount === 1, audioCount === 1, otherStreams.length === 0, chapterCount === 0).
+ * Missing topology evidence strictly fails closed.
  * 
  * @param {object} facts 
  * @param {string} ext 
  * @returns {object | null}
  */
 export function findCertifiedRepairRule(facts, ext) {
+  if (!facts) return null;
   const bucket = matchExactCertifiedBucket(facts, ext);
   if (!bucket) return null;
 
-  // Enforce topology boundary: certified rule requires strictly ordinary topology
-  if ((facts.videoCount ?? 1) !== 1) return null;
-  if (facts.audioCount !== undefined && facts.audioCount !== 1) return null;
-  if (facts.otherStreams && facts.otherStreams.length > 0) return null;
-  if (facts.chapterCount && facts.chapterCount > 0) return null;
+  // Enforce topology boundary: certified rule requires strictly explicit ordinary topology evidence
+  if (facts.videoCount !== 1) return null;
+  if (facts.audioCount !== 1) return null;
+  if (!Array.isArray(facts.otherStreams) || facts.otherStreams.length !== 0) return null;
+  if (!Number.isInteger(facts.chapterCount) || facts.chapterCount !== 0) return null;
 
   return {
     ...CERTIFIED_REPAIR_RULES[0],

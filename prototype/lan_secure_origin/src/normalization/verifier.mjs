@@ -142,7 +142,7 @@ export async function verifyNormalizedOutput(originalPath, outputPath, expectedR
     return { ok: false, reason: 'Verification cancelled', details: {} };
   }
 
-  const origFacts = await probeMediaFacts(originalPath, options);
+  const origFacts = options.origFacts || options.mockOrigFacts || await probeMediaFacts(originalPath, options);
   if (!origFacts || !origFacts.video) {
     return { ok: false, reason: 'Original media cannot be probed', details: {} };
   }
@@ -151,7 +151,7 @@ export async function verifyNormalizedOutput(originalPath, outputPath, expectedR
     return { ok: false, reason: 'Verification cancelled', details: {} };
   }
 
-  const outFacts = await probeMediaFacts(outputPath, options);
+  const outFacts = options.outFacts || options.mockOutFacts || await probeMediaFacts(outputPath, options);
   if (!outFacts || !outFacts.video) {
     return { ok: false, reason: 'Output media cannot be probed by ffprobe', details: {} };
   }
@@ -217,7 +217,7 @@ export async function verifyNormalizedOutput(originalPath, outputPath, expectedR
   }
 
   // 4. Container & Packet Demux Validation (checks all container streams & packets)
-  const demuxResult = await runStreamcopyDemuxIntegrityCheck(outputPath, options);
+  const demuxResult = options.demuxResult || await runStreamcopyDemuxIntegrityCheck(outputPath, options);
   if (!demuxResult.ok) {
     return { ok: false, reason: `Container stream demux check failed: ${demuxResult.error}`, details: demuxResult };
   }
@@ -227,8 +227,8 @@ export async function verifyNormalizedOutput(originalPath, outputPath, expectedR
   }
 
   // 5. Per-Stream Packet Count Equality (P0-5 Fail-Closed: null or 0 packets fails verification)
-  const origStreams = await getPerStreamPacketDetails(originalPath, options);
-  const outStreams = await getPerStreamPacketDetails(outputPath, options);
+  const origStreams = options.origStreams || await getPerStreamPacketDetails(originalPath, options);
+  const outStreams = options.outStreams || await getPerStreamPacketDetails(outputPath, options);
   if (!origStreams || !outStreams) {
     return { ok: false, reason: 'Failed to retrieve per-stream packet details (ffprobe unavailable or unparseable)', details: {} };
   }
@@ -267,23 +267,42 @@ export async function verifyNormalizedOutput(originalPath, outputPath, expectedR
       }
     }
 
-    // 3. Check for unauthorized extra streams in output container
-    const outOtherStreams = outStreams.filter(s => s.codecType !== 'video' && s.codecType !== 'audio');
-    if (outOtherStreams.length > 1) {
-      return { ok: false, reason: `Unexpected multiple non-A/V streams in output container: ${outOtherStreams.length}`, details: { outOtherStreams } };
+    // 3. Check output topology: strictly 1 known muxer-generated chapter representation
+    const outOtherFacts = outFacts.otherStreams || [];
+    if (outOtherFacts.length !== 1) {
+      return {
+        ok: false,
+        reason: `Chapter-aware output topology requires exactly 1 non-A/V chapter stream, found ${outOtherFacts.length}`,
+        details: { outOtherFacts }
+      };
     }
-    if (outOtherStreams.length === 1) {
-      const s = outOtherStreams[0];
-      if (s.codecType !== 'data' && s.codecType !== 'text') {
-        return { ok: false, reason: `Unauthorized output stream type: ${s.codecType}`, details: { stream: s } };
-      }
+    const chStream = outOtherFacts[0];
+    const chType = (chStream.codecType || '').toLowerCase();
+    const chName = (chStream.codecName || '').toLowerCase();
+    const chTag = (chStream.codecTag || '').toLowerCase();
+    if (chType !== 'data' || !['bin_data', 'text'].includes(chName) || !['text', 'bin_data', ''].includes(chTag)) {
+      return {
+        ok: false,
+        reason: `Chapter output stream [type=${chType}, codec=${chName}, tag=${chTag}] is not a recognized muxer-generated chapter representation`,
+        details: { chStream }
+      };
+    }
+
+    const outOtherPacketStreams = outStreams.filter(s => s.codecType !== 'video' && s.codecType !== 'audio');
+    if (outOtherPacketStreams.length !== 1) {
+      return {
+        ok: false,
+        reason: `Chapter output packet probe requires exactly 1 non-A/V stream, found ${outOtherPacketStreams.length}`,
+        details: { outOtherPacketStreams }
+      };
     }
 
     // 4. Elementary payload MD5 equality for Video
+    const md5Fn = options.getStreamPayloadMD5 || getStreamPayloadMD5;
     for (let vIdx = 0; vIdx < origVideoCount; vIdx++) {
       if (options.isCancelled?.()) return { ok: false, reason: 'Verification cancelled', details: {} };
-      const origVideoMd5 = await getStreamPayloadMD5(originalPath, `0:v:${vIdx}`, options);
-      const outVideoMd5 = await getStreamPayloadMD5(outputPath, `0:v:${vIdx}`, options);
+      const origVideoMd5 = await md5Fn(originalPath, `0:v:${vIdx}`, options);
+      const outVideoMd5 = await md5Fn(outputPath, `0:v:${vIdx}`, options);
       if (!origVideoMd5 || !outVideoMd5) {
         return { ok: false, reason: `Video stream [${vIdx}] payload MD5 could not be computed`, details: {} };
       }
@@ -295,8 +314,8 @@ export async function verifyNormalizedOutput(originalPath, outputPath, expectedR
     // 5. Elementary payload MD5 equality for Audio
     for (let aIdx = 0; aIdx < origFacts.audioCount; aIdx++) {
       if (options.isCancelled?.()) return { ok: false, reason: 'Verification cancelled', details: {} };
-      const origAudioMd5 = await getStreamPayloadMD5(originalPath, `0:a:${aIdx}`, options);
-      const outAudioMd5 = await getStreamPayloadMD5(outputPath, `0:a:${aIdx}`, options);
+      const origAudioMd5 = await md5Fn(originalPath, `0:a:${aIdx}`, options);
+      const outAudioMd5 = await md5Fn(outputPath, `0:a:${aIdx}`, options);
       if (!origAudioMd5 || !outAudioMd5) {
         return { ok: false, reason: `Audio stream [${aIdx}] payload MD5 could not be computed`, details: {} };
       }
@@ -335,10 +354,17 @@ export async function verifyNormalizedOutput(originalPath, outputPath, expectedR
         return { ok: false, reason: `Chapter [${cIdx}] title drift: "${oTitle}" vs "${nTitle}"`, details: { oC, nC } };
       }
 
-      const oLang = oC.tags?.language || oC.tags?.LANGUAGE;
-      const nLang = nC.tags?.language || nC.tags?.LANGUAGE;
-      if (oLang && nLang && oLang.toLowerCase() !== nLang.toLowerCase()) {
-        return { ok: false, reason: `Chapter [${cIdx}] language tag mismatch: ${oLang} vs ${nLang}`, details: { oC, nC } };
+      // Chapter language equality: if present on either source or output, normalized languages must match exactly
+      const oLang = (oC.tags?.language || oC.tags?.LANGUAGE || '').trim().toLowerCase();
+      const nLang = (nC.tags?.language || nC.tags?.LANGUAGE || '').trim().toLowerCase();
+      if (oLang || nLang) {
+        if (oLang !== nLang) {
+          return {
+            ok: false,
+            reason: `Chapter [${cIdx}] language tag mismatch or missing: source "${oLang}" vs output "${nLang}"`,
+            details: { oC, nC }
+          };
+        }
       }
     }
 

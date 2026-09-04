@@ -76,6 +76,13 @@ function createMockChapterFacts(overrides = {}) {
   };
 }
 
+function createMockChapterOutFacts(overrides = {}) {
+  return createMockChapterFacts({
+    video: createMockVideoFact({ codecTag: 'hvc1' }),
+    ...overrides
+  });
+}
+
 async function runAllTests() {
   console.log('============================================================');
   console.log('🧪 RUNNING CHAPTER-AWARE HEVC NORMALIZATION SUITE');
@@ -150,6 +157,27 @@ async function runAllTests() {
     assert.strictEqual(unexpClass.classification, MediaClass.UNSUPPORTED_UNKNOWN_FIX);
     assert.strictEqual(unexpClass.repairCandidate, null);
     console.log('  ✅ [PASS] MediaClass routing strictly enforces topology boundaries');
+
+    // 1.7 Missing topology evidence must fail closed (certified FAIL)
+    const missingAudioFacts = { ...ordFacts, audioCount: undefined };
+    assert.strictEqual(findCertifiedRepairRule(missingAudioFacts, '.mp4'), null, 'Missing audioCount fails certified rule');
+    assert.strictEqual(classifyMedia('sample.mp4', missingAudioFacts).classification, MediaClass.UNSUPPORTED_UNKNOWN_FIX);
+
+    const missingOtherFacts = { ...ordFacts, otherStreams: undefined };
+    assert.strictEqual(findCertifiedRepairRule(missingOtherFacts, '.mp4'), null, 'Missing otherStreams fails certified rule');
+    assert.strictEqual(classifyMedia('sample.mp4', missingOtherFacts).classification, MediaClass.UNSUPPORTED_UNKNOWN_FIX);
+
+    const missingChCountFacts = { ...ordFacts, chapterCount: undefined };
+    assert.strictEqual(findCertifiedRepairRule(missingChCountFacts, '.mp4'), null, 'Missing chapterCount fails certified rule');
+    assert.strictEqual(classifyMedia('sample.mp4', missingChCountFacts).classification, MediaClass.UNSUPPORTED_UNKNOWN_FIX);
+    console.log('  ✅ [PASS] Missing topology evidence strictly fails closed to UNSUPPORTED_UNKNOWN_FIX');
+
+    // 1.8 Chapter input codecName=unknown -> candidate FAIL
+    const unkCodecChFacts = createMockChapterFacts({
+      otherStreams: [{ index: 2, codecType: 'data', codecName: 'unknown', codecTag: 'text' }]
+    });
+    assert.strictEqual(matchChapterAwareCandidate(unkCodecChFacts, '.mp4'), null, 'Chapter data codecName=unknown rejected');
+    console.log('  ✅ [PASS] Chapter input with codecName=unknown strictly rejected from candidate');
   }
 
   // -------------------------------------------------------------
@@ -213,33 +241,95 @@ async function runAllTests() {
     fs.writeFileSync(dummySrc, 'test');
     fs.writeFileSync(dummyOut, 'test');
 
-    // 3.1 Chapter count mismatch fails closed
     const baseOrig = createMockChapterFacts();
-    const missingChOut = createMockChapterFacts({
+    const baseStreams = [
+      { index: 0, codecType: 'video', codecName: 'hevc', packetCount: 100, duration: 10 },
+      { index: 1, codecType: 'audio', codecName: 'aac', packetCount: 100, duration: 10 },
+      { index: 2, codecType: 'data', codecName: 'bin_data', packetCount: 1, duration: 10 }
+    ];
+    const defaultVerifierOpts = {
+      demuxResult: { ok: true },
+      origStreams: baseStreams,
+      outStreams: baseStreams,
+      getStreamPayloadMD5: async () => 'mockmd5'
+    };
+
+    // 3.1 Chapter output non-A/V count=0 -> verifier FAIL
+    const zeroNonAVOut = createMockChapterOutFacts({ otherStreams: [] });
+    const zeroRes = await verifyNormalizedOutput(dummySrc, dummyOut, candRule, {
+      ...defaultVerifierOpts,
+      origFacts: baseOrig,
+      outFacts: zeroNonAVOut
+    });
+    assert.strictEqual(zeroRes.ok, false);
+    assert(zeroRes.reason.includes('requires exactly 1 non-A/V chapter stream'));
+    console.log('  ✅ [PASS] Chapter output non-A/V count=0 fails closed');
+
+    // 3.2 Chapter output unknown data -> verifier FAIL
+    const unknownDataOut = createMockChapterOutFacts({
+      otherStreams: [{ index: 2, codecType: 'data', codecName: 'unknown_raw', codecTag: 'bad' }]
+    });
+    const unkRes = await verifyNormalizedOutput(dummySrc, dummyOut, candRule, {
+      ...defaultVerifierOpts,
+      origFacts: baseOrig,
+      outFacts: unknownDataOut
+    });
+    assert.strictEqual(unkRes.ok, false);
+    assert(unkRes.reason.includes('not a recognized muxer-generated chapter representation'));
+    console.log('  ✅ [PASS] Chapter output unknown data stream fails closed');
+
+    // 3.3 Source language present, output missing -> verifier FAIL
+    const langOrig = createMockChapterFacts({
+      chapters: [
+        { id: 0, start: 0, end: 3, title: 'Chapter 1', tags: { language: 'eng' } },
+        { id: 1, start: 3, end: 7, title: 'Chapter 2', tags: { language: 'eng' } },
+        { id: 2, start: 7, end: 10, title: 'Chapter 3', tags: { language: 'eng' } }
+      ]
+    });
+    const missingLangOut = createMockChapterOutFacts({
+      chapters: [
+        { id: 0, start: 0, end: 3, title: 'Chapter 1', tags: {} },
+        { id: 1, start: 3, end: 7, title: 'Chapter 2', tags: {} },
+        { id: 2, start: 7, end: 10, title: 'Chapter 3', tags: {} }
+      ]
+    });
+    const langRes = await verifyNormalizedOutput(dummySrc, dummyOut, candRule, {
+      ...defaultVerifierOpts,
+      origFacts: langOrig,
+      outFacts: missingLangOut
+    });
+    assert.strictEqual(langRes.ok, false);
+    assert(langRes.reason.includes('language tag mismatch or missing'));
+    console.log('  ✅ [PASS] Source chapter language present / output missing fails closed');
+
+    // 3.4 Chapter count mismatch fails closed
+    const missingChOut = createMockChapterOutFacts({
       chapterCount: 2,
       chapters: baseOrig.chapters.slice(0, 2)
     });
     const missingRes = await verifyNormalizedOutput(dummySrc, dummyOut, candRule, {
-      mockOrigFacts: baseOrig,
-      mockOutFacts: missingChOut
+      ...defaultVerifierOpts,
+      origFacts: baseOrig,
+      outFacts: missingChOut
     });
     assert.strictEqual(missingRes.ok, false);
     console.log('  ✅ [PASS] Missing chapter in output fails closed');
 
-    // 3.2 Extra chapter in output fails closed
-    const extraChOut = createMockChapterFacts({
+    // 3.5 Extra chapter in output fails closed
+    const extraChOut = createMockChapterOutFacts({
       chapterCount: 4,
       chapters: [...baseOrig.chapters, { id: 3, start: 10, end: 12, title: 'Chapter 4', tags: {} }]
     });
     const extraRes = await verifyNormalizedOutput(dummySrc, dummyOut, candRule, {
-      mockOrigFacts: baseOrig,
-      mockOutFacts: extraChOut
+      ...defaultVerifierOpts,
+      origFacts: baseOrig,
+      outFacts: extraChOut
     });
     assert.strictEqual(extraRes.ok, false);
     console.log('  ✅ [PASS] Extra chapter in output fails closed');
 
-    // 3.3 Chapter title drift fails closed
-    const driftedTitleOut = createMockChapterFacts({
+    // 3.6 Chapter title drift fails closed
+    const driftedTitleOut = createMockChapterOutFacts({
       chapters: [
         baseOrig.chapters[0],
         { ...baseOrig.chapters[1], title: 'Mutated Title' },
@@ -247,14 +337,15 @@ async function runAllTests() {
       ]
     });
     const titleRes = await verifyNormalizedOutput(dummySrc, dummyOut, candRule, {
-      mockOrigFacts: baseOrig,
-      mockOutFacts: driftedTitleOut
+      ...defaultVerifierOpts,
+      origFacts: baseOrig,
+      outFacts: driftedTitleOut
     });
     assert.strictEqual(titleRes.ok, false);
     console.log('  ✅ [PASS] Chapter title drift fails closed');
 
-    // 3.4 Timestamp drift outside 5ms tolerance fails closed
-    const driftedTimeOut = createMockChapterFacts({
+    // 3.7 Timestamp drift outside 5ms tolerance fails closed
+    const driftedTimeOut = createMockChapterOutFacts({
       chapters: [
         baseOrig.chapters[0],
         { ...baseOrig.chapters[1], start: baseOrig.chapters[1].start + 0.05 }, // 50ms drift
@@ -262,8 +353,9 @@ async function runAllTests() {
       ]
     });
     const timeRes = await verifyNormalizedOutput(dummySrc, dummyOut, candRule, {
-      mockOrigFacts: baseOrig,
-      mockOutFacts: driftedTimeOut
+      ...defaultVerifierOpts,
+      origFacts: baseOrig,
+      outFacts: driftedTimeOut
     });
     assert.strictEqual(timeRes.ok, false);
     console.log('  ✅ [PASS] Chapter timestamp drift (>5ms) fails closed');

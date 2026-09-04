@@ -388,8 +388,9 @@ async function runTests() {
     const fPending = path.join(TEST_DIR, 'good_cand.mp4');
     createSyntheticHevcFixture(fPending, 0.1);
     const mockPendingFacts = {
+      videoCount: 1,
       video: { codec: 'hevc', codecTag: 'hev1', width: 4096, height: 2048, level: 153, profile: 'Main', bitDepth: 8, rFps: '60000/1001', avgFps: '60000/1001', durationSec: 1 },
-      audioCount: 1
+      audioCount: 1, otherStreams: [], chapterCount: 0
     };
 
     const mockInventory = [
