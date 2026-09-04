@@ -110,7 +110,7 @@ export const CERTIFIED_REPAIR_RULES = [
       sampleEntryTags: ['hev1'],
       colorDepth: [8],
       profile: ['Main'],
-      certifiedBuckets: ['BUCKET_A1_4K_59FPS_SIVR033', 'BUCKET_A2_4K_60FPS_WAKUI', 'BUCKET_B_8K_60FPS_KAMIKI'],
+      certifiedBuckets: ['BUCKET_A2_4K_60FPS_WAKUI'],
       requiresChapters: true,
       allowedTopology: '1 video + 1 audio + 1 legacy chapter/data stream'
     },
@@ -190,6 +190,7 @@ export function matchExactCertifiedBucket(facts, ext) {
 
 /**
  * Matches candidate media against the narrow chapter-aware candidate topology.
+ * Strictly locked to BUCKET_A2_4K_60FPS_WAKUI based on physical-device certification evidence.
  * 
  * @param {object} facts 
  * @param {string} ext 
@@ -203,6 +204,9 @@ export function matchChapterAwareCandidate(facts, ext) {
   // Video envelope must match exact certified bucket
   const bucket = matchExactCertifiedBucket(facts, ext);
   if (!bucket) return null;
+
+  // Chapter-aware certified scope is strictly A2 only (Wakui 4096x2048 ~60fps)
+  if (bucket.bucketId !== 'BUCKET_A2_4K_60FPS_WAKUI') return null;
 
   // Topology matching: strictly 1 video stream, 1 audio stream, and integer chapters > 0
   if (facts.videoCount !== 1) return null;

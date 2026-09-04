@@ -180,6 +180,38 @@ async function runAllTests() {
     });
     assert.strictEqual(matchChapterAwareCandidate(unkCodecChFacts, '.mp4'), null, 'Chapter data codecName=unknown rejected');
     console.log('  ✅ [PASS] Chapter input with codecName=unknown strictly rejected from candidate');
+
+    // 1.9 Narrow Certified Scope: A2 PASS, A1 FAIL, B FAIL, ordinary non-chapter unchanged
+    // A2 (Wakui 4096x2048) + chapter topology -> PASS
+    const a2ChFacts = createMockChapterFacts(); // default is A2 (4096x2048 Wakui)
+    assert.strictEqual(matchChapterAwareCandidate(a2ChFacts, '.mp4')?.ruleId, 'hevc-mp4-hev1-to-hvc1-chapters-streamcopy-v1');
+    assert.strictEqual(findCertifiedRepairRule(a2ChFacts, '.mp4')?.ruleId, 'hevc-mp4-hev1-to-hvc1-chapters-streamcopy-v1');
+    assert.strictEqual(classifyMedia('sample_a2.mp4', a2ChFacts).classification, MediaClass.EXACT_CERTIFIED_NORMALIZATION_CANDIDATE);
+
+    // A1 (SIVR033 3840x1920) + chapter topology -> FAIL (blocked from chapter certified rule)
+    const a1ChFacts = createMockChapterFacts({
+      video: createMockVideoFact({ width: 3840, height: 1920, rFps: '2997/50', avgFps: '262749987/4359446' })
+    });
+    assert.strictEqual(matchChapterAwareCandidate(a1ChFacts, '.mp4'), null, 'A1 with chapters strictly fails chapter rule');
+    assert.strictEqual(findCertifiedRepairRule(a1ChFacts, '.mp4'), null, 'A1 with chapters fails certified repair');
+    assert.strictEqual(classifyMedia('sample_a1.mp4', a1ChFacts).classification, MediaClass.UNSUPPORTED_UNKNOWN_FIX);
+
+    // B (Kamiki 8192x4096) + chapter topology -> FAIL (blocked from chapter certified rule)
+    const bChFacts = createMockChapterFacts({
+      video: createMockVideoFact({ width: 8192, height: 4096, level: 183, avgFps: '2118587705/34961143' })
+    });
+    assert.strictEqual(matchChapterAwareCandidate(bChFacts, '.mp4'), null, 'B with chapters strictly fails chapter rule');
+    assert.strictEqual(findCertifiedRepairRule(bChFacts, '.mp4'), null, 'B with chapters fails certified repair');
+    assert.strictEqual(classifyMedia('sample_b.mp4', bChFacts).classification, MediaClass.UNSUPPORTED_UNKNOWN_FIX);
+
+    // Ordinary non-chapter A1, A2, B behavior remains completely unchanged
+    const ordA1 = createMockOrdinaryFacts({ video: createMockVideoFact({ width: 3840, height: 1920, rFps: '2997/50', avgFps: '262749987/4359446' }) });
+    const ordA2 = createMockOrdinaryFacts();
+    const ordB = createMockOrdinaryFacts({ video: createMockVideoFact({ width: 8192, height: 4096, level: 183, avgFps: '2118587705/34961143' }) });
+    assert.strictEqual(findCertifiedRepairRule(ordA1, '.mp4')?.matchedBucket.bucketId, 'BUCKET_A1_4K_59FPS_SIVR033');
+    assert.strictEqual(findCertifiedRepairRule(ordA2, '.mp4')?.matchedBucket.bucketId, 'BUCKET_A2_4K_60FPS_WAKUI');
+    assert.strictEqual(findCertifiedRepairRule(ordB, '.mp4')?.matchedBucket.bucketId, 'BUCKET_B_8K_60FPS_KAMIKI');
+    console.log('  ✅ [PASS] Chapter-aware rule strictly limited to A2 only; A1/B fail closed; ordinary rules unchanged');
   }
 
   // -------------------------------------------------------------
