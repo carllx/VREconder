@@ -49,21 +49,47 @@ export function handlePreflightRoutes(req, res, pathname, __dirname, allowedRoot
         payload.remoteIp = req.socket.remoteAddress;
 
         const resultsFile = path.join(__dirname, 'preflight_results.json');
-        fs.writeFileSync(resultsFile, JSON.stringify(payload, null, 2), 'utf8');
+        let records = [];
+        if (fs.existsSync(resultsFile)) {
+          try {
+            const existing = JSON.parse(fs.readFileSync(resultsFile, 'utf8'));
+            if (Array.isArray(existing)) {
+              records = existing;
+            } else if (existing && typeof existing === 'object') {
+              if (Array.isArray(existing.history)) {
+                records = existing.history;
+              } else {
+                records = [existing];
+              }
+            }
+          } catch (_) {
+            records = [];
+          }
+        }
+        records.push(payload);
+        const fileOutput = {
+          latest: payload,
+          count: records.length,
+          history: records
+        };
+        fs.writeFileSync(resultsFile, JSON.stringify(fileOutput, null, 2), 'utf8');
 
         // Log formatted report
         console.log(`\n============================================================`);
         console.log(`📋 [Preflight Report Received from ${payload.remoteIp}]`);
+        console.log(`   runId: ${payload.runId || '--'} | testType: ${payload.testType || '--'}`);
         console.log(`   User-Agent: ${payload.userAgent || '--'}`);
         if (payload.pairsTested) {
           for (const [id, data] of Object.entries(payload.pairsTested)) {
             console.log(`   * ${data.pairName}: [Original: ${data.original?.canPlay ? 'OK' : 'ERR'}] [HVC1: ${data.derivative?.canPlay ? 'OK' : 'ERR'}] => Verdict: ${data.verdict}`);
           }
+        } else if (payload.pair) {
+          console.log(`   * ${payload.pair.name}: [Original: ${payload.pair.original?.canPlay ? 'OK' : 'ERR'}] [Derivative: ${payload.pair.derivative?.canPlay ? 'OK' : 'ERR'}] => Verdict: ${payload.pair.verdict}`);
         }
         console.log(`============================================================\n`);
 
         res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
-        res.end(JSON.stringify({ ok: true, saved: true }));
+        res.end(JSON.stringify({ ok: true, saved: true, runId: payload.runId || null, totalRecords: records.length }));
       } catch (err) {
         res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' });
         res.end(JSON.stringify({ error: err.message }));
