@@ -30,6 +30,7 @@ export class VRRenderer {
     this.sceneType = 0; // 0: Video, 1: Synthetic Calibration Grid
     this.showReferenceGrid = false; // Verification-only overlay in Stage C
     this.identityMat3 = [1, 0, 0,  0, 1, 0,  0, 0, 1];
+    this.videoTextureReady = false;
     this.initWebGL();
   }
 
@@ -151,6 +152,22 @@ export class VRRenderer {
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
   }
 
+  invalidateVideoTexture() {
+    this.videoTextureReady = false;
+    const gl = this.gl;
+    if (!gl || !this.videoTex) return;
+    try {
+      gl.bindTexture(gl.TEXTURE_2D, this.videoTex);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([0, 0, 0, 255]));
+    } catch (e) {
+      console.warn('invalidateVideoTexture error:', e);
+    }
+  }
+
+  isVideoTextureReady() {
+    return this.videoTextureReady;
+  }
+
   updateVideoTexture(videoElement) {
     const gl = this.gl;
     if (!gl || !this.videoTex) return;
@@ -160,6 +177,7 @@ export class VRRenderer {
       const t0 = performance.now();
       gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, videoElement);
       const t1 = performance.now();
+      this.videoTextureReady = true;
       perfTelemetry.recordUploadDuration(t1 - t0);
       if (!state.firstFrameTimings.firstTextureUploadAt && state.firstFrameTimings.selectedAt) {
         state.firstFrameTimings.firstTextureUploadAt = performance.now();
@@ -246,6 +264,23 @@ export class VRRenderer {
     gl.uniformMatrix3fv(locs.uCamRot, false, cameraPoseMat3 || this.identityMat3);
 
     gl.drawArrays(gl.TRIANGLES, 0, 6);
+
+    this.checkReadyTransition();
+  }
+
+  checkReadyTransition() {
+    if (!state.firstFrameTimings.firstRenderAt && state.firstFrameTimings.firstTextureUploadAt && this.videoTextureReady) {
+      state.firstFrameTimings.firstRenderAt = performance.now();
+      state.firstFrameTimings.ready = true;
+      state.firstFrameTimings.statusText = state.inVR ? 'VR Ready' : 'Diagnostic Ready';
+      const t = state.firstFrameTimings;
+      const totalMs = (t.firstRenderAt - t.selectedAt).toFixed(1);
+      const metaMs = (t.metadataAt ? (t.metadataAt - t.selectedAt).toFixed(1) : '--');
+      const canplayMs = (t.canplayAt ? (t.canplayAt - t.metadataAt).toFixed(1) : '--');
+      const decodeMs = (t.firstFrameDecodedAt ? (t.firstFrameDecodedAt - t.canplayAt).toFixed(1) : '--');
+      const uploadMs = (t.firstTextureUploadAt - (t.firstFrameDecodedAt || t.canplayAt)).toFixed(1);
+      console.log(`[First Frame Timing (Measured)] Total: ${totalMs}ms | Meta: ${metaMs}ms | CanPlay: ${canplayMs}ms | Decode: ${decodeMs}ms | Upload: ${uploadMs}ms`);
+    }
   }
 
   // Stereo VR 2-Pass Mode: Renders Ideal Left/Right Scene -> Cardboard Screen-Space Barrel Distortion Pass
@@ -412,17 +447,6 @@ export class VRRenderer {
 
     gl.disable(gl.SCISSOR_TEST);
 
-    if (!state.firstFrameTimings.firstRenderAt && state.firstFrameTimings.firstTextureUploadAt) {
-      state.firstFrameTimings.firstRenderAt = performance.now();
-      state.firstFrameTimings.ready = true;
-      state.firstFrameTimings.statusText = 'VR Ready';
-      const t = state.firstFrameTimings;
-      const totalMs = (t.firstRenderAt - t.selectedAt).toFixed(1);
-      const metaMs = (t.metadataAt ? (t.metadataAt - t.selectedAt).toFixed(1) : '--');
-      const canplayMs = (t.canplayAt ? (t.canplayAt - t.metadataAt).toFixed(1) : '--');
-      const decodeMs = (t.firstFrameDecodedAt ? (t.firstFrameDecodedAt - t.canplayAt).toFixed(1) : '--');
-      const uploadMs = (t.firstTextureUploadAt - (t.firstFrameDecodedAt || t.canplayAt)).toFixed(1);
-      console.log(`[First Frame Timing (Measured)] Total: ${totalMs}ms | Meta: ${metaMs}ms | CanPlay: ${canplayMs}ms | Decode: ${decodeMs}ms | Upload: ${uploadMs}ms`);
-    }
+    this.checkReadyTransition();
   }
 }

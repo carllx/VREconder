@@ -3,7 +3,7 @@
 // ==========================================
 import { state } from '../core/state.js';
 import { perfTelemetry } from '../telemetry/telemetry.js';
-import { stallDetector } from '../telemetry/stall-detector.js';
+import { stallDetector, serializeMediaError } from '../telemetry/stall-detector.js';
 
 export class MediaController {
   constructor(videoElement, videoSelectElement) {
@@ -12,7 +12,68 @@ export class MediaController {
     this.videoFrameNeedsUpload = false;
     this.lastUploadedVideoTime = -1;
     this.hasLoggedFirstFrame = false;
+    this.currentMediaGeneration = 0;
+    this.decodedMediaGeneration = -1;
+    this.poisonedGeneration = -1;
+    this.activeFallbackToken = 0;
+    this.onMediaInvalidated = null;
+    this.probeTimeoutMs = 5000;
+    this.probeTimer = null;
     this.initListeners();
+  }
+
+  isCurrentMediaDecoded() {
+    return this.currentMediaGeneration > 0 && 
+           this.decodedMediaGeneration === this.currentMediaGeneration &&
+           this.poisonedGeneration !== this.currentMediaGeneration;
+  }
+
+  clearProbeTimer() {
+    if (this.probeTimer) {
+      clearTimeout(this.probeTimer);
+      this.probeTimer = null;
+    }
+  }
+
+  notifyInvalidated(generation, path = state.videoPath) {
+    if (typeof this.onMediaInvalidated === 'function') {
+      try {
+        this.onMediaInvalidated(generation, path);
+      } catch (e) {
+        console.warn('onMediaInvalidated error:', e);
+      }
+    }
+  }
+
+  onProbeTimeout(generation) {
+    if (generation !== this.currentMediaGeneration) return;
+    if (this.isCurrentMediaDecoded()) return;
+    this.poisonedGeneration = generation;
+    state.firstFrameTimings.statusText = 'No decoded video frame received within probe window (Fail closed)';
+    state.firstFrameTimings.ready = false;
+    this.videoFrameNeedsUpload = false;
+    this.notifyInvalidated(generation, state.videoPath);
+  }
+
+  onDecodedFrame(generation, now, metadata = null) {
+    if (generation !== this.currentMediaGeneration || generation === this.poisonedGeneration) {
+      return false;
+    }
+    const w = this.video ? this.video.videoWidth : 0;
+    const h = this.video ? this.video.videoHeight : 0;
+    if (w <= 0 || h <= 0) {
+      return false;
+    }
+    this.decodedMediaGeneration = generation;
+    this.clearProbeTimer();
+    this.videoFrameNeedsUpload = true;
+    perfTelemetry.recordRvfc();
+    stallDetector.recordRvfc(now, metadata);
+    if (!state.firstFrameTimings.firstFrameDecodedAt && state.firstFrameTimings.selectedAt) {
+      state.firstFrameTimings.firstFrameDecodedAt = performance.now();
+      state.firstFrameTimings.statusText = 'Decoded Frame Arrived';
+    }
+    return true;
   }
 
   initListeners() {
@@ -20,29 +81,21 @@ export class MediaController {
       stallDetector.attachVideo(this.video);
     }
 
-    const onFrame = (now, metadata) => {
-      this.videoFrameNeedsUpload = true;
-      perfTelemetry.recordRvfc();
-      stallDetector.recordRvfc(now, metadata);
-      if (!state.firstFrameTimings.firstFrameDecodedAt && state.firstFrameTimings.selectedAt) {
-        state.firstFrameTimings.firstFrameDecodedAt = performance.now();
-        state.firstFrameTimings.statusText = 'Decoded Frame Arrived';
-      }
-      if (this.video && this.video.requestVideoFrameCallback) {
-        this.video.requestVideoFrameCallback(onFrame);
-      }
+    const queueRvfc = () => {
+      if (!this.video || !this.video.requestVideoFrameCallback) return;
+      const scheduledToken = this.currentMediaGeneration;
+      this.video.requestVideoFrameCallback((now, metadata) => {
+        this.onDecodedFrame(scheduledToken, now, metadata);
+        queueRvfc();
+      });
     };
 
     if (this.video && this.video.requestVideoFrameCallback) {
-      this.video.requestVideoFrameCallback(onFrame);
+      queueRvfc();
     } else if (this.video) {
       this.video.addEventListener('timeupdate', () => {
-        this.videoFrameNeedsUpload = true;
-        stallDetector.recordRvfc(performance.now(), null);
-        if (!state.firstFrameTimings.firstFrameDecodedAt && state.firstFrameTimings.selectedAt) {
-          state.firstFrameTimings.firstFrameDecodedAt = performance.now();
-          state.firstFrameTimings.statusText = 'Decoded Frame Arrived';
-        }
+        const token = this.activeFallbackToken || 0;
+        this.onDecodedFrame(token, performance.now(), null);
       });
     }
 
@@ -94,22 +147,15 @@ export class MediaController {
     });
 
     this.video.addEventListener('error', () => {
-      let codeName = 'MEDIA_ERR_UNKNOWN';
-      let codeNum = 0;
-      let msg = '';
-      if (this.video.error) {
-        codeNum = this.video.error.code;
-        msg = this.video.error.message || '';
-        switch (codeNum) {
-          case 1: codeName = 'MEDIA_ERR_ABORTED'; break;
-          case 2: codeName = 'MEDIA_ERR_NETWORK'; break;
-          case 3: codeName = 'MEDIA_ERR_DECODE'; break;
-          case 4: codeName = 'MEDIA_ERR_SRC_NOT_SUPPORTED'; break;
-        }
-      }
-      const errText = `${codeName} (code ${codeNum}${msg ? ': ' + msg : ''})`;
+      const errInfo = serializeMediaError(this.video ? this.video.error : null) || { code: 0, name: 'MEDIA_ERR_UNKNOWN', message: '' };
+      const errText = `${errInfo.name} (code ${errInfo.code}${errInfo.message ? ': ' + errInfo.message : ''})`;
       console.error('Video error: ' + errText);
       state.firstFrameTimings.statusText = errText;
+      state.firstFrameTimings.ready = false;
+      this.clearProbeTimer();
+      this.decodedMediaGeneration = -1;
+      this.videoFrameNeedsUpload = false;
+      this.notifyInvalidated(this.currentMediaGeneration, state.videoPath);
     });
 
     if (this.videoSelect) {
@@ -120,6 +166,9 @@ export class MediaController {
   }
 
   selectVideo(relPath) {
+    this.currentMediaGeneration++;
+    this.decodedMediaGeneration = -1;
+    this.videoFrameNeedsUpload = false;
     state.videoPath = relPath;
     stallDetector.resetForMedia(relPath);
     this.hasLoggedFirstFrame = false;
@@ -135,9 +184,17 @@ export class MediaController {
       statusText: 'Opening ' + relPath.split('/').pop()
     };
 
+    this.notifyInvalidated(this.currentMediaGeneration, relPath);
+
+    this.clearProbeTimer();
+    const token = this.currentMediaGeneration;
+    this.activeFallbackToken = token;
+    this.probeTimer = setTimeout(() => {
+      this.onProbeTimeout(token);
+    }, this.probeTimeoutMs);
+
     this.video.src = '/video?path=' + encodeURIComponent(relPath);
     this.video.load();
-    this.videoFrameNeedsUpload = true;
     if (state.inVR) {
       this.video.play().catch(e => console.log('Video play error:', e));
     }
@@ -195,6 +252,7 @@ export class MediaController {
 
   shouldUploadTexture() {
     if (this.video.readyState < 2) return false;
+    if (!this.isCurrentMediaDecoded()) return false;
 
     // Performance Modes:
     // 'baseline': upload if videoFrameNeedsUpload OR currentTime changed while playing
