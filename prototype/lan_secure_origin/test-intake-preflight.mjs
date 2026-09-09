@@ -66,6 +66,7 @@ function makeFacts(overrides = {}) {
     otherStreams: [],
     chapterCount: 0,
     chapters: [],
+    subtitleCount: 0,
     moovLocation: 'moov_first',
     fingerprint: {
       canonicalPath: '/test/media.mp4',
@@ -425,6 +426,79 @@ async function runAllIntakeTests() {
   } catch (err) {
     throw new Error(`CLI execution failed: ${err.message}`);
   }
+
+  // Test 16: Missing chapterCount fails closed (not READY_DIRECT, cannot inherit certified repair envelope)
+  console.log('\nTest 16: Missing chapterCount fails closed');
+  const factsMissingChaptersReady = makeFacts({
+    video: makeVideoFacts({ codec: 'h264', codecTag: 'avc1', profile: 'High', level: 41, bitDepth: 8, width: 1920, height: 1080, rFps: '30/1', avgFps: '30/1' }),
+    chapterCount: undefined,
+    chapters: undefined
+  });
+  const resMissingChaptersReady = evaluateMediaFacts(factsMissingChaptersReady, 'sample_h264.mp4');
+  check(resMissingChaptersReady.classification !== IntakeClassification.READY_DIRECT, 'Missing chapterCount is NOT READY_DIRECT');
+  check(resMissingChaptersReady.mayPromoteToVrReady === false, 'Missing chapterCount cannot promote to VR Ready');
+
+  const factsMissingChaptersRepair = makeFacts({
+    video: makeVideoFacts({ codec: 'hevc', codecTag: 'hev1', profile: 'Main 10', level: 180, bitDepth: 10, width: 4320, height: 2160, rFps: '60000/1001', avgFps: '60000/1001' }),
+    chapterCount: undefined,
+    chapters: undefined
+  });
+  const resMissingChaptersRepair = evaluateMediaFacts(factsMissingChaptersRepair, 'sample_env_b.mp4');
+  check(resMissingChaptersRepair.classification !== IntakeClassification.NORMALIZATION_CANDIDATE_CERTIFIED, 'Missing chapterCount cannot inherit certified repair envelope');
+
+  // Test 17: Missing otherStreams fails closed (not READY_DIRECT, cannot inherit certified repair envelope)
+  console.log('\nTest 17: Missing otherStreams fails closed');
+  const factsMissingOtherReady = makeFacts({
+    video: makeVideoFacts({ codec: 'h264', codecTag: 'avc1', profile: 'High', level: 41, bitDepth: 8, width: 1920, height: 1080, rFps: '30/1', avgFps: '30/1' }),
+    otherStreams: undefined
+  });
+  const resMissingOtherReady = evaluateMediaFacts(factsMissingOtherReady, 'sample_h264.mp4');
+  check(resMissingOtherReady.classification !== IntakeClassification.READY_DIRECT, 'Missing otherStreams is NOT READY_DIRECT');
+  check(resMissingOtherReady.mayPromoteToVrReady === false, 'Missing otherStreams cannot promote to VR Ready');
+
+  const factsMissingOtherRepair = makeFacts({
+    video: makeVideoFacts({ codec: 'hevc', codecTag: 'hev1', profile: 'Main 10', level: 180, bitDepth: 10, width: 4320, height: 2160, rFps: '60000/1001', avgFps: '60000/1001' }),
+    otherStreams: undefined
+  });
+  const resMissingOtherRepair = evaluateMediaFacts(factsMissingOtherRepair, 'sample_env_b.mp4');
+  check(resMissingOtherRepair.classification !== IntakeClassification.NORMALIZATION_CANDIDATE_CERTIFIED, 'Missing otherStreams cannot inherit certified repair envelope');
+
+  // Test 18: Missing subtitleCount fails closed (not READY_DIRECT, cannot inherit certified repair envelope)
+  console.log('\nTest 18: Missing subtitleCount fails closed');
+  const factsMissingSubtitleReady = makeFacts({
+    video: makeVideoFacts({ codec: 'h264', codecTag: 'avc1', profile: 'High', level: 41, bitDepth: 8, width: 1920, height: 1080, rFps: '30/1', avgFps: '30/1' }),
+    subtitleCount: undefined
+  });
+  const resMissingSubtitleReady = evaluateMediaFacts(factsMissingSubtitleReady, 'sample_h264.mp4');
+  check(resMissingSubtitleReady.classification !== IntakeClassification.READY_DIRECT, 'Missing subtitleCount is NOT READY_DIRECT');
+  check(resMissingSubtitleReady.mayPromoteToVrReady === false, 'Missing subtitleCount cannot promote to VR Ready');
+
+  const factsMissingSubtitleRepair = makeFacts({
+    video: makeVideoFacts({ codec: 'hevc', codecTag: 'hev1', profile: 'Main 10', level: 180, bitDepth: 10, width: 4320, height: 2160, rFps: '60000/1001', avgFps: '60000/1001' }),
+    subtitleCount: undefined
+  });
+  const resMissingSubtitleRepair = evaluateMediaFacts(factsMissingSubtitleRepair, 'sample_env_b.mp4');
+  check(resMissingSubtitleRepair.classification !== IntakeClassification.NORMALIZATION_CANDIDATE_CERTIFIED, 'Missing subtitleCount cannot inherit certified repair envelope');
+
+  // Test 19: Contradictory codec=hevc + codecTag=avc1 fails closed (not READY_DIRECT)
+  console.log('\nTest 19: Contradictory codec=hevc + codecTag=avc1 fails closed');
+  const factsContradictory = makeFacts({
+    video: makeVideoFacts({
+      codec: 'hevc',
+      codecTag: 'avc1',
+      profile: 'Main',
+      level: 153,
+      bitDepth: 8,
+      width: 1920,
+      height: 1080,
+      rFps: '30/1',
+      avgFps: '30/1'
+    })
+  });
+  const resContradictory = evaluateMediaFacts(factsContradictory, 'contradictory_sample.mp4');
+  check(resContradictory.classification !== IntakeClassification.READY_DIRECT, 'Contradictory codec=hevc + codecTag=avc1 is strictly NOT READY_DIRECT');
+  check(resContradictory.mayPromoteToVrReady === false, 'Contradictory media mayPromoteToVrReady is false');
+  check(resContradictory.matchedPolicy !== 'safari-static-direct-h264', 'Contradictory media does not match static H.264 policy');
 
   console.log('\n============================================================');
   console.log(`📊 INTAKE GATE TEST SUITE RESULTS: ${passedTests} / ${totalTests} PASSED`);

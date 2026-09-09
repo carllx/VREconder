@@ -178,17 +178,18 @@ export function evaluateMediaFacts(facts, filePath = '', options = {}) {
   }
 
   // 6. Narrow static READY_DIRECT policy
-  // Must fail closed: requires known container (.mp4), known bitDepth, clean topology (1V+1A, 0 chapters, 0 other)
+  // Must fail closed: requires known container (.mp4), known bitDepth, clean explicit topology
   const hasCleanStandardTopology =
     facts.videoCount === 1 &&
     facts.audioCount === 1 &&
-    (!Number.isInteger(facts.chapterCount) || facts.chapterCount === 0) &&
-    (!Array.isArray(facts.chapters) || facts.chapters.length === 0) &&
-    (!Array.isArray(facts.otherStreams) || facts.otherStreams.length === 0) &&
-    (!facts.subtitleCount || facts.subtitleCount === 0);
+    Number.isInteger(facts.chapterCount) && facts.chapterCount === 0 &&
+    Array.isArray(facts.chapters) && facts.chapters.length === 0 &&
+    Array.isArray(facts.otherStreams) && facts.otherStreams.length === 0 &&
+    Number.isInteger(facts.subtitleCount) && facts.subtitleCount === 0;
 
-  // 6a. Static AVC1 (H.264) in MP4
-  if (codec === 'h264' || tag === 'avc1') {
+  // 6a. Static AVC1 (H.264) in MP4: require consistent identity (codec === 'h264' && tag === 'avc1')
+  // Permissive OR behavior is strictly forbidden; contradictory codec/tag must fail closed.
+  if (codec === 'h264' && tag === 'avc1') {
     if (ext === '.mp4' && hasCleanStandardTopology) {
       return {
         classification: IntakeClassification.READY_DIRECT,

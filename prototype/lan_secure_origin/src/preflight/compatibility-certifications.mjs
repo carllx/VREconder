@@ -397,25 +397,30 @@ export function matchExactCompatibilityEnvelope(facts, ext, env) {
 
   // Topology verification
   if (env.isChapterAware) {
+    if (facts.videoCount !== 1) return false;
     if (facts.audioCount !== 1) return false;
     if (!Number.isInteger(facts.chapterCount) || facts.chapterCount <= 0) return false;
+    if (!Array.isArray(facts.chapters) || facts.chapters.length !== facts.chapterCount) return false;
     if (!Array.isArray(facts.otherStreams) || facts.otherStreams.length !== 1) return false;
+    if (!Number.isInteger(facts.subtitleCount) || facts.subtitleCount !== 0) return false;
     const dataStream = facts.otherStreams[0];
     if (dataStream.codecType !== 'data') return false;
     const cName = (dataStream.codecName || '').toLowerCase();
     const cTag = (dataStream.codecTag || '').toLowerCase();
     if (!['bin_data', 'text'].includes(cName)) return false;
     if (!['text', 'bin_data', ''].includes(cTag)) return false;
-    if (facts.subtitleCount && facts.subtitleCount > 0) return false;
     return true;
   }
 
-  // Clean standard topology: 1 video, 1 audio, 0 chapters, 0 other streams, 0 subtitles
+  // Clean standard topology requires explicit known facts:
+  // videoCount === 1, audioCount === 1, chapterCount === 0, chapters.length === 0,
+  // otherStreams.length === 0, subtitleCount === 0
+  if (facts.videoCount !== 1) return false;
   if (facts.audioCount !== 1) return false;
-  if (Number.isInteger(facts.chapterCount) && facts.chapterCount !== 0) return false;
-  if (facts.chapterCount === undefined && Array.isArray(facts.chapters) && facts.chapters.length > 0) return false;
-  if (Array.isArray(facts.otherStreams) && facts.otherStreams.length > 0) return false;
-  if (facts.subtitleCount && facts.subtitleCount > 0) return false;
+  if (!Number.isInteger(facts.chapterCount) || facts.chapterCount !== 0) return false;
+  if (!Array.isArray(facts.chapters) || facts.chapters.length !== 0) return false;
+  if (!Array.isArray(facts.otherStreams) || facts.otherStreams.length !== 0) return false;
+  if (!Number.isInteger(facts.subtitleCount) || facts.subtitleCount !== 0) return false;
 
   return true;
 }
