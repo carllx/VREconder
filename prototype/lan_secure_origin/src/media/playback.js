@@ -16,6 +16,7 @@ export class MediaController {
     // Issue #23: Media-selection generation token & teardown state
     this.currentMediaGeneration = 0;
     this.currentRvfcHandle = null;
+    this.currentGenerationListeners = [];
     this.renderer = null;
     this.remoteLogHook = null;
 
@@ -57,28 +58,33 @@ export class MediaController {
     this.scheduleNextRvfc(generation);
   }
 
-  initListeners() {
-    if (this.video) {
-      stallDetector.attachVideo(this.video);
+  detachGenerationListeners() {
+    if (this.video && this.currentGenerationListeners.length > 0) {
+      for (const { event, listener } of this.currentGenerationListeners) {
+        this.video.removeEventListener(event, listener);
+      }
+      this.currentGenerationListeners = [];
     }
+  }
 
-    if (this.video && !this.video.requestVideoFrameCallback) {
-      this.video.addEventListener('timeupdate', () => {
-        const gen = this.currentMediaGeneration;
-        this.videoFrameNeedsUpload = true;
-        stallDetector.recordRvfc(performance.now(), null);
-        if (!state.firstFrameTimings.firstFrameDecodedAt && state.firstFrameTimings.selectedAt && gen === this.currentMediaGeneration) {
-          state.firstFrameTimings.firstFrameDecodedAt = performance.now();
-          state.firstFrameTimings.statusText = 'Decoded Frame Arrived';
-        }
-      });
-    }
+  attachGenerationListeners(generation, mediaPath) {
+    this.detachGenerationListeners();
+    if (!this.video) return;
 
-    this.video.addEventListener('loadstart', () => {
+    const addGenListener = (event, handler) => {
+      const listener = (e) => {
+        if (generation !== this.currentMediaGeneration) return;
+        handler(e);
+      };
+      this.video.addEventListener(event, listener);
+      this.currentGenerationListeners.push({ event, listener });
+    };
+
+    addGenListener('loadstart', () => {
       state.firstFrameTimings.statusText = 'Loading Media Header...';
     });
 
-    this.video.addEventListener('loadedmetadata', () => {
+    addGenListener('loadedmetadata', () => {
       state.videoDuration = this.video.duration;
       state.videoWidth = this.video.videoWidth;
       state.videoHeight = this.video.videoHeight;
@@ -94,12 +100,74 @@ export class MediaController {
       }
     });
 
-    this.video.addEventListener('canplay', () => {
+    addGenListener('canplay', () => {
       if (state.firstFrameTimings.selectedAt && !state.firstFrameTimings.canplayAt) {
         state.firstFrameTimings.canplayAt = performance.now();
         state.firstFrameTimings.statusText = 'Decoder Ready';
       }
     });
+
+    if (!this.video.requestVideoFrameCallback) {
+      addGenListener('timeupdate', () => {
+        this.videoFrameNeedsUpload = true;
+        stallDetector.recordRvfc(performance.now(), null);
+        if (!state.firstFrameTimings.firstFrameDecodedAt && state.firstFrameTimings.selectedAt) {
+          state.firstFrameTimings.firstFrameDecodedAt = performance.now();
+          state.firstFrameTimings.statusText = 'Decoded Frame Arrived';
+        }
+      });
+    }
+
+    addGenListener('error', () => {
+      let codeName = 'MEDIA_ERR_UNKNOWN';
+      let codeNum = 0;
+      let msg = '';
+      if (this.video && this.video.error) {
+        codeNum = this.video.error.code;
+        msg = this.video.error.message || '';
+        switch (codeNum) {
+          case 1: codeName = 'MEDIA_ERR_ABORTED'; break;
+          case 2: codeName = 'MEDIA_ERR_NETWORK'; break;
+          case 3: codeName = 'MEDIA_ERR_DECODE'; break;
+          case 4: codeName = 'MEDIA_ERR_SRC_NOT_SUPPORTED'; break;
+        }
+      }
+      const errText = `${codeName} (code ${codeNum}${msg ? ': ' + msg : ''})`;
+      console.error(`Video error [gen ${generation}]: ${errText}`);
+
+      // Update status and fail-closed state for this generation
+      state.firstFrameTimings.statusText = errText;
+      state.firstFrameTimings.ready = false;
+      this.videoFrameNeedsUpload = false;
+
+      // Invalidate displayed texture so failed source never leaves stale frame
+      if (this.renderer && typeof this.renderer.resetVideoTexture === 'function') {
+        this.renderer.resetVideoTexture();
+      }
+
+      // Structured error event for telemetry & remote logging seam
+      const errEvent = {
+        generation: generation,
+        mediaPath: mediaPath || '',
+        mediaName: mediaPath ? mediaPath.split('/').pop() : '',
+        code: codeNum,
+        name: codeName,
+        message: msg,
+        readyState: this.video ? this.video.readyState : 0,
+        networkState: this.video ? this.video.networkState : 0,
+        videoWidth: this.video ? this.video.videoWidth : 0,
+        videoHeight: this.video ? this.video.videoHeight : 0
+      };
+      if (this.remoteLogHook) {
+        this.remoteLogHook('ERROR', 'MEDIA_PLAYBACK_ERROR', errEvent);
+      }
+    });
+  }
+
+  initListeners() {
+    if (this.video) {
+      stallDetector.attachVideo(this.video);
+    }
 
     this.video.addEventListener('timeupdate', () => {
       if (typeof document !== 'undefined') {
@@ -129,52 +197,6 @@ export class MediaController {
       }
     });
 
-    this.video.addEventListener('error', () => {
-      const errGeneration = this.currentMediaGeneration;
-      let codeName = 'MEDIA_ERR_UNKNOWN';
-      let codeNum = 0;
-      let msg = '';
-      if (this.video && this.video.error) {
-        codeNum = this.video.error.code;
-        msg = this.video.error.message || '';
-        switch (codeNum) {
-          case 1: codeName = 'MEDIA_ERR_ABORTED'; break;
-          case 2: codeName = 'MEDIA_ERR_NETWORK'; break;
-          case 3: codeName = 'MEDIA_ERR_DECODE'; break;
-          case 4: codeName = 'MEDIA_ERR_SRC_NOT_SUPPORTED'; break;
-        }
-      }
-      const errText = `${codeName} (code ${codeNum}${msg ? ': ' + msg : ''})`;
-      console.error(`Video error [gen ${errGeneration}]: ${errText}`);
-      
-      // Update status and fail-closed state for current generation
-      state.firstFrameTimings.statusText = errText;
-      state.firstFrameTimings.ready = false;
-      this.videoFrameNeedsUpload = false;
-
-      // Invalidate displayed texture so failed source never leaves stale frame
-      if (this.renderer && typeof this.renderer.resetVideoTexture === 'function') {
-        this.renderer.resetVideoTexture();
-      }
-
-      // Structured error event for telemetry & remote logging seam
-      const errEvent = {
-        generation: errGeneration,
-        mediaPath: state.videoPath || '',
-        mediaName: state.videoPath ? state.videoPath.split('/').pop() : '',
-        code: codeNum,
-        name: codeName,
-        message: msg,
-        readyState: this.video ? this.video.readyState : 0,
-        networkState: this.video ? this.video.networkState : 0,
-        videoWidth: this.video ? this.video.videoWidth : 0,
-        videoHeight: this.video ? this.video.videoHeight : 0
-      };
-      if (this.remoteLogHook) {
-        this.remoteLogHook('ERROR', 'MEDIA_PLAYBACK_ERROR', errEvent);
-      }
-    });
-
     if (this.videoSelect) {
       this.videoSelect.addEventListener('change', (e) => {
         this.selectVideo(e.target.value);
@@ -200,6 +222,9 @@ export class MediaController {
         } catch (e) {}
         this.currentRvfcHandle = null;
       }
+
+      // Detach generation-bound listeners from previous media
+      this.detachGenerationListeners();
 
       // Detach and reset previous source state to clear decoder pipelines
       try {
@@ -233,6 +258,9 @@ export class MediaController {
 
     // 5. Assign and load new source
     if (this.video) {
+      // Bind generation-scoped media event listeners (loadstart, loadedmetadata, canplay, timeupdate, error)
+      this.attachGenerationListeners(generation, relPath);
+
       this.video.src = '/video?path=' + encodeURIComponent(relPath);
       this.video.load();
 

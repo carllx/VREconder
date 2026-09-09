@@ -326,27 +326,80 @@ console.log('\nIssue 23 - Check 2: Playable A -> Unsupported B -> Playable C (Fu
   }
 }
 
-// Issue 23 - Check 3: Stale Callback & Stale Event Isolation
-console.log('\nIssue 23 - Check 3: Stale Callback & Event Isolation:');
+// Issue 23 - Check 3: Stale Callback & Stale Media Event Isolation (Delayed B Event vs Active C)
+console.log('\nIssue 23 - Check 3: Stale Callback & Stale Media Event Isolation:');
 {
   const video = new MockVideoElement();
   const renderer = new MockVRRenderer();
+  const logged = [];
   const controller = new MediaController(video, null);
   controller.attachRenderer(renderer);
+  controller.setRemoteLogHook((level, msg, data) => logged.push({ level, msg, data }));
 
-  controller.selectVideo('media_1.mp4');
-  const gen1 = controller.currentMediaGeneration;
+  // 1. Select playable A
+  controller.selectVideo('playable_A.mp4');
+  const genA = controller.currentMediaGeneration;
 
-  // Next media selected before callback fires
-  controller.selectVideo('media_2.mp4');
-  const gen2 = controller.currentMediaGeneration;
+  // 2. Select unsupported B
+  controller.selectVideo('unsupported_B.mp4');
+  const genB = controller.currentMediaGeneration;
 
-  // Stale callback from gen 1 arrives
-  controller.handleDecodedFrame(gen1, 500, { mediaTime: 1.0 });
-  const passStaleDiscarded = (controller.videoFrameNeedsUpload === false && state.firstFrameTimings.firstFrameDecodedAt === 0);
+  // Capture B's generation-scoped error handler before teardown to simulate delayed event delivery
+  const bErrorListeners = [...(video.eventListeners['error'] || [])];
+  const bMetadataListeners = [...(video.eventListeners['loadedmetadata'] || [])];
+
+  // 3. Immediately select playable C before B's error/metadata fires
+  controller.selectVideo('playable_C.mp4');
+  const genC = controller.currentMediaGeneration;
+
+  // Reset renderer call counters to observe any mutation from delayed B events
+  renderer.resetCalls = 0;
+  renderer.updateCalls = 0;
+  logged.length = 0;
+
+  // 4. Simulate delayed B error event arriving while C is active
+  video.error = { code: 4, message: 'Format not supported (from B)' };
+  for (const listener of bErrorListeners) {
+    listener({ type: 'error' });
+  }
+
+  // Verify delayed B error did NOT mutate C
+  const passNoErrorLoggedForC = (logged.length === 0);
+  const passTextureNotResetByB = (renderer.resetCalls === 0);
+  const passStatusNotOverwrittenByB = (!state.firstFrameTimings.statusText.includes('MEDIA_ERR'));
+  const passCStillIntact = (state.videoPath === 'playable_C.mp4' && controller.currentMediaGeneration === genC);
+
+  // 5. Simulate delayed B loadedmetadata arriving while C is active
+  for (const listener of bMetadataListeners) {
+    listener({ type: 'loadedmetadata' });
+  }
+
+  // 6. Stale rVFC callback from gen A / gen B arrives
+  controller.handleDecodedFrame(genA, 500, { mediaTime: 1.0 });
+  controller.handleDecodedFrame(genB, 510, { mediaTime: 1.0 });
+  const passStaleRvfcDiscarded = (controller.videoFrameNeedsUpload === false && state.firstFrameTimings.firstFrameDecodedAt === 0);
   const passRvfcCanceled = (video.cancelRvfcCalls.length > 0);
 
-  if (passStaleDiscarded && passRvfcCanceled && gen2 === gen1 + 1) {
+  // 7. Legitimate C decoded frame arrives
+  video.readyState = 4;
+  video.triggerRvfc(600);
+  const passCFrameDecoded = (controller.videoFrameNeedsUpload === true && state.firstFrameTimings.firstFrameDecodedAt > 0);
+  const passCUpload = controller.shouldUploadTexture();
+  renderer.updateVideoTexture(video);
+
+  const allCheck3Pass = (
+    passNoErrorLoggedForC &&
+    passTextureNotResetByB &&
+    passStatusNotOverwrittenByB &&
+    passCStillIntact &&
+    passStaleRvfcDiscarded &&
+    passRvfcCanceled &&
+    passCFrameDecoded &&
+    passCUpload &&
+    renderer.updateCalls === 1
+  );
+
+  if (allCheck3Pass) {
     console.log('  ✅ Issue 23 - Check 3 PASSED');
   } else {
     console.log('  ❌ Issue 23 - Check 3 FAILED');
