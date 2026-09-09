@@ -1,6 +1,7 @@
 // ==========================================
 // Deterministic Interaction & Gaze Dwell Regression Verification
 // ==========================================
+import assert from 'node:assert';
 import { GazeEngine } from './src/controls/gaze-engine.js';
 import { state } from './src/core/state.js';
 import { TIMELINE_GEOMETRY, sphericalToDir } from './src/controls/patterns.js';
@@ -128,4 +129,291 @@ if (!c4_pass) {
   console.log('  ✅ Check 4 PASSED');
 }
 
-console.log(`\nOVERALL INTERACTION & POLICY REGRESSION CHECK: ${allPassed ? '✅ ALL PASSED' : '❌ FAILED'}`);
+// ============================================================================
+// Issue #23: Deterministic Media Switch Failure Isolation & Recovery
+// ============================================================================
+import { MediaController } from './src/media/playback.js';
+
+console.log('\n=== RUNNING ISSUE #23 DETERMINISTIC MEDIA RECOVERY CHECKS ===\n');
+
+class MockVideoElement {
+  constructor() {
+    this.src = '';
+    this.paused = true;
+    this.readyState = 0;
+    this.networkState = 0;
+    this.videoWidth = 0;
+    this.videoHeight = 0;
+    this.currentTime = 0;
+    this.duration = 0;
+    this.error = null;
+    this.eventListeners = {};
+    this.rvfcCallbacks = new Map();
+    this.nextRvfcId = 1;
+    this.loadCalls = 0;
+    this.pauseCalls = 0;
+    this.playCalls = 0;
+    this.cancelRvfcCalls = [];
+  }
+
+  addEventListener(event, listener) {
+    if (!this.eventListeners[event]) this.eventListeners[event] = [];
+    this.eventListeners[event].push(listener);
+  }
+
+  removeEventListener(event, listener) {
+    if (this.eventListeners[event]) {
+      this.eventListeners[event] = this.eventListeners[event].filter(l => l !== listener);
+    }
+  }
+
+  dispatchEvent(event) {
+    const type = event.type || event;
+    const list = this.eventListeners[type] || [];
+    for (const l of list) l(event);
+  }
+
+  removeAttribute(attr) {
+    if (attr === 'src') this.src = '';
+  }
+
+  load() {
+    this.loadCalls++;
+  }
+
+  pause() {
+    this.pauseCalls++;
+    this.paused = true;
+    this.dispatchEvent('pause');
+  }
+
+  play() {
+    this.playCalls++;
+    this.paused = false;
+    this.dispatchEvent('play');
+    return Promise.resolve();
+  }
+
+  requestVideoFrameCallback(cb) {
+    const id = this.nextRvfcId++;
+    this.rvfcCallbacks.set(id, cb);
+    return id;
+  }
+
+  cancelVideoFrameCallback(id) {
+    this.cancelRvfcCalls.push(id);
+    this.rvfcCallbacks.delete(id);
+  }
+
+  triggerRvfc(now, metadata = {}) {
+    const entries = Array.from(this.rvfcCallbacks.entries());
+    this.rvfcCallbacks.clear();
+    for (const [id, cb] of entries) {
+      cb(now, {
+        mediaTime: this.currentTime,
+        presentedFrames: 1,
+        width: this.videoWidth,
+        height: this.videoHeight,
+        ...metadata
+      });
+    }
+  }
+
+  triggerError(code, message = '') {
+    this.error = { code, message };
+    this.networkState = 3;
+    this.dispatchEvent({ type: 'error' });
+  }
+}
+
+class MockVRRenderer {
+  constructor() {
+    this.resetCalls = 0;
+    this.updateCalls = 0;
+  }
+
+  resetVideoTexture() {
+    this.resetCalls++;
+  }
+
+  updateVideoTexture(el) {
+    this.updateCalls++;
+    state.firstFrameTimings.firstTextureUploadAt = performance.now();
+  }
+}
+
+// Issue 23 - Check 1: Playable A -> Unsupported B (Fail Closed)
+console.log('Issue 23 - Check 1: Playable A -> Unsupported B (Fail Closed):');
+{
+  const video = new MockVideoElement();
+  const renderer = new MockVRRenderer();
+  const loggedErrors = [];
+  const controller = new MediaController(video, null);
+  controller.attachRenderer(renderer);
+  controller.setRemoteLogHook((level, msg, data) => loggedErrors.push({ level, msg, data }));
+
+  // Playable A
+  controller.selectVideo('4K/playable_A.mp4');
+  const genA = controller.currentMediaGeneration;
+  video.readyState = 4;
+  video.videoWidth = 3840;
+  video.videoHeight = 1920;
+  video.triggerRvfc(100);
+  assert(controller.shouldUploadTexture(), 'Upload allowed for A');
+  renderer.updateVideoTexture(video);
+
+  // Unsupported B
+  controller.selectVideo('unsupported/broken_B.mp4');
+  const genB = controller.currentMediaGeneration;
+  const passGenB = (genB === genA + 1);
+  const passResetB = (renderer.resetCalls === 2);
+  const passUploadB = (!controller.videoFrameNeedsUpload);
+  const passReadyB = (!state.firstFrameTimings.ready);
+
+  // Trigger Code 4
+  video.triggerError(4, 'Format not supported');
+  const passErrorB = (state.firstFrameTimings.statusText.includes('MEDIA_ERR_SRC_NOT_SUPPORTED'));
+  const passLoggedB = (loggedErrors.length === 1 && loggedErrors[0].data.code === 4);
+
+  if (passGenB && passResetB && passUploadB && passReadyB && passErrorB && passLoggedB) {
+    console.log('  ✅ Issue 23 - Check 1 PASSED');
+  } else {
+    console.log('  ❌ Issue 23 - Check 1 FAILED');
+    allPassed = false;
+  }
+}
+
+// Issue 23 - Check 2: Playable A -> Unsupported B -> Playable C (Full Recovery)
+console.log('\nIssue 23 - Check 2: Playable A -> Unsupported B -> Playable C (Full Recovery):');
+{
+  const video = new MockVideoElement();
+  const renderer = new MockVRRenderer();
+  const loggedErrors = [];
+  const controller = new MediaController(video, null);
+  controller.attachRenderer(renderer);
+  controller.setRemoteLogHook((level, msg, data) => loggedErrors.push({ level, msg, data }));
+
+  // A -> B (failed)
+  controller.selectVideo('4K/playable_A.mp4');
+  video.readyState = 4;
+  video.triggerRvfc(100);
+  controller.selectVideo('unsupported/broken_B.mp4');
+  video.triggerError(4, 'Cannot play');
+
+  // Select C
+  const preLoads = video.loadCalls;
+  controller.selectVideo('4K/playable_C.mp4');
+  const genC = controller.currentMediaGeneration;
+  const passTeardownC = (video.loadCalls >= preLoads + 2); // Teardown load() + new source load()
+  const passSrcC = video.src.includes('playable_C.mp4');
+
+  // C decodes
+  video.error = null;
+  video.readyState = 4;
+  video.videoWidth = 1920;
+  video.videoHeight = 1080;
+  video.triggerRvfc(200);
+
+  const passUploadC = controller.shouldUploadTexture();
+  renderer.updateVideoTexture(video);
+  const passDecodedC = (state.firstFrameTimings.firstFrameDecodedAt > 0);
+
+  if (genC === 3 && passTeardownC && passSrcC && passUploadC && passDecodedC) {
+    console.log('  ✅ Issue 23 - Check 2 PASSED');
+  } else {
+    console.log('  ❌ Issue 23 - Check 2 FAILED');
+    allPassed = false;
+  }
+}
+
+// Issue 23 - Check 3: Stale Callback & Stale Event Isolation
+console.log('\nIssue 23 - Check 3: Stale Callback & Event Isolation:');
+{
+  const video = new MockVideoElement();
+  const renderer = new MockVRRenderer();
+  const controller = new MediaController(video, null);
+  controller.attachRenderer(renderer);
+
+  controller.selectVideo('media_1.mp4');
+  const gen1 = controller.currentMediaGeneration;
+
+  // Next media selected before callback fires
+  controller.selectVideo('media_2.mp4');
+  const gen2 = controller.currentMediaGeneration;
+
+  // Stale callback from gen 1 arrives
+  controller.handleDecodedFrame(gen1, 500, { mediaTime: 1.0 });
+  const passStaleDiscarded = (controller.videoFrameNeedsUpload === false && state.firstFrameTimings.firstFrameDecodedAt === 0);
+  const passRvfcCanceled = (video.cancelRvfcCalls.length > 0);
+
+  if (passStaleDiscarded && passRvfcCanceled && gen2 === gen1 + 1) {
+    console.log('  ✅ Issue 23 - Check 3 PASSED');
+  } else {
+    console.log('  ❌ Issue 23 - Check 3 FAILED');
+    allPassed = false;
+  }
+}
+
+// Issue 23 - Check 4: Ordinary Playable A -> Playable B Switching
+console.log('\nIssue 23 - Check 4: Ordinary Playable A -> Playable B Switching:');
+{
+  const video = new MockVideoElement();
+  const renderer = new MockVRRenderer();
+  const controller = new MediaController(video, null);
+  controller.attachRenderer(renderer);
+
+  controller.selectVideo('4K/vidA.mp4');
+  video.readyState = 4;
+  video.triggerRvfc(100);
+  const passA = controller.shouldUploadTexture();
+  renderer.updateVideoTexture(video);
+
+  controller.selectVideo('4K/vidB.mp4');
+  const passPreB = (!controller.shouldUploadTexture());
+  video.readyState = 4;
+  video.triggerRvfc(200);
+  const passPostB = controller.shouldUploadTexture();
+  renderer.updateVideoTexture(video);
+
+  if (passA && passPreB && passPostB && renderer.updateCalls === 2) {
+    console.log('  ✅ Issue 23 - Check 4 PASSED');
+  } else {
+    console.log('  ❌ Issue 23 - Check 4 FAILED');
+    allPassed = false;
+  }
+}
+
+// Issue 23 - Check 5: Telemetry Error Seam Event Structure
+console.log('\nIssue 23 - Check 5: Telemetry Error Seam Event Structure:');
+{
+  const video = new MockVideoElement();
+  const logged = [];
+  const controller = new MediaController(video, null);
+  controller.setRemoteLogHook((level, msg, data) => logged.push({ level, msg, data }));
+
+  controller.selectVideo('bad/codec.mp4');
+  video.networkState = 3;
+  video.triggerError(4, 'Source not supported');
+
+  const passLog = (logged.length === 1 &&
+                   logged[0].level === 'ERROR' &&
+                   logged[0].msg === 'MEDIA_PLAYBACK_ERROR' &&
+                   logged[0].data.generation === controller.currentMediaGeneration &&
+                   logged[0].data.code === 4 &&
+                   logged[0].data.name === 'MEDIA_ERR_SRC_NOT_SUPPORTED');
+
+  if (passLog) {
+    console.log('  ✅ Issue 23 - Check 5 PASSED');
+  } else {
+    console.log('  ❌ Issue 23 - Check 5 FAILED');
+    allPassed = false;
+  }
+}
+
+console.log('\n------------------------------------------------------------');
+if (allPassed) {
+  console.log('OVERALL REGRESSION & ISSUE #23 VERIFICATION: ✅ ALL PASSED');
+} else {
+  console.log('OVERALL REGRESSION & ISSUE #23 VERIFICATION: ❌ SOME FAILED');
+  process.exit(1);
+}

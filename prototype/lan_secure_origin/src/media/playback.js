@@ -12,7 +12,49 @@ export class MediaController {
     this.videoFrameNeedsUpload = false;
     this.lastUploadedVideoTime = -1;
     this.hasLoggedFirstFrame = false;
+
+    // Issue #23: Media-selection generation token & teardown state
+    this.currentMediaGeneration = 0;
+    this.currentRvfcHandle = null;
+    this.renderer = null;
+    this.remoteLogHook = null;
+
     this.initListeners();
+  }
+
+  attachRenderer(renderer) {
+    this.renderer = renderer;
+  }
+
+  setRemoteLogHook(fn) {
+    if (typeof fn === 'function') {
+      this.remoteLogHook = fn;
+    }
+  }
+
+  scheduleNextRvfc(generation) {
+    if (!this.video || !this.video.requestVideoFrameCallback) return;
+    this.currentRvfcHandle = this.video.requestVideoFrameCallback((now, metadata) => {
+      this.handleDecodedFrame(generation, now, metadata);
+    });
+  }
+
+  handleDecodedFrame(generation, now, metadata) {
+    if (generation !== this.currentMediaGeneration) {
+      return; // Stale callback from previous generation discarded
+    }
+
+    this.videoFrameNeedsUpload = true;
+    perfTelemetry.recordRvfc();
+    stallDetector.recordRvfc(now, metadata);
+
+    if (!state.firstFrameTimings.firstFrameDecodedAt && state.firstFrameTimings.selectedAt) {
+      state.firstFrameTimings.firstFrameDecodedAt = performance.now();
+      state.firstFrameTimings.statusText = 'Decoded Frame Arrived';
+    }
+
+    // Schedule next callback for current generation
+    this.scheduleNextRvfc(generation);
   }
 
   initListeners() {
@@ -20,26 +62,12 @@ export class MediaController {
       stallDetector.attachVideo(this.video);
     }
 
-    const onFrame = (now, metadata) => {
-      this.videoFrameNeedsUpload = true;
-      perfTelemetry.recordRvfc();
-      stallDetector.recordRvfc(now, metadata);
-      if (!state.firstFrameTimings.firstFrameDecodedAt && state.firstFrameTimings.selectedAt) {
-        state.firstFrameTimings.firstFrameDecodedAt = performance.now();
-        state.firstFrameTimings.statusText = 'Decoded Frame Arrived';
-      }
-      if (this.video && this.video.requestVideoFrameCallback) {
-        this.video.requestVideoFrameCallback(onFrame);
-      }
-    };
-
-    if (this.video && this.video.requestVideoFrameCallback) {
-      this.video.requestVideoFrameCallback(onFrame);
-    } else if (this.video) {
+    if (this.video && !this.video.requestVideoFrameCallback) {
       this.video.addEventListener('timeupdate', () => {
+        const gen = this.currentMediaGeneration;
         this.videoFrameNeedsUpload = true;
         stallDetector.recordRvfc(performance.now(), null);
-        if (!state.firstFrameTimings.firstFrameDecodedAt && state.firstFrameTimings.selectedAt) {
+        if (!state.firstFrameTimings.firstFrameDecodedAt && state.firstFrameTimings.selectedAt && gen === this.currentMediaGeneration) {
           state.firstFrameTimings.firstFrameDecodedAt = performance.now();
           state.firstFrameTimings.statusText = 'Decoded Frame Arrived';
         }
@@ -58,10 +86,12 @@ export class MediaController {
         state.firstFrameTimings.metadataAt = performance.now();
         state.firstFrameTimings.statusText = 'Metadata Loaded';
       }
-      const elRes = document.getElementById('valVideoRes');
-      const elDur = document.getElementById('valVideoDur');
-      if (elRes) elRes.textContent = this.video.videoWidth + 'x' + this.video.videoHeight;
-      if (elDur) elDur.textContent = this.video.duration.toFixed(1) + 's';
+      if (typeof document !== 'undefined') {
+        const elRes = document.getElementById('valVideoRes');
+        const elDur = document.getElementById('valVideoDur');
+        if (elRes) elRes.textContent = this.video.videoWidth + 'x' + this.video.videoHeight;
+        if (elDur) elDur.textContent = this.video.duration.toFixed(1) + 's';
+      }
     });
 
     this.video.addEventListener('canplay', () => {
@@ -72,8 +102,10 @@ export class MediaController {
     });
 
     this.video.addEventListener('timeupdate', () => {
-      const elTime = document.getElementById('valVideoTime');
-      if (elTime) elTime.textContent = this.video.currentTime.toFixed(1) + 's';
+      if (typeof document !== 'undefined') {
+        const elTime = document.getElementById('valVideoTime');
+        if (elTime) elTime.textContent = this.video.currentTime.toFixed(1) + 's';
+      }
     });
 
     const perfEvents = ['waiting', 'stalled', 'playing', 'canplay', 'seeking', 'seeked', 'pause', 'error'];
@@ -84,20 +116,25 @@ export class MediaController {
     });
 
     this.video.addEventListener('play', () => {
-      const elStat = document.getElementById('valPlayStatus');
-      if (elStat) { elStat.textContent = 'Playing'; elStat.style.color = '#34d399'; }
+      if (typeof document !== 'undefined') {
+        const elStat = document.getElementById('valPlayStatus');
+        if (elStat) { elStat.textContent = 'Playing'; elStat.style.color = '#34d399'; }
+      }
     });
 
     this.video.addEventListener('pause', () => {
-      const elStat = document.getElementById('valPlayStatus');
-      if (elStat) { elStat.textContent = 'Paused'; elStat.style.color = '#fbbf24'; }
+      if (typeof document !== 'undefined') {
+        const elStat = document.getElementById('valPlayStatus');
+        if (elStat) { elStat.textContent = 'Paused'; elStat.style.color = '#fbbf24'; }
+      }
     });
 
     this.video.addEventListener('error', () => {
+      const errGeneration = this.currentMediaGeneration;
       let codeName = 'MEDIA_ERR_UNKNOWN';
       let codeNum = 0;
       let msg = '';
-      if (this.video.error) {
+      if (this.video && this.video.error) {
         codeNum = this.video.error.code;
         msg = this.video.error.message || '';
         switch (codeNum) {
@@ -108,8 +145,34 @@ export class MediaController {
         }
       }
       const errText = `${codeName} (code ${codeNum}${msg ? ': ' + msg : ''})`;
-      console.error('Video error: ' + errText);
+      console.error(`Video error [gen ${errGeneration}]: ${errText}`);
+      
+      // Update status and fail-closed state for current generation
       state.firstFrameTimings.statusText = errText;
+      state.firstFrameTimings.ready = false;
+      this.videoFrameNeedsUpload = false;
+
+      // Invalidate displayed texture so failed source never leaves stale frame
+      if (this.renderer && typeof this.renderer.resetVideoTexture === 'function') {
+        this.renderer.resetVideoTexture();
+      }
+
+      // Structured error event for telemetry & remote logging seam
+      const errEvent = {
+        generation: errGeneration,
+        mediaPath: state.videoPath || '',
+        mediaName: state.videoPath ? state.videoPath.split('/').pop() : '',
+        code: codeNum,
+        name: codeName,
+        message: msg,
+        readyState: this.video ? this.video.readyState : 0,
+        networkState: this.video ? this.video.networkState : 0,
+        videoWidth: this.video ? this.video.videoWidth : 0,
+        videoHeight: this.video ? this.video.videoHeight : 0
+      };
+      if (this.remoteLogHook) {
+        this.remoteLogHook('ERROR', 'MEDIA_PLAYBACK_ERROR', errEvent);
+      }
     });
 
     if (this.videoSelect) {
@@ -120,6 +183,39 @@ export class MediaController {
   }
 
   selectVideo(relPath) {
+    // 1. Advance generation token immediately
+    const generation = ++this.currentMediaGeneration;
+
+    // 2. Explicit previous source teardown
+    if (this.video) {
+      try {
+        if (!this.video.paused) {
+          this.video.pause();
+        }
+      } catch (e) {}
+
+      if (this.currentRvfcHandle !== null && this.video.cancelVideoFrameCallback) {
+        try {
+          this.video.cancelVideoFrameCallback(this.currentRvfcHandle);
+        } catch (e) {}
+        this.currentRvfcHandle = null;
+      }
+
+      // Detach and reset previous source state to clear decoder pipelines
+      try {
+        this.video.removeAttribute('src');
+        this.video.load();
+      } catch (e) {}
+    }
+
+    // 3. Fail-closed renderer texture invalidation
+    this.videoFrameNeedsUpload = false;
+    this.lastUploadedVideoTime = -1;
+    if (this.renderer && typeof this.renderer.resetVideoTexture === 'function') {
+      this.renderer.resetVideoTexture();
+    }
+
+    // 4. Reset state for new media
     state.videoPath = relPath;
     stallDetector.resetForMedia(relPath);
     this.hasLoggedFirstFrame = false;
@@ -135,11 +231,17 @@ export class MediaController {
       statusText: 'Opening ' + relPath.split('/').pop()
     };
 
-    this.video.src = '/video?path=' + encodeURIComponent(relPath);
-    this.video.load();
-    this.videoFrameNeedsUpload = true;
-    if (state.inVR) {
-      this.video.play().catch(e => console.log('Video play error:', e));
+    // 5. Assign and load new source
+    if (this.video) {
+      this.video.src = '/video?path=' + encodeURIComponent(relPath);
+      this.video.load();
+
+      // Schedule fresh rVFC pipeline bound to this new generation
+      this.scheduleNextRvfc(generation);
+
+      if (state.inVR) {
+        this.video.play().catch(e => console.log('Video play error:', e));
+      }
     }
   }
 

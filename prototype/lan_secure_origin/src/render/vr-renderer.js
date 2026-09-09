@@ -169,6 +169,17 @@ export class VRRenderer {
     }
   }
 
+  resetVideoTexture() {
+    const gl = this.gl;
+    if (!gl || !this.videoTex) return;
+    try {
+      gl.bindTexture(gl.TEXTURE_2D, this.videoTex);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([10, 15, 25, 255]));
+    } catch (e) {
+      console.warn('Reset video texture error:', e);
+    }
+  }
+
   computePoseMatrix(poseDeg) {
     const p = poseDeg || { yawDeg: 0, pitchDeg: 0, rollDeg: 0 };
     const deg2rad = Math.PI / 180;
@@ -412,7 +423,7 @@ export class VRRenderer {
 
     gl.disable(gl.SCISSOR_TEST);
 
-    if (!state.firstFrameTimings.firstRenderAt && state.firstFrameTimings.firstTextureUploadAt) {
+    if (!state.firstFrameTimings.firstRenderAt && state.firstFrameTimings.firstTextureUploadAt && state.firstFrameTimings.firstFrameDecodedAt) {
       state.firstFrameTimings.firstRenderAt = performance.now();
       state.firstFrameTimings.ready = true;
       state.firstFrameTimings.statusText = 'VR Ready';

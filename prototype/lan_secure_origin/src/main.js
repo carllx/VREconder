@@ -165,6 +165,8 @@ const btnVrExit = document.getElementById('btnVrExit');
 const vrRenderer = new VRRenderer(glCanvas);
 const diagnosticOverlay = new DiagnosticOverlay(uiCanvas);
 const mediaController = new MediaController(video, null);
+mediaController.attachRenderer(vrRenderer);
+mediaController.setRemoteLogHook(remoteLog);
 const commandModel = new CommandModel(mediaController);
 const gazeEngine = new GazeEngine(commandModel, video);
 const controllerProbe = new ControllerInputProbe(commandModel);
