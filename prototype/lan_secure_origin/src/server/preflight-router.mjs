@@ -3,9 +3,71 @@ import path from 'node:path';
 import { runDryRunInventory } from '../normalization/inventory-scanner.mjs';
 import { NormalizationEngine } from '../normalization/normalization-engine.mjs';
 import { DeviceProbeCache } from '../preflight/device-probe-cache.mjs';
+import { preflightIncomingMedia } from '../preflight/intake-preflight.mjs';
+import { getMediaFingerprint } from '../normalization/fingerprint.mjs';
 
 const probeCache = new DeviceProbeCache();
 const engine = new NormalizationEngine({ executionEnabled: false });
+const admissionCache = new Map();
+
+/**
+ * Check if a file is admitted for Safari playback based on Issue #21 compatibility authority.
+ * Keyed in-memory by file fingerprint (canonicalPath, size, mtimeMs).
+ *
+ * @param {string} filePath
+ * @returns {Promise<{ allowed: boolean, classification: string, reason: string, matchedEnvelopeId: string | null, allowedNextActions: string[] }>}
+ */
+export async function checkPlaybackAdmission(filePath) {
+  if (!filePath || !fs.existsSync(filePath)) {
+    return {
+      allowed: false,
+      classification: 'UNREADABLE_MEDIA',
+      reason: 'File not found or unreadable',
+      matchedEnvelopeId: null,
+      allowedNextActions: []
+    };
+  }
+
+  const fp = getMediaFingerprint(filePath);
+  if (!fp) {
+    return {
+      allowed: false,
+      classification: 'UNREADABLE_MEDIA',
+      reason: 'Could not generate fingerprint for file',
+      matchedEnvelopeId: null,
+      allowedNextActions: []
+    };
+  }
+
+  if (admissionCache.has(fp.fingerprintId)) {
+    return admissionCache.get(fp.fingerprintId);
+  }
+
+  try {
+    const decision = await preflightIncomingMedia(fp.canonicalPath, { probeCache });
+    const result = {
+      allowed: Boolean(decision && decision.mayPromoteToVrReady),
+      classification: (decision && decision.classification) || 'UNKNOWN',
+      reason: (decision && decision.reason) || 'No policy reason provided',
+      matchedEnvelopeId: (decision && decision.matchedEnvelopeId) || null,
+      allowedNextActions: (decision && decision.allowedNextActions) || []
+    };
+    admissionCache.set(fp.fingerprintId, result);
+    return result;
+  } catch (err) {
+    return {
+      allowed: false,
+      classification: 'PREFLIGHT_ERROR',
+      reason: err.message || 'Error executing preflight check',
+      matchedEnvelopeId: null,
+      allowedNextActions: []
+    };
+  }
+}
+
+export function clearAdmissionCache() {
+  admissionCache.clear();
+}
 
 // Initialize engine asynchronously on startup
 export const engineInitPromise = engine.initialize().then(initResult => {
@@ -24,9 +86,10 @@ export const engineInitPromise = engine.initialize().then(initResult => {
  * @param {string} pathname 
  * @param {string} __dirname 
  * @param {string[]} allowedRoots 
+ * @param {Function} [resolveMediaPath]
  * @returns {boolean} true if request was handled
  */
-export function handlePreflightRoutes(req, res, pathname, __dirname, allowedRoots) {
+export function handlePreflightRoutes(req, res, pathname, __dirname, allowedRoots, resolveMediaPath) {
   // 1. Static HTML for /compat-preflight
   if (pathname === '/compat-preflight' || pathname === '/compat-preflight.html') {
     const filePath = path.join(__dirname, 'compat-preflight.html');
@@ -173,6 +236,62 @@ export function handlePreflightRoutes(req, res, pathname, __dirname, allowedRoot
     res.write(`data: ${JSON.stringify({ isPlaybackActive: engine.isPlaybackActive, timestamp: new Date().toISOString() })}\n\n`);
     playbackSseClients.add(res);
     req.on('close', () => { playbackSseClients.delete(res); });
+    return true;
+  }
+
+  // 8. Playback Admission Gate check endpoint (Issue #23)
+  if (pathname === '/api/playback-admission' && req.method === 'GET') {
+    const parsedUrl = new URL(req.url, 'http://localhost');
+    const relParam = parsedUrl.searchParams.get('path');
+    if (!relParam) {
+      res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' });
+      res.end(JSON.stringify({
+        allowed: false,
+        error: 'Missing path query parameter',
+        classification: 'INVALID_REQUEST'
+      }));
+      return true;
+    }
+
+    let resolvedPath = null;
+    if (typeof resolveMediaPath === 'function') {
+      resolvedPath = resolveMediaPath(relParam);
+    } else {
+      for (const root of (allowedRoots || [])) {
+        const p = path.resolve(root, relParam);
+        if (fs.existsSync(p)) {
+          resolvedPath = p;
+          break;
+        }
+      }
+    }
+
+    if (!resolvedPath) {
+      res.writeHead(404, { 'Content-Type': 'application/json; charset=utf-8' });
+      res.end(JSON.stringify({
+        allowed: false,
+        classification: 'UNREADABLE_MEDIA',
+        reason: 'File not found in media roots',
+        matchedEnvelopeId: null,
+        allowedNextActions: []
+      }));
+      return true;
+    }
+
+    checkPlaybackAdmission(resolvedPath).then(decision => {
+      res.writeHead(200, {
+        'Content-Type': 'application/json; charset=utf-8',
+        'Cache-Control': 'no-cache, no-store'
+      });
+      res.end(JSON.stringify(decision));
+    }).catch(err => {
+      res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8' });
+      res.end(JSON.stringify({
+        allowed: false,
+        classification: 'INTERNAL_ERROR',
+        reason: err.message
+      }));
+    });
     return true;
   }
 

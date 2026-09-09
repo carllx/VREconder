@@ -6,7 +6,7 @@ import { perfTelemetry } from '../telemetry/telemetry.js';
 import { stallDetector } from '../telemetry/stall-detector.js';
 
 export class MediaController {
-  constructor(videoElement, videoSelectElement) {
+  constructor(videoElement, videoSelectElement, options = {}) {
     this.video = videoElement;
     this.videoSelect = videoSelectElement;
     this.videoFrameNeedsUpload = false;
@@ -19,6 +19,12 @@ export class MediaController {
     this.currentGenerationListeners = [];
     this.renderer = null;
     this.remoteLogHook = null;
+
+    // Issue #23: Playback Admission Gate integration
+    this.admissionChecker = (options && options.admissionChecker) || null;
+    this.syncAdmissionBypass = options && typeof options.syncAdmissionBypass === 'boolean'
+      ? options.syncAdmissionBypass
+      : (typeof window === 'undefined');
 
     this.initListeners();
   }
@@ -204,6 +210,27 @@ export class MediaController {
     }
   }
 
+  async queryAdmission(relPath) {
+    if (typeof this.admissionChecker === 'function') {
+      return this.admissionChecker(relPath);
+    }
+    const fetchFn = (typeof window !== 'undefined' && window.fetch)
+      ? window.fetch.bind(window)
+      : (typeof fetch === 'function' ? fetch : null);
+    if (!fetchFn) {
+      return { allowed: false, classification: 'NO_FETCH', reason: 'No fetch API available' };
+    }
+    const res = await fetchFn('/api/playback-admission?path=' + encodeURIComponent(relPath));
+    if (!res.ok) {
+      return {
+        allowed: false,
+        classification: 'HTTP_' + res.status,
+        reason: `Admission endpoint returned HTTP ${res.status}`
+      };
+    }
+    return await res.json();
+  }
+
   selectVideo(relPath) {
     // 1. Advance generation token immediately
     const generation = ++this.currentMediaGeneration;
@@ -253,24 +280,76 @@ export class MediaController {
       firstTextureUploadAt: 0,
       firstRenderAt: 0,
       ready: false,
-      statusText: 'Opening ' + relPath.split('/').pop()
+      statusText: 'Checking compatibility...'
     };
 
-    // 5. Assign and load new source
-    if (this.video) {
-      // Bind generation-scoped media event listeners (loadstart, loadedmetadata, canplay, timeupdate, error)
-      this.attachGenerationListeners(generation, relPath);
-
-      this.video.src = '/video?path=' + encodeURIComponent(relPath);
-      this.video.load();
-
-      // Schedule fresh rVFC pipeline bound to this new generation
-      this.scheduleNextRvfc(generation);
-
-      if (state.inVR) {
-        this.video.play().catch(e => console.log('Video play error:', e));
+    const applyAdmissionDecision = (admission) => {
+      // Discard stale response if a newer selection occurred concurrently
+      if (generation !== this.currentMediaGeneration) {
+        return false;
       }
+
+      if (!admission || !admission.allowed) {
+        let statusMsg = 'Unsupported media';
+        const classification = admission ? admission.classification : 'UNKNOWN';
+        if (classification === 'NORMALIZATION_CANDIDATE_CERTIFIED') {
+          statusMsg = 'Needs compatibility repair';
+        } else if (classification === 'NEEDS_DEVICE_PROBE') {
+          statusMsg = 'Compatibility not yet verified';
+        } else if (classification === 'NEEDS_BUCKET_CERTIFICATION') {
+          statusMsg = 'Compatibility not yet certified';
+        } else if (classification === 'UNREADABLE_MEDIA') {
+          statusMsg = 'Media file unreadable';
+        }
+        state.firstFrameTimings.statusText = statusMsg;
+        state.firstFrameTimings.ready = false;
+
+        if (this.remoteLogHook) {
+          this.remoteLogHook('WARN', 'MEDIA_PLAYBACK_BLOCKED_BY_POLICY', {
+            generation,
+            mediaPath: relPath,
+            mediaName: relPath ? relPath.split('/').pop() : '',
+            classification,
+            reason: admission ? admission.reason : 'Admission denied',
+            matchedEnvelopeId: admission ? admission.matchedEnvelopeId || null : null,
+            allowedNextActions: admission ? admission.allowedNextActions || [] : []
+          });
+        }
+        return false;
+      }
+
+      // Admission granted: attach to video element
+      state.firstFrameTimings.statusText = 'Opening ' + relPath.split('/').pop();
+      if (this.video) {
+        this.attachGenerationListeners(generation, relPath);
+        this.video.src = '/video?path=' + encodeURIComponent(relPath);
+        this.video.load();
+        this.scheduleNextRvfc(generation);
+        if (state.inVR) {
+          this.video.play().catch(e => console.log('Video play error:', e));
+        }
+      }
+      return true;
+    };
+
+    if (this.syncAdmissionBypass) {
+      applyAdmissionDecision({ allowed: true });
+      return Promise.resolve({ allowed: true, generation });
     }
+
+    // Asynchronous admission check
+    return this.queryAdmission(relPath).then(admission => {
+      const allowed = applyAdmissionDecision(admission);
+      return { allowed, admission, generation };
+    }).catch(err => {
+      const fallbackAdmission = {
+        allowed: false,
+        classification: 'ADMISSION_ERROR',
+        reason: err.message || 'Error executing admission check'
+      };
+      const allowed = applyAdmissionDecision(fallbackAdmission);
+      return { allowed, admission: fallbackAdmission, generation };
+    });
   }
 
   async refreshVideoList() {

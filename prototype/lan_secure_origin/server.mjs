@@ -13,7 +13,7 @@ import {
   getCachedVideos
 } from './src/server/cert-helper.mjs';
 import { streamVideo, getRecentRangeLifecycles, onActiveStreamCountChange } from './src/media/video-streamer.mjs';
-import { handlePreflightRoutes, getEngineInstance, notifyPlaybackChange } from './src/server/preflight-router.mjs';
+import { handlePreflightRoutes, getEngineInstance, notifyPlaybackChange, checkPlaybackAdmission } from './src/server/preflight-router.mjs';
 import { handleProfileRoutes } from './src/server/profile-router.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -128,7 +128,7 @@ function handleRequest(req, res, isHttps) {
   }
 
   // Preflight & Normalization modular routes
-  if (handlePreflightRoutes(req, res, pathname, __dirname, getAllowedRoots())) {
+  if (handlePreflightRoutes(req, res, pathname, __dirname, getAllowedRoots(), resolveSecureMediaPath)) {
     return;
   }
 
@@ -342,7 +342,25 @@ function handleRequest(req, res, isHttps) {
     }
 
     if (targetPath && fs.existsSync(targetPath)) {
-      streamVideo(req, res, targetPath);
+      // Defense-in-depth: fail closed if playback admission policy denies file
+      checkPlaybackAdmission(targetPath).then(admission => {
+        if (!admission.allowed) {
+          console.warn(`[Admission Gate] Denied direct stream request for incompatible media: ${targetPath} (${admission.classification}: ${admission.reason})`);
+          res.writeHead(403, { 'Content-Type': 'application/json; charset=utf-8' });
+          res.end(JSON.stringify({
+            error: 'Playback admission denied by Safari compatibility policy',
+            classification: admission.classification,
+            reason: admission.reason,
+            targetPath: relParam || path.basename(targetPath)
+          }));
+          return;
+        }
+        streamVideo(req, res, targetPath);
+      }).catch(err => {
+        console.error(`[Admission Gate] Error verifying playback admission:`, err);
+        res.writeHead(500, { 'Content-Type': 'text/plain; charset=utf-8' });
+        res.end('Error verifying playback admission');
+      });
     } else {
       res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
       res.end('Video not found');
