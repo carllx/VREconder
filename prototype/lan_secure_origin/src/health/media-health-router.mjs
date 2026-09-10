@@ -85,6 +85,50 @@ export function handleMediaHealthRoutes(req, res, pathname) {
     }
   }
 
+  // 1b. Issue #21 Repair Probe Page: /repair-probe-runner
+  if (pathname === '/repair-probe-runner' || pathname === '/repair-probe-runner.html') {
+    const htmlPath = path.join(PROTOTYPE_DIR, 'repair-probe-runner.html');
+    if (fs.existsSync(htmlPath)) {
+      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+      fs.createReadStream(htmlPath).pipe(res);
+      return true;
+    }
+  }
+
+  // 1c. Repair Probe Queue Endpoint: GET /api/repair/queue
+  if (pathname === '/api/repair/queue' && req.method === 'GET') {
+    const manifestPath = path.join(PROTOTYPE_DIR, 'canonical_repair_manifest.json');
+    if (fs.existsSync(manifestPath)) {
+      const rm = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+      res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+      res.end(JSON.stringify({ queue: rm.probeQueue || [] }));
+      return true;
+    }
+    res.writeHead(404, { 'Content-Type': 'application/json; charset=utf-8' });
+    res.end(JSON.stringify({ error: 'canonical_repair_manifest.json not found' }));
+    return true;
+  }
+
+  // 1d. Record Repair Probe Result: POST /api/repair/result
+  if (pathname === '/api/repair/result' && req.method === 'POST') {
+    let body = '';
+    req.on('data', chunk => { body += chunk; });
+    req.on('end', () => {
+      try {
+        const payload = JSON.parse(body);
+        const resultsFile = path.join(PROTOTYPE_DIR, 'canonical_repair_probe_results.jsonl');
+        fs.appendFileSync(resultsFile, JSON.stringify(payload) + '\n', 'utf8');
+        res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+        res.end(JSON.stringify({ ok: true }));
+      } catch (err) {
+        res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' });
+        res.end(JSON.stringify({ error: err.message }));
+      }
+    });
+    return true;
+  }
+
   // 2. Health-specific Video Stream Endpoint: /api/health/video
   if (pathname === '/api/health/video' && req.method === 'GET') {
     const parsedUrl = new URL(req.url, 'http://localhost');
