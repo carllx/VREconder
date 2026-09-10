@@ -66,3 +66,5 @@ media_health_facts_cache.json
 prototype/lan_secure_origin/media_health_registry.jsonl
 prototype/lan_secure_origin/media_health_checkpoint.json
 prototype/lan_secure_origin/media_health_facts_cache.json
+prototype/lan_secure_origin/asset_integrity_cleanup_manifest.json
+asset_integrity_cleanup_manifest.json
