@@ -197,14 +197,14 @@ const calibrationUI = new CalibrationUI({
 
 // Override media selection to automatically load per-video profile
 const originalSelectVideo = mediaController.selectVideo.bind(mediaController);
-mediaController.selectVideo = (relPath) => {
-  originalSelectVideo(relPath);
+mediaController.selectVideo = async (relPath) => {
   let found = (state.videoList || []).find(v => v.relPath === relPath);
   if (!found) {
     console.warn(`[ProfileStorage] Video item not found in state.videoList for: ${relPath}. Using unverified fallback.`);
     found = { name: relPath.split('/').pop(), relPath: relPath, sizeBytes: 0 };
   }
   onVideoSelected(found);
+  return await originalSelectVideo(relPath);
 };
 
 // Bootstrap hydration sequence: hydrate server profiles first, then bind initial media

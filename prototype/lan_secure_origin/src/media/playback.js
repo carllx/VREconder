@@ -269,6 +269,15 @@ export class MediaController {
 
     // 4. Reset state for new media
     state.videoPath = relPath;
+    if (Array.isArray(state.videoList) && state.videoList.length > 0) {
+      const foundIdx = state.videoList.findIndex(v => v.relPath === relPath);
+      if (foundIdx !== -1) {
+        state.currentVideoIndex = foundIdx;
+        if (this.videoSelect && this.videoSelect.value !== relPath) {
+          this.videoSelect.value = relPath;
+        }
+      }
+    }
     stallDetector.resetForMedia(relPath);
     this.hasLoggedFirstFrame = false;
     const now = performance.now();

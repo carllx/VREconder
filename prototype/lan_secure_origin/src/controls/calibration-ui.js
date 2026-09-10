@@ -77,8 +77,27 @@ export class CalibrationUI {
       showFeedbackToast(`Render Scale: ${msg.scale.toFixed(2)}x`);
       logAction('Set Render Scale: ' + msg.scale);
     } else if (act === 'select_media' && msg.relPath && this.mediaController) {
-      this.mediaController.selectVideo(msg.relPath);
-      logAction('Selected media from PC: ' + msg.relPath);
+      const requestedPath = msg.relPath;
+      logAction('Requesting media selection from PC: ' + requestedPath);
+      Promise.resolve(this.mediaController.selectVideo(requestedPath)).then(result => {
+        if (!result) {
+          logAction('Remote media selection yielded no result: ' + requestedPath, { outcome: 'unknown' });
+          return;
+        }
+        if (result.generation !== this.mediaController.currentMediaGeneration) {
+          logAction('Remote media selection stale: ' + requestedPath, { outcome: 'stale', generation: result.generation });
+          return;
+        }
+        if (result.allowed) {
+          logAction('Remote media selection admitted: ' + requestedPath, { outcome: 'admitted', generation: result.generation });
+        } else {
+          const classification = result.admission ? result.admission.classification : 'UNKNOWN';
+          const reason = result.admission ? result.admission.reason : 'Policy denied';
+          logAction('Remote media selection policy denied: ' + requestedPath, { outcome: 'policy_denied', classification, reason });
+        }
+      }).catch(err => {
+        logAction('Remote media selection errored: ' + requestedPath, { outcome: 'errored', error: err.message });
+      });
     } else if (act === 'set_diagnostic_eye' && typeof msg.eye === 'number') {
       this.selectedEye = msg.eye;
       showFeedbackToast(`Eye: ${this.selectedEye === 0 ? 'Left' : 'Right'}`);

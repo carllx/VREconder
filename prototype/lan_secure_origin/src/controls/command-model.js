@@ -23,22 +23,64 @@ export class CommandModel {
     telemetry.recordCommand('playPause', video);
   }
 
-  previous() {
-    if (state.videoList && state.videoList.length > 0) {
-      state.currentVideoIndex = (state.currentVideoIndex - 1 + state.videoList.length) % state.videoList.length;
-      this.media.selectVideo(state.videoList[state.currentVideoIndex].relPath);
-      showFeedbackToast('⏮ 上一个视频');
+  async navigatePlaylist(direction) {
+    if (!state.videoList || state.videoList.length === 0) {
+      return null;
     }
-    telemetry.recordCommand('previous', this.media.video);
+
+    const total = state.videoList.length;
+    let startIndex = state.currentVideoIndex;
+    if (state.videoPath) {
+      const found = state.videoList.findIndex(v => v.relPath === state.videoPath);
+      if (found !== -1) startIndex = found;
+    }
+    if (startIndex < 0 || startIndex >= total) {
+      startIndex = 0;
+    }
+
+    let currentIndex = startIndex;
+    let admittedResult = null;
+
+    for (let step = 0; step < total; step++) {
+      currentIndex = (currentIndex + direction + total) % total;
+      const candidate = state.videoList[currentIndex];
+      const result = await this.media.selectVideo(candidate.relPath);
+
+      // Guard against concurrent superseding selections
+      if (result && result.generation !== this.media.currentMediaGeneration) {
+        return null;
+      }
+
+      if (result && result.allowed) {
+        admittedResult = result;
+        break;
+      }
+    }
+
+    if (!admittedResult) {
+      state.firstFrameTimings.statusText = 'No compatible media available';
+      showFeedbackToast('⚠️ 没有可播放的兼容视频');
+    }
+
+    return admittedResult;
   }
 
-  next() {
-    if (state.videoList && state.videoList.length > 0) {
-      state.currentVideoIndex = (state.currentVideoIndex + 1) % state.videoList.length;
-      this.media.selectVideo(state.videoList[state.currentVideoIndex].relPath);
+  async previous() {
+    telemetry.recordCommand('previous', this.media.video);
+    const res = await this.navigatePlaylist(-1);
+    if (res && res.allowed) {
+      showFeedbackToast('⏮ 上一个视频');
+    }
+    return res;
+  }
+
+  async next() {
+    telemetry.recordCommand('next', this.media.video);
+    const res = await this.navigatePlaylist(1);
+    if (res && res.allowed) {
       showFeedbackToast('⏭ 下一个视频');
     }
-    telemetry.recordCommand('next', this.media.video);
+    return res;
   }
 
   seekBackward(sec = 10) {
