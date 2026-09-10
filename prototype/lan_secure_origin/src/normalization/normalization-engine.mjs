@@ -6,7 +6,7 @@ import { getDiskFreeSpace } from './inventory-scanner.mjs';
 import { probeMediaFacts } from './ffprobe-facts.mjs';
 import { getMediaFingerprint, isFingerprintValid } from './fingerprint.mjs';
 import { verifyNormalizedOutput } from './verifier.mjs';
-import { findRepairCandidate } from './repair-rules.mjs';
+import { findRepairCandidate, RuleStatus } from './repair-rules.mjs';
 import { executeRollback, RollbackStatus } from './rollback-helper.mjs';
 
 export const EngineStatus = {
@@ -27,6 +27,7 @@ export class NormalizationEngine {
     this.executionEnabled = options.executionEnabled ?? false; // Hard safety gate: disabled by default
     this.allowUncertifiedCandidate = options.allowUncertifiedCandidate ?? false; // Explicit candidate staging gate
     this.allowedRoots = options.allowedRoots || null; // Optional isolation guard
+    this.exactFileAuthorizer = options.exactFileAuthorizer || null;
     this.fileOps = options.fileOps || {}; // Fault injection hook
     this.getMediaFingerprint = options.getMediaFingerprint || options.fileOps?.getMediaFingerprint || getMediaFingerprint;
     this.spawn = options.spawn || options.fileOps?.spawn || spawn;
@@ -306,19 +307,17 @@ export class NormalizationEngine {
       return this._handleJobCancellation(job);
     }
 
-    const rule = findRepairCandidate(facts, ext, { allowUncertified: this.allowUncertifiedCandidate });
-    if (!rule) {
-      this.activeJob = null;
-      this.isProcessing = false;
-      this.status = EngineStatus.SAFE_IDLE;
-      return { ok: false, state: NormalizationState.FAILED_SAFE, error: 'No applicable repair candidate rule' };
+    let rule = findRepairCandidate(facts, ext, { allowUncertified: this.allowUncertifiedCandidate });
+    if (!rule && this.exactFileAuthorizer) {
+      rule = this.exactFileAuthorizer.resolveExactFileRepairRule(canonical, facts, initialFingerprint);
     }
-
-    if (!this.allowUncertifiedCandidate && rule.status !== 'CERTIFIED_FOR_TESTED_ENVELOPE') {
+    const isCertified = rule && (rule.status === RuleStatus.CERTIFIED_FOR_TESTED_ENVELOPE || rule.status === RuleStatus.CERTIFIED_FOR_EXACT_FILE);
+    if (!rule || (!this.allowUncertifiedCandidate && !isCertified)) {
       this.activeJob = null;
       this.isProcessing = false;
       this.status = EngineStatus.SAFE_IDLE;
-      return { ok: false, state: NormalizationState.FAILED_SAFE, error: 'Uncertified candidate rule blocked by production safety gate' };
+      const error = !rule ? 'No applicable repair candidate rule' : 'Uncertified candidate rule blocked by production safety gate';
+      return { ok: false, state: NormalizationState.FAILED_SAFE, error };
     }
 
     this.journal.recordState(canonical, NormalizationState.PENDING, { ruleId: rule.ruleId, initialFingerprint });

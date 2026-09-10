@@ -76,3 +76,6 @@ prototype/lan_secure_origin/canonical_repair_manifest.json
 canonical_repair_manifest.json
 prototype/lan_secure_origin/canonical_repair_probe_results.jsonl
 canonical_repair_probe_results.jsonl
+prototype/lan_secure_origin/canonical_exact_file_authorization.json
+canonical_exact_file_authorization.json
+*exact_file_authorization*.json
