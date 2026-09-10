@@ -292,4 +292,104 @@ describe('Issue #26: T1 Media Health Harness Test Suite', () => {
     assert.equal(statBefore.mtimeMs, statAfter.mtimeMs, 'mtime must not change');
     assert.equal(fpBefore.fingerprintId, fpAfter.fingerprintId, 'Fingerprint must be perfectly preserved');
   });
+
+  // Test 13: resolveHealthMediaPath rejects sibling prefixes, traversal escapes, and accepts valid files
+  test('13. resolveHealthMediaPath strict containment (rejects sibling prefix, traversal escapes, admits valid files)', () => {
+    const sandboxMedia = path.join(tempDir, 'Media', 'VR');
+    const sandboxDownload = path.join(tempDir, 'Download');
+    const siblingPrefix = path.join(tempDir, 'Media', 'VR_sibling');
+    const outsideDir = path.join(tempDir, 'Outside');
+
+    fs.mkdirSync(sandboxMedia, { recursive: true });
+    fs.mkdirSync(sandboxDownload, { recursive: true });
+    fs.mkdirSync(siblingPrefix, { recursive: true });
+    fs.mkdirSync(outsideDir, { recursive: true });
+
+    const validMediaFile = path.join(sandboxMedia, 'valid_vr.mp4');
+    const validDownloadFile = path.join(sandboxDownload, 'valid_dl.mp4');
+    const siblingFile = path.join(siblingPrefix, 'escape.mp4');
+    const outsideFile = path.join(outsideDir, 'secret.mp4');
+
+    fs.writeFileSync(validMediaFile, 'vr');
+    fs.writeFileSync(validDownloadFile, 'dl');
+    fs.writeFileSync(siblingFile, 'sibling');
+    fs.writeFileSync(outsideFile, 'secret');
+
+    const testRoots = [sandboxMedia, sandboxDownload];
+
+    // 1. Valid absolute paths pass
+    assert.equal(resolveHealthMediaPath(validMediaFile, testRoots), validMediaFile);
+    assert.equal(resolveHealthMediaPath(validDownloadFile, testRoots), validDownloadFile);
+
+    // 2. Valid relative paths pass
+    assert.equal(resolveHealthMediaPath('valid_vr.mp4', testRoots), validMediaFile);
+    assert.equal(resolveHealthMediaPath('valid_dl.mp4', testRoots), validDownloadFile);
+
+    // 3. Sibling prefix escape fails
+    assert.equal(resolveHealthMediaPath(siblingFile, testRoots), null, 'Sibling prefix directory must be rejected');
+
+    // 4. Outside path fails
+    assert.equal(resolveHealthMediaPath(outsideFile, testRoots), null, 'Outside path must be rejected');
+
+    // 5. Directory traversal escape fails
+    assert.equal(resolveHealthMediaPath('../Outside/secret.mp4', testRoots), null, 'Relative traversal escape must be rejected');
+    const traversalAbs = path.join(sandboxMedia, '..', 'Outside', 'secret.mp4');
+    assert.equal(resolveHealthMediaPath(traversalAbs, testRoots), null, 'Absolute traversal escape must be rejected');
+  });
+
+  // Test 14: persistence failure leaves currentIndex and checkpoint cursor unchanged
+  test('14. persistence failure halts queue and preserves resume target/checkpoint cursor', async () => {
+    let currentIndex = 5;
+    let isRunning = true;
+    let pauseCalled = false;
+
+    async function pauseQueue() {
+      isRunning = false;
+      pauseCalled = true;
+    }
+
+    // Simulate probe loop persistence block
+    async function simulateItemPersistence(mockResponse) {
+      let postRes;
+      try {
+        if (!mockResponse.ok) {
+          throw new Error(`HTTP ${mockResponse.status} ${mockResponse.statusText}`);
+        }
+        postRes = mockResponse.data;
+        if (!postRes || !postRes.ok) {
+          throw new Error(postRes?.error || 'Server rejected probe-result');
+        }
+      } catch (persistErr) {
+        await pauseQueue();
+        return { success: false, error: persistErr.message };
+      }
+
+      // Only on success
+      currentIndex++;
+      return { success: true, checkpoint: postRes.checkpoint };
+    }
+
+    // Case A: HTTP 500 error
+    const failHttp = await simulateItemPersistence({ ok: false, status: 500, statusText: 'Internal Server Error' });
+    assert.equal(failHttp.success, false);
+    assert.equal(currentIndex, 5, 'currentIndex must NOT advance on HTTP failure');
+    assert.equal(pauseCalled, true, 'pauseQueue must be invoked');
+    assert.equal(isRunning, false, 'Queue execution must be stopped/paused');
+
+    // Case B: Application rejection (e.g. invalid payload / rejected probe)
+    pauseCalled = false;
+    isRunning = true;
+    const failApp = await simulateItemPersistence({ ok: true, data: { ok: false, error: 'Database locked' } });
+    assert.equal(failApp.success, false);
+    assert.equal(currentIndex, 5, 'currentIndex must NOT advance on application failure');
+    assert.equal(pauseCalled, true);
+    assert.equal(isRunning, false);
+
+    // Case C: Success advances index
+    isRunning = true;
+    const successResult = await simulateItemPersistence({ ok: true, data: { ok: true, checkpoint: { cursor: 6 } } });
+    assert.equal(successResult.success, true);
+    assert.equal(currentIndex, 6, 'currentIndex advances on verified success');
+  });
 });
+

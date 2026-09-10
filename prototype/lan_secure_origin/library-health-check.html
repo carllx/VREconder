@@ -325,28 +325,47 @@
 
         // Persist before advancing
         logTrace(`持久化结果: ${item.neutralId} => ${result.verdict}`, result.verdict === 'PASS_VIDEO' ? 'ok' : 'err');
-        const postRes = await fetch('/api/health/probe-result', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            queueIndex: currentIndex,
-            generation: token,
-            neutralId: item.neutralId,
-            fingerprintId: item.fingerprintId,
-            filePath: item.filePath,
-            region: item.region,
-            staticClassification: item.staticClassification,
-            verdict: result.verdict,
-            videoWidth: result.videoWidth,
-            videoHeight: result.videoHeight,
-            rvfcFrameCount: result.rvfcFrameCount,
-            readyState: result.readyState,
-            networkState: result.networkState,
-            error: result.error,
-            elapsedMs: result.elapsedMs
-          })
-        }).then(r => r.json());
+        
+        let postRes;
+        try {
+          const res = await fetch('/api/health/probe-result', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              queueIndex: currentIndex,
+              generation: token,
+              neutralId: item.neutralId,
+              fingerprintId: item.fingerprintId,
+              filePath: item.filePath,
+              region: item.region,
+              staticClassification: item.staticClassification,
+              verdict: result.verdict,
+              videoWidth: result.videoWidth,
+              videoHeight: result.videoHeight,
+              rvfcFrameCount: result.rvfcFrameCount,
+              readyState: result.readyState,
+              networkState: result.networkState,
+              error: result.error,
+              elapsedMs: result.elapsedMs
+            })
+          });
 
+          if (!res.ok) {
+            throw new Error(`HTTP ${res.status} ${res.statusText}`);
+          }
+          postRes = await res.json();
+          if (!postRes || !postRes.ok) {
+            throw new Error(postRes?.error || 'Server rejected probe-result');
+          }
+        } catch (persistErr) {
+          logTrace(`⚠️ 持久化失败，暂停队列以保留 Resume 游标: ${persistErr.message}`, 'err');
+          await pauseQueue();
+          lblVerdict.textContent = 'PERSIST_ERROR';
+          lblVerdict.className = 'badge badge-err';
+          return;
+        }
+
+        // Advance queue ONLY on verified successful persistence
         updateStats(postRes.checkpoint);
         currentIndex++;
         valProgress.textContent = `${currentIndex} / ${queue.length}`;
@@ -356,11 +375,10 @@
           setTimeout(runNextItem, 300);
         }
       } catch (err) {
-        logTrace(`探测异常: ${err.message}`, 'err');
-        if (isRunning) {
-          currentIndex++;
-          setTimeout(runNextItem, 1000);
-        }
+        logTrace(`探测执行异常: ${err.message}，暂停队列`, 'err');
+        await pauseQueue();
+        lblVerdict.textContent = 'PROBE_ERROR';
+        lblVerdict.className = 'badge badge-err';
       }
     }
 

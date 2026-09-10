@@ -33,25 +33,32 @@ let scanInProgress = false;
  * @param {string} relParam 
  * @returns {string | null}
  */
-export function resolveHealthMediaPath(relParam) {
-  if (!relParam) return null;
+export function resolveHealthMediaPath(relParam, allowedRoots = AUTHORITATIVE_HEALTH_ROOTS) {
+  if (!relParam || typeof relParam !== 'string') return null;
 
   // 1. Direct absolute path check within authoritative roots
   if (path.isAbsolute(relParam)) {
-    const norm = path.normalize(relParam);
-    for (const root of AUTHORITATIVE_HEALTH_ROOTS) {
-      if (norm.startsWith(root) && fs.existsSync(norm) && fs.statSync(norm).isFile()) {
-        return norm;
+    const norm = path.resolve(relParam);
+    for (const root of allowedRoots) {
+      const rel = path.relative(root, norm);
+      // Ensure rel is strictly inside root (not equal to root, not starting with '..' or path.sep, not absolute)
+      if (rel && !rel.startsWith('..') && !path.isAbsolute(rel)) {
+        if (fs.existsSync(norm) && fs.statSync(norm).isFile()) {
+          return norm;
+        }
       }
     }
+    return null;
   }
 
   // 2. Relative to authoritative roots
-  for (const root of AUTHORITATIVE_HEALTH_ROOTS) {
+  for (const root of allowedRoots) {
     const resolved = path.resolve(root, relParam);
     const rel = path.relative(root, resolved);
-    if (!rel.startsWith('..') && !path.isAbsolute(rel) && fs.existsSync(resolved) && fs.statSync(resolved).isFile()) {
-      return resolved;
+    if (rel && !rel.startsWith('..') && !path.isAbsolute(rel)) {
+      if (fs.existsSync(resolved) && fs.statSync(resolved).isFile()) {
+        return resolved;
+      }
     }
   }
 
