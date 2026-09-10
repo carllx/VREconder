@@ -60,3 +60,9 @@ prototype_video_profiles.json
 *.pending.jsonl
 *.processed.jsonl
 runtime_incidents.*.jsonl
+media_health_registry.jsonl
+media_health_checkpoint.json
+media_health_facts_cache.json
+prototype/lan_secure_origin/media_health_registry.jsonl
+prototype/lan_secure_origin/media_health_checkpoint.json
+prototype/lan_secure_origin/media_health_facts_cache.json

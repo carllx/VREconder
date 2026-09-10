@@ -16,6 +16,7 @@ import { streamVideo, getRecentRangeLifecycles, onActiveStreamCountChange } from
 import { handlePreflightRoutes, getEngineInstance, notifyPlaybackChange, checkPlaybackAdmission } from './src/server/preflight-router.mjs';
 import { handleProfileRoutes } from './src/server/profile-router.mjs';
 import { recordIncident } from './src/telemetry/incident-store.mjs';
+import { handleMediaHealthRoutes } from './src/health/media-health-router.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -135,6 +136,11 @@ function handleRequest(req, res, isHttps) {
 
   // Profiles modular routes
   if (handleProfileRoutes(req, res, pathname, __dirname)) {
+    return;
+  }
+
+  // Media Health modular routes (Issue #26)
+  if (handleMediaHealthRoutes(req, res, pathname)) {
     return;
   }
 
