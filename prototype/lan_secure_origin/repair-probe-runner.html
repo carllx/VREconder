@@ -361,7 +361,7 @@
           if (finished) return;
           rvfcCount++;
           lblRvfc.textContent = String(rvfcCount);
-          if (rvfcCount >= 2 && video.videoWidth > 0) {
+          if (rvfcCount >= 2 && video.videoWidth > 0 && video.videoHeight > 0) {
             done('PASS_VIDEO');
             return;
           }
