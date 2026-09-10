@@ -260,9 +260,10 @@
         logTrace(`${item.groupId} 测试未通过: ${result.verdict} (${result.elapsedMs}ms)`, 'fail');
       }
 
-      // 记录到服务器
+      // 严格持久化 Contract：probe -> POST -> verify HTTP success -> parse JSON -> verify ok === true -> only then advance
+      let persistSuccess = false;
       try {
-        await fetch('/api/repair/result', {
+        const res = await fetch('/api/repair/result', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -274,10 +275,24 @@
             timestamp: new Date().toISOString()
           })
         });
+
+        if (!res.ok) {
+          throw new Error(`HTTP ${res.status} ${res.statusText}`);
+        }
+        const postRes = await res.json();
+        if (!postRes || postRes.ok !== true) {
+          throw new Error(postRes?.error || 'Server response ok !== true');
+        }
+        persistSuccess = true;
       } catch (e) {
-        logTrace(`保存结果失败: ${e.message}`, 'warn');
+        logTrace(`⚠️ 持久化失败，暂停队列以保留 Resume 游标: ${e.message}`, 'fail');
+        pauseQueue();
+        lblVerdict.textContent = 'PERSIST_ERROR';
+        lblVerdict.className = 'badge badge-fail';
+        return;
       }
 
+      // Advance queue ONLY on verified successful persistence
       currentIndex++;
       updateStats();
 
@@ -306,16 +321,24 @@
         function done(verdict, errObj = null) {
           if (finished) return;
           finished = true;
-          cleanup();
-          resolve({
+
+          // 1. Snapshot immutable evidence BEFORE any teardown or cleanup
+          const snapshot = {
             verdict,
             videoWidth: video.videoWidth || 0,
             videoHeight: video.videoHeight || 0,
             rvfcFrameCount: rvfcCount,
             readyState: video.readyState,
+            networkState: video.networkState,
             error: errObj,
             elapsedMs: Date.now() - startTime
-          });
+          };
+
+          // 2. Perform teardown / DOM reset
+          cleanup();
+
+          // 3. Resolve with the immutable pre-teardown snapshot
+          resolve(snapshot);
         }
 
         const timeoutLimitMs = (item.targetTimeoutSec || 15) * 1000;

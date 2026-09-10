@@ -8,8 +8,7 @@ export const COMPATIBILITY_POLICY_VERSION = 'v1.0.0-safari-compat';
  */
 export const AUTHORITATIVE_HEALTH_ROOTS = [
   path.normalize('G:\\Media\\VR'),
-  path.normalize('G:\\Download'),
-  path.normalize('G:\\VREconder_Repair_Probe')
+  path.normalize('G:\\Download')
 ];
 
 /**

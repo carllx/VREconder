@@ -133,11 +133,15 @@ export function handleMediaHealthRoutes(req, res, pathname) {
   if (pathname === '/api/health/video' && req.method === 'GET') {
     const parsedUrl = new URL(req.url, 'http://localhost');
     const pathParam = parsedUrl.searchParams.get('path');
-    const targetFile = resolveHealthMediaPath(pathParam);
+    
+    // Narrow resolver allowlist: authoritative health roots plus isolated repair probe directory
+    const repairProbeRoot = path.normalize('G:\\VREconder_Repair_Probe');
+    const streamingAllowedRoots = [...AUTHORITATIVE_HEALTH_ROOTS, repairProbeRoot];
+    const targetFile = resolveHealthMediaPath(pathParam, streamingAllowedRoots);
 
     if (!targetFile) {
       res.writeHead(404, { 'Content-Type': 'application/json; charset=utf-8' });
-      res.end(JSON.stringify({ error: 'Media file not found within authoritative health roots' }));
+      res.end(JSON.stringify({ error: 'Media file not found within authoritative health roots or repair probe directory' }));
       return true;
     }
 
