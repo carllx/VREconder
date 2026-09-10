@@ -5,6 +5,7 @@ import { NormalizationEngine } from '../normalization/normalization-engine.mjs';
 import { DeviceProbeCache } from '../preflight/device-probe-cache.mjs';
 import { preflightIncomingMedia } from '../preflight/intake-preflight.mjs';
 import { getMediaFingerprint } from '../normalization/fingerprint.mjs';
+import { recordIncident } from '../telemetry/incident-store.mjs';
 
 const probeCache = new DeviceProbeCache();
 const engine = new NormalizationEngine({ executionEnabled: false });
@@ -45,23 +46,59 @@ export async function checkPlaybackAdmission(filePath) {
 
   try {
     const decision = await preflightIncomingMedia(fp.canonicalPath, { probeCache });
+    const allowed = Boolean(decision && decision.mayPromoteToVrReady);
     const result = {
-      allowed: Boolean(decision && decision.mayPromoteToVrReady),
+      allowed,
       classification: (decision && decision.classification) || 'UNKNOWN',
       reason: (decision && decision.reason) || 'No policy reason provided',
       matchedEnvelopeId: (decision && decision.matchedEnvelopeId) || null,
       allowedNextActions: (decision && decision.allowedNextActions) || []
     };
     admissionCache.set(fp.fingerprintId, result);
+
+    if (!allowed) {
+      try {
+        recordIncident({
+          eventType: 'PLAYBACK_ADMISSION_DENIED',
+          severity: 'WARN',
+          fingerprintId: fp.fingerprintId,
+          localMediaName: path.basename(filePath),
+          localMediaPath: filePath,
+          classification: result.classification,
+          reason: result.reason,
+          matchedEnvelopeId: result.matchedEnvelopeId,
+          allowedNextActions: result.allowedNextActions,
+          occurrenceSource: 'server_admission_gate'
+        });
+      } catch (logErr) {
+        console.warn('[PreflightRouter] Failed to persist denied admission incident:', logErr.message);
+      }
+    }
+
     return result;
   } catch (err) {
-    return {
+    const errResult = {
       allowed: false,
       classification: 'PREFLIGHT_ERROR',
       reason: err.message || 'Error executing preflight check',
       matchedEnvelopeId: null,
       allowedNextActions: []
     };
+    try {
+      recordIncident({
+        eventType: 'PREFLIGHT_ERROR',
+        severity: 'ERROR',
+        fingerprintId: fp ? fp.fingerprintId : null,
+        localMediaName: path.basename(filePath),
+        localMediaPath: filePath,
+        classification: 'PREFLIGHT_ERROR',
+        reason: err.message || 'Error executing preflight check',
+        matchedEnvelopeId: null,
+        allowedNextActions: [],
+        occurrenceSource: 'server_admission_gate'
+      });
+    } catch (_) {}
+    return errResult;
   }
 }
 

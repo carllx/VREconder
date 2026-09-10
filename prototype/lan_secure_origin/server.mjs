@@ -15,6 +15,7 @@ import {
 import { streamVideo, getRecentRangeLifecycles, onActiveStreamCountChange } from './src/media/video-streamer.mjs';
 import { handlePreflightRoutes, getEngineInstance, notifyPlaybackChange, checkPlaybackAdmission } from './src/server/preflight-router.mjs';
 import { handleProfileRoutes } from './src/server/profile-router.mjs';
+import { recordIncident } from './src/telemetry/incident-store.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -188,6 +189,37 @@ function handleRequest(req, res, isHttps) {
         }
         const line = `[${new Date().toISOString()}] [${req.socket.remoteAddress}] [${item.level || 'INFO'}] ${item.message} ${item.data ? JSON.stringify(item.data) : ''}\n`;
         fs.appendFileSync(path.join(__dirname, 'live_client.log'), line);
+
+        // Ingest policy blocks and playback errors into persistent incident store
+        if (item.message === 'MEDIA_PLAYBACK_BLOCKED_BY_POLICY' || item.message === 'MEDIA_PLAYBACK_ERROR') {
+          try {
+            const d = item.data || {};
+            recordIncident({
+              eventType: item.message,
+              severity: item.level === 'ERROR' ? 'ERROR' : 'WARN',
+              fingerprintId: d.fingerprintId || null,
+              localMediaName: d.mediaName || (d.mediaPath ? d.mediaPath.split('/').pop() : ''),
+              localMediaPath: d.mediaPath || '',
+              classification: d.classification || (item.message === 'MEDIA_PLAYBACK_ERROR' ? (d.name || 'MEDIA_PLAYBACK_ERROR') : 'UNCLASSIFIED'),
+              reason: d.reason || (d.message ? `${d.name || 'ERROR'}: ${d.message}` : (d.name || item.message)),
+              matchedEnvelopeId: d.matchedEnvelopeId || null,
+              allowedNextActions: Array.isArray(d.allowedNextActions) ? d.allowedNextActions : [],
+              occurrenceSource: 'client_telemetry',
+              metadata: {
+                clientIp: req.socket.remoteAddress,
+                generation: d.generation,
+                code: d.code,
+                readyState: d.readyState,
+                networkState: d.networkState,
+                videoWidth: d.videoWidth,
+                videoHeight: d.videoHeight
+              }
+            });
+          } catch (incErr) {
+            console.warn('[Server] Failed to record client incident:', incErr.message);
+          }
+        }
+
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ ok: true }));
       } catch (e) {

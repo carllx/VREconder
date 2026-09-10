@@ -57,3 +57,6 @@ prototype/lan_secure_origin/prototype_viewer_profile.json
 prototype/lan_secure_origin/prototype_video_profiles.json
 prototype_viewer_profile.json
 prototype_video_profiles.json
+*.pending.jsonl
+*.processed.jsonl
+runtime_incidents.*.jsonl
