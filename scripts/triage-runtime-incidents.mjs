@@ -2,7 +2,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { execSync, spawnSync } from 'node:child_process';
+import { spawnSync } from 'node:child_process';
 import {
   readPendingIncidents,
   readProcessedIncidents,
@@ -37,31 +37,74 @@ Options:
 /**
  * Maps an incident to the appropriate GitHub issue and category.
  * Routing rules:
- * - NORMALIZATION_CANDIDATE_CERTIFIED / EXPERIMENT_DERIVATIVE / NEEDS_BUCKET_CERTIFICATION -> Issue #21 (Normalization & Codec Authority)
- * - MEDIA_ERR_SRC_NOT_SUPPORTED / MEDIA_PLAYBACK_ERROR / playback loop failures -> Issue #23 (Playback Recovery)
- * - Telemetry / unclassified / general pipeline incidents -> Issue #24 (Incident Triage Pipeline)
+ * - Media-health / compatibility findings -> Issue #21 (Normalization & Codec Authority):
+ *   - NORMALIZATION_CANDIDATE_CERTIFIED
+ *   - EXACT_CERTIFIED_NORMALIZATION_CANDIDATE
+ *   - EXPERIMENT_DERIVATIVE
+ *   - NEEDS_BUCKET_CERTIFICATION
+ *   - NEEDS_DEVICE_PROBE
+ *   - UNSUPPORTED_UNKNOWN_FIX
+ *   - UNREADABLE_MEDIA
+ *   - INVALID_MEDIA
+ * - Actual runtime playback failures -> Issue #23 (Runtime Playback Recovery):
+ *   - MEDIA_ERR_SRC_NOT_SUPPORTED
+ *   - MEDIA_ERR_ABORTED
+ *   - MEDIA_ERR_NETWORK
+ *   - MEDIA_ERR_DECODE
+ *   - MEDIA_PLAYBACK_ERROR
+ * - Incident pipeline / logging lifecycle defects & unclassified pipeline failures -> Issue #24 (Incident Triage Pipeline)
  */
-function routeIncident(incident) {
+export function routeIncident(incident) {
   const c = incident.classification || '';
   const r = incident.reason || '';
   const e = incident.eventType || '';
 
-  if (c === 'NORMALIZATION_CANDIDATE_CERTIFIED' || c === 'EXPERIMENT_DERIVATIVE' || c === 'NEEDS_BUCKET_CERTIFICATION') {
-    return { targetIssue: 21, topic: 'Media Normalization / Policy Compatibility' };
-  }
-  if (c === 'MEDIA_ERR_SRC_NOT_SUPPORTED' || r.includes('MEDIA_ERR_SRC_NOT_SUPPORTED') || e === 'MEDIA_PLAYBACK_ERROR') {
+  // Actual runtime playback failures -> Issue #23
+  if (
+    c === 'MEDIA_ERR_SRC_NOT_SUPPORTED' ||
+    c === 'MEDIA_ERR_DECODE' ||
+    c === 'MEDIA_ERR_NETWORK' ||
+    c === 'MEDIA_ERR_ABORTED' ||
+    r.includes('MEDIA_ERR_SRC_NOT_SUPPORTED') ||
+    e === 'MEDIA_PLAYBACK_ERROR'
+  ) {
     return { targetIssue: 23, topic: 'Runtime Playback Recovery' };
   }
-  if (c === 'NEEDS_DEVICE_PROBE') {
-    return { targetIssue: 21, topic: 'Device Probe Verification' };
+
+  // Media-health / compatibility findings -> Issue #21
+  if (
+    c === 'NORMALIZATION_CANDIDATE_CERTIFIED' ||
+    c === 'EXACT_CERTIFIED_NORMALIZATION_CANDIDATE' ||
+    c === 'EXPERIMENT_DERIVATIVE' ||
+    c === 'NEEDS_BUCKET_CERTIFICATION' ||
+    c === 'NEEDS_DEVICE_PROBE' ||
+    c === 'UNSUPPORTED_UNKNOWN_FIX' ||
+    c === 'UNREADABLE_MEDIA' ||
+    c === 'INVALID_MEDIA' ||
+    e === 'PLAYBACK_ADMISSION_DENIED'
+  ) {
+    return { targetIssue: 21, topic: 'Media Normalization / Policy Compatibility' };
   }
+
+  // Incident pipeline lifecycle / unclassified defects -> Issue #24
   return { targetIssue: 24, topic: 'Runtime Incident Triage' };
+}
+
+/**
+ * Sanitizes reason strings to remove any absolute paths or private media filenames.
+ */
+function sanitizeReason(reason) {
+  if (!reason || typeof reason !== 'string') return '';
+  // Replace Windows and Unix file paths with [path]
+  let sanitized = reason.replace(/[a-zA-Z]:\\[^ \n\r\t,"]+/g, '[path]');
+  sanitized = sanitized.replace(/\/[^ \n\r\t,"]+\.(mp4|m4v|mkv|mov|webm)/gi, '[path]');
+  return sanitized;
 }
 
 /**
  * Sanitizes an incident report so NO private filenames or absolute paths are exposed.
  */
-function generateSanitizedTriage(pendingList) {
+export function generateSanitizedTriage(pendingList) {
   if (!pendingList || pendingList.length === 0) {
     return { groups: [], totalCount: 0 };
   }
@@ -71,7 +114,8 @@ function generateSanitizedTriage(pendingList) {
 
   for (const inc of pendingList) {
     const route = routeIncident(inc);
-    const key = `${route.targetIssue}::${inc.classification}::${inc.matchedEnvelopeId || 'NONE'}::${inc.reason}`;
+    const cleanReason = sanitizeReason(inc.reason);
+    const key = `${route.targetIssue}::${inc.classification}::${inc.matchedEnvelopeId || 'NONE'}::${cleanReason}`;
 
     if (!groupMap.has(key)) {
       groupMap.set(key, {
@@ -79,7 +123,7 @@ function generateSanitizedTriage(pendingList) {
         topic: route.topic,
         classification: inc.classification,
         matchedEnvelopeId: inc.matchedEnvelopeId || null,
-        reason: inc.reason,
+        reason: cleanReason,
         allowedNextActions: inc.allowedNextActions || [],
         incidentIds: [],
         fingerprintIds: new Set(),
@@ -105,7 +149,7 @@ function generateSanitizedTriage(pendingList) {
   return { groups, totalCount: pendingList.length };
 }
 
-function formatMarkdownSummary(triage) {
+export function formatMarkdownSummary(triage) {
   if (triage.totalCount === 0) {
     return '### Runtime Incident Triage\n\nNo pending runtime incidents found in `runtime_incidents.pending.jsonl`.\n';
   }
@@ -139,7 +183,7 @@ function formatMarkdownSummary(triage) {
   return md;
 }
 
-function postToGitHub(targetIssue, commentBody) {
+export function postToGitHub(targetIssue, commentBody) {
   try {
     const res = spawnSync('gh', ['issue', 'comment', String(targetIssue), '-F', '-'], {
       cwd: REPO_ROOT,
@@ -159,45 +203,101 @@ function postToGitHub(targetIssue, commentBody) {
   }
 }
 
-// Main execution
-const pending = readPendingIncidents(PROTO_DIR);
-const triage = generateSanitizedTriage(pending);
+/**
+ * Executes triage logic with configurable incident reader/poster for dependency injection & testing.
+ */
+export function executeTriage({
+  pendingList = null,
+  protoDir = PROTO_DIR,
+  isPost = false,
+  isAck = false,
+  poster = postToGitHub,
+  logger = console.log
+} = {}) {
+  const pending = pendingList !== null ? pendingList : readPendingIncidents(protoDir);
+  const triage = generateSanitizedTriage(pending);
 
-if (isJson) {
-  console.log(JSON.stringify(triage, null, 2));
-} else {
-  const summaryMd = formatMarkdownSummary(triage);
-  console.log(summaryMd);
-}
+  const publishedIncidentIds = [];
+  const failedIncidentIds = [];
 
-if (isPost && triage.groups.length > 0) {
-  console.log('\n--- Posting to GitHub Issues ---');
-  // Group by target issue
-  const byIssue = new Map();
-  for (const g of triage.groups) {
-    if (!byIssue.has(g.targetIssue)) byIssue.set(g.targetIssue, []);
-    byIssue.get(g.targetIssue).push(g);
+  if (isPost && triage.groups.length > 0) {
+    logger('\n--- Posting to GitHub Issues ---');
+    const byIssue = new Map();
+    for (const g of triage.groups) {
+      if (!byIssue.has(g.targetIssue)) byIssue.set(g.targetIssue, []);
+      byIssue.get(g.targetIssue).push(g);
+    }
+
+    for (const [issueNum, issueGroups] of byIssue.entries()) {
+      let issueComment = `### Runtime Incidents Triage Report\n\n`;
+      issueComment += `Automated report from pending runtime incidents inbox.\n\n`;
+      issueComment += '| Classification | Envelope | Events | Unique Media | Reason |\n';
+      issueComment += '|:---|:---|:---:|:---:|:---|\n';
+      for (const g of issueGroups) {
+        const env = g.matchedEnvelopeId ? `\`${g.matchedEnvelopeId}\`` : 'None';
+        issueComment += `| \`${g.classification}\` | ${env} | ${g.count} | ${g.fingerprintCount} | ${(g.reason || '').replace(/\|/g, '\\|')} |\n`;
+      }
+      issueComment += '\n**Sanitized Reference Incident IDs**:\n';
+      for (const g of issueGroups) {
+        issueComment += `- \`${g.classification}\`: ${g.incidentIds.join(', ')}\n`;
+      }
+
+      const postSuccess = poster(issueNum, issueComment);
+      const groupIncidentIds = issueGroups.flatMap(g => g.incidentIds);
+      if (postSuccess) {
+        publishedIncidentIds.push(...groupIncidentIds);
+      } else {
+        failedIncidentIds.push(...groupIncidentIds);
+      }
+    }
   }
 
-  for (const [issueNum, issueGroups] of byIssue.entries()) {
-    let issueComment = `### Runtime Incidents Triage Report\n\n`;
-    issueComment += `Automated report from pending runtime incidents inbox.\n\n`;
-    issueComment += '| Classification | Envelope | Events | Unique Media | Reason |\n';
-    issueComment += '|:---|:---|:---:|:---:|:---|\n';
-    for (const g of issueGroups) {
-      const env = g.matchedEnvelopeId ? `\`${g.matchedEnvelopeId}\`` : 'None';
-      issueComment += `| \`${g.classification}\` | ${env} | ${g.count} | ${g.fingerprintCount} | ${(g.reason || '').replace(/\|/g, '\\|')} |\n`;
+  // Acknowledgment policy:
+  // 1. If --post-github was requested: acknowledge ONLY the incident IDs whose GitHub publication succeeded.
+  // 2. If --ack was requested WITHOUT --post-github: intentional manual acknowledgement of all pending incidents.
+  let ackResult = null;
+  if (isPost && isAck) {
+    if (publishedIncidentIds.length > 0) {
+      ackResult = acknowledgeIncidents(publishedIncidentIds, { triagedBy: 'triage-runtime-incidents.mjs', publishMode: 'github' }, protoDir);
+      logger(`\n[IncidentStore] Acknowledged ${ackResult.acknowledgedCount} published incidents. Remaining pending: ${ackResult.remainingCount}`);
+    } else {
+      logger(`\n[IncidentStore] No incidents acknowledged because no GitHub issue comment succeeded.`);
     }
-    issueComment += '\n**Sanitized Reference Incident IDs**:\n';
-    for (const g of issueGroups) {
-      issueComment += `- \`${g.classification}\`: ${g.incidentIds.join(', ')}\n`;
+    if (failedIncidentIds.length > 0) {
+      logger(`[IncidentStore] WARNING: ${failedIncidentIds.length} incident IDs remain pending due to publication failure.`);
     }
-    postToGitHub(issueNum, issueComment);
+  } else if (!isPost && isAck && pending.length > 0) {
+    const allIds = pending.map(p => p.incidentId);
+    ackResult = acknowledgeIncidents(allIds, { triagedBy: 'triage-runtime-incidents.mjs', publishMode: 'manual_ack' }, protoDir);
+    logger(`\n[IncidentStore] Manual acknowledgement: ${ackResult.acknowledgedCount} incidents moved to processed. Remaining pending: ${ackResult.remainingCount}`);
   }
+
+  return {
+    triage,
+    publishedIncidentIds,
+    failedIncidentIds,
+    ackResult
+  };
 }
 
-if (isAck && pending.length > 0) {
-  const allIds = pending.map(p => p.incidentId);
-  const res = acknowledgeIncidents(allIds, { triagedBy: 'triage-runtime-incidents.mjs' }, PROTO_DIR);
-  console.log(`\n[IncidentStore] Acknowledged ${res.acknowledgedCount} incidents. Remaining pending: ${res.remainingCount}`);
+// Run if called as CLI script directly
+if (process.argv[1] && path.resolve(process.argv[1]) === path.resolve(__filename)) {
+  const pending = readPendingIncidents(PROTO_DIR);
+  const triage = generateSanitizedTriage(pending);
+
+  if (isJson) {
+    console.log(JSON.stringify(triage, null, 2));
+  } else {
+    const summaryMd = formatMarkdownSummary(triage);
+    console.log(summaryMd);
+  }
+
+  executeTriage({
+    pendingList: pending,
+    protoDir: PROTO_DIR,
+    isPost,
+    isAck,
+    poster: postToGitHub,
+    logger: console.log
+  });
 }
