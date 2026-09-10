@@ -138,7 +138,6 @@ export async function executeQuarantineAndStrengthenEvidence() {
     // Check Type A: six_rep_derivatives_manifest
     const sixRepSlot = Object.values(sixRepManifest).find(s => path.basename(s.derivPath) === filename);
     if (sixRepSlot) {
-      permClassification = 'PERMANENT_DELETE_READY';
       evidenceType = 'PROVENANCE_MANIFEST_STREAM_MD5';
       evidenceDetails = {
         sourceManifest: 'six_rep_derivatives_manifest.json',
@@ -150,13 +149,17 @@ export async function executeQuarantineAndStrengthenEvidence() {
         videoMd5Match: sixRepSlot.videoMd5Match,
         audioMd5Match: sixRepSlot.audioMd5Match
       };
+      if (sixRepSlot.videoMd5Match === true && sixRepSlot.audioMd5Match === true) {
+        permClassification = 'PERMANENT_DELETE_READY';
+      } else {
+        permClassification = 'KEEP_QUARANTINED_PENDING_EVIDENCE';
+      }
     }
 
     // Check Type A: b2_c2_d2_derivatives
     if (!evidenceType) {
       const b2c2d2Slot = Object.values(b2c2d2Manifest).find(s => path.basename(s.derivPath) === filename);
       if (b2c2d2Slot) {
-        permClassification = 'PERMANENT_DELETE_READY';
         evidenceType = 'PROVENANCE_MANIFEST_STREAM_MD5';
         evidenceDetails = {
           sourceManifest: 'b2_c2_d2_derivatives.json',
@@ -168,6 +171,11 @@ export async function executeQuarantineAndStrengthenEvidence() {
           videoMd5Match: b2c2d2Slot.videoMd5Match,
           audioMd5Match: b2c2d2Slot.audioMd5Match
         };
+        if (b2c2d2Slot.videoMd5Match === true && b2c2d2Slot.audioMd5Match === true) {
+          permClassification = 'PERMANENT_DELETE_READY';
+        } else {
+          permClassification = 'KEEP_QUARANTINED_PENDING_EVIDENCE';
+        }
       }
     }
 
