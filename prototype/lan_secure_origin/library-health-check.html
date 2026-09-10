@@ -388,19 +388,24 @@
         function finish(verdict, err = null) {
           if (resolved) return;
           resolved = true;
+          const capturedWidth = video.videoWidth || 0;
+          const capturedHeight = video.videoHeight || 0;
+          const capturedReadyState = video.readyState;
+          const capturedNetworkState = video.networkState;
+          const elapsedMs = Date.now() - startTime;
+
           cleanup();
 
-          const elapsedMs = Date.now() - startTime;
           lblVerdict.textContent = verdict;
           lblVerdict.className = (verdict === 'PASS_VIDEO') ? 'badge badge-ok' : 'badge badge-err';
 
           resolve({
             verdict,
-            videoWidth: video.videoWidth || 0,
-            videoHeight: video.videoHeight || 0,
+            videoWidth: capturedWidth,
+            videoHeight: capturedHeight,
             rvfcFrameCount: rvfcCount,
-            readyState: video.readyState,
-            networkState: video.networkState,
+            readyState: capturedReadyState,
+            networkState: capturedNetworkState,
             error: err,
             elapsedMs
           });
