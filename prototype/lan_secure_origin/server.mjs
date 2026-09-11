@@ -18,6 +18,7 @@ import { handleProfileRoutes } from './src/server/profile-router.mjs';
 import { recordIncident } from './src/telemetry/incident-store.mjs';
 import { enrichIncidentFromRequest } from './src/telemetry/incident-enricher.mjs';
 import { handleMediaHealthRoutes } from './src/health/media-health-router.mjs';
+import { isPathContained, resolveSecureMediaPath } from './src/server/media-path-resolver.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -50,7 +51,7 @@ let latestTelemetry = null;
 let lastLoggedPerfWindowSeq = -1;
 let lastIphoneTelemetryAt = 0;
 
-function getAllowedRoots() {
+export function getAllowedRoots() {
   const primary = getActiveMediaRoot();
   const roots = [primary];
   const renderRoot = 'G:\\Media\\VR\\Render';
@@ -58,30 +59,8 @@ function getAllowedRoots() {
   return roots;
 }
 
-function resolveSecureMediaPath(relParam) {
-  if (!relParam) return null;
-  const roots = getAllowedRoots();
-
-  // Try direct resolution or root relative resolution
-  for (const root of roots) {
-    const resolved = path.resolve(root, relParam);
-    const relToRoot = path.relative(root, resolved);
-    if (!relToRoot.startsWith('..') && !path.isAbsolute(relToRoot) && fs.existsSync(resolved)) {
-      return resolved;
-    }
-  }
-
-  // Handle case where relParam is prefixed with 'Render/' or folder name
-  for (const root of roots) {
-    const parentDir = path.dirname(root);
-    const resolved = path.resolve(parentDir, relParam);
-    const relToParent = path.relative(parentDir, resolved);
-    if (!relToParent.startsWith('..') && !path.isAbsolute(relToParent) && fs.existsSync(resolved)) {
-      return resolved;
-    }
-  }
-
-  return null;
+export function resolveSecureMediaPathLocal(relParam) {
+  return resolveSecureMediaPath(relParam, getAllowedRoots());
 }
 
 function handleRequest(req, res, isHttps) {
@@ -131,7 +110,7 @@ function handleRequest(req, res, isHttps) {
   }
 
   // Preflight & Normalization modular routes
-  if (handlePreflightRoutes(req, res, pathname, __dirname, getAllowedRoots(), resolveSecureMediaPath)) {
+  if (handlePreflightRoutes(req, res, pathname, __dirname, getAllowedRoots(), resolveSecureMediaPathLocal)) {
     return;
   }
 
@@ -203,8 +182,8 @@ function handleRequest(req, res, isHttps) {
             const enriched = enrichIncidentFromRequest({
               req,
               item,
-              allowedRoots: [getActiveMediaRoot()],
-              resolveMediaPath: (rel) => path.resolve(getActiveMediaRoot(), rel)
+              allowedRoots: getAllowedRoots(),
+              resolveMediaPath: resolveSecureMediaPathLocal
             });
             recordIncident(enriched);
           } catch (incErr) {
@@ -352,7 +331,7 @@ function handleRequest(req, res, isHttps) {
     let targetPath = null;
 
     if (relParam) {
-      targetPath = resolveSecureMediaPath(relParam);
+      targetPath = resolveSecureMediaPathLocal(relParam);
       if (!targetPath) {
         console.warn(`[Security] Path outside allowed roots or missing: ${relParam}`);
         res.writeHead(403, { 'Content-Type': 'text/plain; charset=utf-8' });

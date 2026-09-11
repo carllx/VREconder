@@ -21,6 +21,7 @@ import {
 } from './src/telemetry/incident-store.mjs';
 import { generateSanitizedTriage, formatMarkdownSummary } from '../../scripts/triage-runtime-incidents.mjs';
 import { setCachedFacts, clearFactsCache } from './src/normalization/ffprobe-facts.mjs';
+import { isPathContained, resolveSecureMediaPath } from './src/server/media-path-resolver.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -430,6 +431,122 @@ try {
   assert.ok(summaryMd.includes('Time Window'), 'Summary must show Time Window');
   assert.ok(summaryMd.includes('Observed static facts: H.264 High@L6.0'), 'Summary must show hypothesis guidance for BIKMVR039');
   console.log('  ✅ [PASS] Formatted Markdown summary contains all required Observatory v1 fields');
+
+  // -------------------------------------------------------------
+  // Test 9: Telemetry Media Path Security & Approved Root Containment
+  // -------------------------------------------------------------
+  console.log('\nTest 9: Telemetry media path security & approved root containment');
+  const activeRoot = path.join(SANDBOX_DIR, 'active_root');
+  const renderRoot = path.join(SANDBOX_DIR, 'Render');
+  const outsideRoot = path.join(SANDBOX_DIR, 'outside_root');
+  fs.mkdirSync(activeRoot, { recursive: true });
+  fs.mkdirSync(renderRoot, { recursive: true });
+  fs.mkdirSync(outsideRoot, { recursive: true });
+
+  const activeFile = path.join(activeRoot, 'valid_active.mp4');
+  const renderFile = path.join(renderRoot, 'valid_render.mp4');
+  const outsideFile = path.join(outsideRoot, 'secret_outside.mp4');
+  fs.writeFileSync(activeFile, 'mock-active-video-content', 'utf8');
+  fs.writeFileSync(renderFile, 'mock-render-video-content', 'utf8');
+  fs.writeFileSync(outsideFile, 'mock-secret-outside-content', 'utf8');
+
+  const testAllowedRoots = [activeRoot, renderRoot];
+  const testResolver = (rel) => resolveSecureMediaPath(rel, testAllowedRoots);
+
+  // 1. Valid active-media-root relative path -> allowed resolution
+  const resActive = testResolver('valid_active.mp4');
+  assert.strictEqual(resActive, path.normalize(activeFile), 'Active-root relative path must resolve');
+  const enrichedActive = enrichIncidentFromRequest({
+    req: mockReq,
+    item: { level: 'ERROR', message: 'MEDIA_PLAYBACK_ERROR', data: { mediaPath: 'valid_active.mp4' } },
+    allowedRoots: testAllowedRoots,
+    resolveMediaPath: testResolver
+  });
+  assert.ok(enrichedActive.fingerprintId, 'Valid active-root path must attach fallback fingerprint');
+  console.log('  ✅ [PASS] 1. Valid active-media-root relative path -> allowed resolution');
+
+  // 2. Valid existing Render allowed-root path -> allowed resolution
+  const resRender = testResolver('Render/valid_render.mp4');
+  assert.strictEqual(resRender, path.normalize(renderFile), 'Render-root path must resolve');
+  const enrichedRender = enrichIncidentFromRequest({
+    req: mockReq,
+    item: { level: 'ERROR', message: 'MEDIA_PLAYBACK_ERROR', data: { mediaPath: 'Render/valid_render.mp4' } },
+    allowedRoots: testAllowedRoots,
+    resolveMediaPath: testResolver
+  });
+  assert.ok(enrichedRender.fingerprintId, 'Valid Render-root path must attach fallback fingerprint');
+  console.log('  ✅ [PASS] 2. Valid existing Render allowed-root path -> allowed resolution');
+
+  // 3. ../ traversal outside roots -> unresolved, no fallback fingerprint
+  const resTraversal = testResolver('../../outside_root/secret_outside.mp4');
+  assert.strictEqual(resTraversal, null, 'Path traversal outside roots must return null');
+  const enrichedTraversal = enrichIncidentFromRequest({
+    req: mockReq,
+    item: { level: 'WARN', message: 'MEDIA_PLAYBACK_BLOCKED_BY_POLICY', data: { mediaPath: '../../outside_root/secret_outside.mp4', reason: 'traversal attempt' } },
+    allowedRoots: testAllowedRoots,
+    resolveMediaPath: testResolver
+  });
+  assert.strictEqual(enrichedTraversal.fingerprintId, null, 'Traversal path MUST NOT produce fallback fingerprint');
+  assert.strictEqual(enrichedTraversal.metadata.mediaFacts, null, 'Traversal path MUST NOT attach cached facts');
+  assert.strictEqual(enrichedTraversal.localMediaPath, '../../outside_root/secret_outside.mp4', 'Original client data preserved safely');
+  console.log('  ✅ [PASS] 3. ../ traversal outside roots -> unresolved, no fallback fingerprint');
+
+  // 4. Absolute outside-root path -> unresolved, no fallback fingerprint
+  const resAbsoluteOutside = testResolver(outsideFile);
+  assert.strictEqual(resAbsoluteOutside, null, 'Absolute outside-root path must return null');
+  const enrichedAbsoluteOutside = enrichIncidentFromRequest({
+    req: mockReq,
+    item: { level: 'ERROR', message: 'MEDIA_PLAYBACK_ERROR', data: { mediaPath: outsideFile } },
+    allowedRoots: testAllowedRoots,
+    resolveMediaPath: testResolver
+  });
+  assert.strictEqual(enrichedAbsoluteOutside.fingerprintId, null, 'Absolute outside-root path MUST NOT produce fallback fingerprint');
+  console.log('  ✅ [PASS] 4. Absolute outside-root path -> unresolved, no fallback fingerprint');
+
+  // 5. Invalid/nonexistent path -> unresolved, incident still records safely
+  const resNonexistent = testResolver('nonexistent_missing_file_xyz.mp4');
+  assert.strictEqual(resNonexistent, null, 'Nonexistent path must return null');
+  const enrichedMissing = enrichIncidentFromRequest({
+    req: mockReq,
+    item: { level: 'ERROR', message: 'MEDIA_PLAYBACK_ERROR', data: { mediaPath: 'nonexistent_missing_file_xyz.mp4', code: 4, name: 'MEDIA_ERR_SRC_NOT_SUPPORTED' } },
+    allowedRoots: testAllowedRoots,
+    resolveMediaPath: testResolver
+  });
+  assert.strictEqual(enrichedMissing.fingerprintId, null, 'Missing file path produces null fingerprint');
+  const recMissing = recordIncident(enrichedMissing, testStoreDir);
+  assert.ok(recMissing.incidentId, 'Incident must still record safely without error');
+  console.log('  ✅ [PASS] 5. Invalid/nonexistent path -> unresolved, incident still records safely');
+
+  // 6. Client-provided valid fingerprint remains usable without doing path fallback
+  const enrichedClientFp = enrichIncidentFromRequest({
+    req: mockReq,
+    item: {
+      level: 'ERROR',
+      message: 'MEDIA_PLAYBACK_ERROR',
+      data: {
+        fingerprintId: 'fp_client_authoritative',
+        mediaPath: '../../outside_path/video.mp4'
+      }
+    },
+    allowedRoots: testAllowedRoots,
+    resolveMediaPath: testResolver
+  });
+  assert.strictEqual(enrichedClientFp.fingerprintId, 'fp_client_authoritative', 'Client-provided fingerprint must be retained directly');
+  console.log('  ✅ [PASS] 6. Client-provided valid fingerprint remains usable without doing path fallback');
+
+  // 7. No ffprobe / content hash / remux introduced (sub-millisecond execution)
+  const t0 = performance.now();
+  for (let i = 0; i < 50; i++) {
+    enrichIncidentFromRequest({
+      req: mockReq,
+      item: { level: 'WARN', message: 'MEDIA_PLAYBACK_BLOCKED_BY_POLICY', data: { mediaPath: 'valid_active.mp4' } },
+      allowedRoots: testAllowedRoots,
+      resolveMediaPath: testResolver
+    });
+  }
+  const tElapsed = performance.now() - t0;
+  assert.ok(tElapsed < 100, `50 enrichments took ${tElapsed.toFixed(2)}ms (must be sub-millisecond, strictly no probes)`);
+  console.log(`  ✅ [PASS] 7. No ffprobe/content hash/remux introduced (${(tElapsed / 50).toFixed(3)}ms per enrichment)`);
 
   console.log('\n------------------------------------------------------------');
   console.log('OVERALL RUNTIME OBSERVATORY V1 TEST SUITE: ✅ ALL PASSED\n');

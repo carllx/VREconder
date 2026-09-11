@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import { getMediaFingerprint } from '../normalization/fingerprint.mjs';
 import { getCachedFacts } from '../normalization/ffprobe-facts.mjs';
 import { getCachedAdmission, extractCheapMediaFacts } from '../server/preflight-router.mjs';
+import { isPathContained, resolveSecureMediaPath } from '../server/media-path-resolver.mjs';
 
 /**
  * Enriches client telemetry incident data server-side using cheap, existing context.
@@ -10,6 +11,10 @@ import { getCachedAdmission, extractCheapMediaFacts } from '../server/preflight-
  * Performance contract:
  * - CHEAP_INLINE: request UA, client IP, DOM media state, session ID, cached media facts.
  * - STRICTLY NO new ffprobe calls, file hashing, or full-library scans during playback.
+ * 
+ * Path safety contract:
+ * - Fallback fingerprint resolution allowed ONLY if resolved path exists AND is contained in approved roots.
+ * - Traversal (../) or outside-root paths remain unresolved without granting canonical local identity.
  * 
  * @param {object} options
  * @param {import('node:http').IncomingMessage} options.req
@@ -39,16 +44,15 @@ export function enrichIncidentFromRequest({ req, item, allowedRoots = [], resolv
     let resolvedPath = null;
     if (typeof resolveMediaPath === 'function') {
       resolvedPath = resolveMediaPath(mediaPath);
-    } else {
-      for (const root of allowedRoots) {
-        const candidate = path.resolve(root, mediaPath);
-        if (fs.existsSync(candidate)) {
-          resolvedPath = candidate;
-          break;
-        }
-      }
+    } else if (allowedRoots && allowedRoots.length > 0) {
+      resolvedPath = resolveSecureMediaPath(mediaPath, allowedRoots);
     }
-    if (resolvedPath && fs.existsSync(resolvedPath)) {
+
+    // Security Gate: Path must exist AND be contained within approved roots
+    const rootsToCheck = (allowedRoots && allowedRoots.length > 0) ? allowedRoots : [];
+    const isContained = rootsToCheck.length > 0 ? isPathContained(resolvedPath, rootsToCheck) : Boolean(resolvedPath);
+
+    if (resolvedPath && fs.existsSync(resolvedPath) && isContained) {
       // Cheap fs.statSync only (path + size + mtimeMs), NO content hashing
       const fp = getMediaFingerprint(resolvedPath);
       if (fp) {
