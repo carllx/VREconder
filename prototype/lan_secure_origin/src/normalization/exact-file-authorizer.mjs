@@ -36,61 +36,22 @@ export function computeFileSha256(filePath) {
 }
 
 /**
- * Loads and verifies actual manifest and results evidence files against frozen SHA-256 constants.
- * Derives authoritative evidence map for the exact 12 authorized groups.
- * Fails closed on any corruption, missing file, hash mismatch, or contract violation.
+ * Validates parsed manifest and probe results against physical contract and consistency invariants.
+ * Pure validation logic separated from hash gating so test suites can inject modified objects
+ * while independently testing specific contract violations.
  * 
- * @param {object} options
+ * @param {object} manifestObj
+ * @param {Array<object>} resultLines
  * @returns {{ ok: boolean, evidenceByPath?: Map, evidenceByGroupId?: Map, error?: string }}
  */
-export function loadVerifiedEvidence(options = {}) {
-  const manifestPath = options.manifestPath || path.join(process.cwd(), 'prototype/lan_secure_origin/canonical_repair_manifest.json');
-  const resultsPath = options.resultsPath || path.join(process.cwd(), 'prototype/lan_secure_origin/canonical_repair_probe_results.jsonl');
-
-  if (!fs.existsSync(manifestPath)) {
-    return { ok: false, error: `Canonical repair manifest file not found: ${manifestPath}` };
-  }
-  if (!fs.existsSync(resultsPath)) {
-    return { ok: false, error: `Canonical repair probe results file not found: ${resultsPath}` };
-  }
-
-  let actualManifestSha;
-  let actualResultsSha;
-  try {
-    actualManifestSha = computeFileSha256(manifestPath);
-    actualResultsSha = computeFileSha256(resultsPath);
-  } catch (err) {
-    return { ok: false, error: `Failed to compute evidence file hashes: ${err.message}` };
-  }
-
-  if (actualManifestSha !== FROZEN_MANIFEST_SHA256) {
-    return { ok: false, error: `Actual manifest SHA256 mismatch: expected ${FROZEN_MANIFEST_SHA256}, got ${actualManifestSha}` };
-  }
-  if (actualResultsSha !== FROZEN_RESULTS_SHA256) {
-    return { ok: false, error: `Actual results SHA256 mismatch: expected ${FROZEN_RESULTS_SHA256}, got ${actualResultsSha}` };
-  }
-
-  let manifestObj;
-  let resultLines;
-  try {
-    manifestObj = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
-    const rawResults = fs.readFileSync(resultsPath, 'utf8').trim();
-    resultLines = rawResults.split('\n').map((line, idx) => {
-      try {
-        return JSON.parse(line);
-      } catch (e) {
-        throw new Error(`Malformed JSONL at line ${idx + 1}: ${e.message}`);
-      }
-    });
-  } catch (err) {
-    return { ok: false, error: `Failed to parse evidence files: ${err.message}` };
-  }
-
+export function validateEvidenceRecords(manifestObj, resultLines) {
   if (!Array.isArray(manifestObj?.items)) {
     return { ok: false, error: 'Manifest items array is missing or invalid' };
   }
+  if (!Array.isArray(resultLines)) {
+    return { ok: false, error: 'Result lines array is missing or invalid' };
+  }
 
-  // Group physical results by groupId and check for duplicates/completeness
   const resultsByGroup = new Map();
   for (const r of resultLines) {
     if (!r || typeof r !== 'object' || !r.groupId) {
@@ -112,7 +73,6 @@ export function loadVerifiedEvidence(options = {}) {
       return { ok: false, error: `Authorized groupId missing from manifest: ${gid}` };
     }
 
-    // Enforce repair action and stream equivalence from manifest
     if (manifestItem.repairAction !== 'HVC1_STREAMCOPY_PROBE_REQUIRED') {
       return { ok: false, error: `Unexpected repairAction for ${gid}: ${manifestItem.repairAction}` };
     }
@@ -127,7 +87,6 @@ export function loadVerifiedEvidence(options = {}) {
       return { ok: false, error: `audioMd5Match not true for ${gid}` };
     }
 
-    // Enforce exactly 1 matching physical result in probe results
     const groupResults = resultsByGroup.get(gid) || [];
     if (groupResults.length === 0) {
       return { ok: false, error: `Missing physical probe result for ${gid}` };
@@ -171,6 +130,123 @@ export function loadVerifiedEvidence(options = {}) {
   }
 
   return { ok: true, evidenceByPath, evidenceByGroupId };
+}
+
+/**
+ * Loads and verifies actual manifest and results evidence files against frozen SHA-256 constants.
+ * Derives authoritative evidence map for the exact 12 authorized groups.
+ * Fails closed on any corruption, missing file, hash mismatch, or contract violation.
+ * 
+ * @param {object} options
+ * @returns {{ ok: boolean, evidenceByPath?: Map, evidenceByGroupId?: Map, error?: string }}
+ */
+export function loadVerifiedEvidence(options = {}) {
+  const manifestPath = options.manifestPath || path.join(process.cwd(), 'prototype/lan_secure_origin/canonical_repair_manifest.json');
+  const resultsPath = options.resultsPath || path.join(process.cwd(), 'prototype/lan_secure_origin/canonical_repair_probe_results.jsonl');
+  const expectedManifestSha = options.expectedManifestSha || FROZEN_MANIFEST_SHA256;
+  const expectedResultsSha = options.expectedResultsSha || FROZEN_RESULTS_SHA256;
+
+  if (!fs.existsSync(manifestPath)) {
+    return { ok: false, error: `Canonical repair manifest file not found: ${manifestPath}` };
+  }
+  if (!fs.existsSync(resultsPath)) {
+    return { ok: false, error: `Canonical repair probe results file not found: ${resultsPath}` };
+  }
+
+  let actualManifestSha;
+  let actualResultsSha;
+  try {
+    actualManifestSha = computeFileSha256(manifestPath);
+    actualResultsSha = computeFileSha256(resultsPath);
+  } catch (err) {
+    return { ok: false, error: `Failed to compute evidence file hashes: ${err.message}` };
+  }
+
+  if (actualManifestSha !== expectedManifestSha) {
+    return { ok: false, error: `Actual manifest SHA256 mismatch: expected ${expectedManifestSha}, got ${actualManifestSha}` };
+  }
+  if (actualResultsSha !== expectedResultsSha) {
+    return { ok: false, error: `Actual results SHA256 mismatch: expected ${expectedResultsSha}, got ${actualResultsSha}` };
+  }
+
+  let manifestObj;
+  let resultLines;
+  try {
+    manifestObj = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+    const rawResults = fs.readFileSync(resultsPath, 'utf8').trim();
+    resultLines = rawResults.split('\n').map((line, idx) => {
+      try {
+        return JSON.parse(line);
+      } catch (e) {
+        throw new Error(`Malformed JSONL at line ${idx + 1}: ${e.message}`);
+      }
+    });
+  } catch (err) {
+    return { ok: false, error: `Failed to parse evidence files: ${err.message}` };
+  }
+
+  return validateEvidenceRecords(manifestObj, resultLines);
+}
+
+/**
+ * Shared matcher that strictly locks material facts against frozen evidence.
+ * If frozen evidence contains a field and current live probe differs, returns false.
+ * 
+ * @param {object} liveFacts
+ * @param {object} frozenFacts
+ * @returns {{ ok: boolean, reason?: string }}
+ */
+export function matchMaterialFacts(liveFacts, frozenFacts) {
+  if (!liveFacts || !frozenFacts) {
+    return { ok: false, reason: 'Facts object missing' };
+  }
+
+  // Common mandatory container & stream topology invariants
+  if (liveFacts.videoCount !== 1) {
+    return { ok: false, reason: `videoCount mismatch: expected 1, got ${liveFacts.videoCount}` };
+  }
+  if (liveFacts.audioCount !== 1) {
+    return { ok: false, reason: `audioCount mismatch: expected 1, got ${liveFacts.audioCount}` };
+  }
+  if (Array.isArray(liveFacts.otherStreams) && liveFacts.otherStreams.length > 0) {
+    return { ok: false, reason: `otherStreams present: ${liveFacts.otherStreams.length}` };
+  }
+  if (typeof liveFacts.chapterCount === 'number' && liveFacts.chapterCount > 0) {
+    return { ok: false, reason: `chapterCount present: ${liveFacts.chapterCount}` };
+  }
+
+  const v = liveFacts.video || (Array.isArray(liveFacts.videoStreams) ? liveFacts.videoStreams[0] : null);
+  if (!v) {
+    return { ok: false, reason: 'Video stream facts missing' };
+  }
+
+  if ((v.codec || '').toLowerCase() !== 'hevc') {
+    return { ok: false, reason: `codec is not hevc: ${v.codec}` };
+  }
+  if ((v.codecTag || '').toLowerCase() !== 'hev1') {
+    return { ok: false, reason: `codecTag is not hev1: ${v.codecTag}` };
+  }
+
+  const fields = ['codec', 'codecTag', 'profile', 'level', 'pixFmt', 'bitDepth', 'width', 'height', 'rFps', 'avgFps'];
+  for (const field of fields) {
+    if (frozenFacts[field] !== undefined && frozenFacts[field] !== null) {
+      let liveVal = v[field];
+      let frozenVal = frozenFacts[field];
+
+      if (typeof liveVal === 'string' && typeof frozenVal === 'string') {
+        if (field === 'codec' || field === 'codecTag') {
+          liveVal = liveVal.toLowerCase();
+          frozenVal = frozenVal.toLowerCase();
+        }
+      }
+
+      if (liveVal !== frozenVal) {
+        return { ok: false, reason: `Material field '${field}' drift: frozen=${frozenVal} vs live=${liveVal}` };
+      }
+    }
+  }
+
+  return { ok: true };
 }
 
 /**
@@ -293,23 +369,11 @@ export class ExactFileAuthorizer {
       return null;
     }
 
-    // Material facts check against verified evidence facts
-    const v = facts.video;
-    if (!v) return null;
-    if ((v.codec || '').toLowerCase() !== 'hevc') return null;
-    if ((v.codecTag || '').toLowerCase() !== 'hev1') return null;
-
-    const frozenFacts = ev.facts || {};
-    if (frozenFacts.codec && (v.codec || '').toLowerCase() !== (frozenFacts.codec || '').toLowerCase()) return null;
-    if (frozenFacts.codecTag && (v.codecTag || '').toLowerCase() !== (frozenFacts.codecTag || '').toLowerCase()) return null;
-    if (frozenFacts.profile && v.profile !== frozenFacts.profile) return null;
-    if (frozenFacts.width && v.width !== frozenFacts.width) return null;
-    if (frozenFacts.height && v.height !== frozenFacts.height) return null;
-
-    // Invariant stream checks
-    if (facts.videoCount !== 1 || facts.audioCount !== 1) return null;
-    if (facts.otherStreams && facts.otherStreams.length > 0) return null;
-    if (facts.chapterCount && facts.chapterCount > 0) return null;
+    // Material facts check using shared matcher
+    const matchRes = matchMaterialFacts(facts, ev.facts || {});
+    if (!matchRes.ok) {
+      return null;
+    }
 
     return {
       ruleId: `exact-file-physical-cert-${ev.groupId.toLowerCase()}`,

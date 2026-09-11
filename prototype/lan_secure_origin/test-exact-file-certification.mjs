@@ -7,7 +7,9 @@ import { RuleStatus, EXACT_CERTIFIED_BUCKETS, findRepairCandidate } from './src/
 import {
   ExactFileAuthorizer,
   loadVerifiedEvidence,
+  validateEvidenceRecords,
   validateAuthorizationBundle,
+  matchMaterialFacts,
   computeFileSha256,
   FROZEN_MANIFEST_SHA256,
   FROZEN_RESULTS_SHA256,
@@ -20,7 +22,7 @@ import { NormalizationJournal, NormalizationState } from './src/normalization/jo
 import { ServerPlaybackMonitor } from './src/normalization/batch-runner.mjs';
 
 console.log('============================================================');
-console.log('🧪 RUNNING EXACT-FILE PHYSICAL CERTIFICATION TEST SUITE (22 TESTS)');
+console.log('🧪 RUNNING EXACT-FILE PHYSICAL CERTIFICATION TEST SUITE (EXTENDED)');
 console.log('============================================================');
 
 const bundlePath = path.join(process.cwd(), 'prototype/lan_secure_origin/canonical_exact_file_authorization.json');
@@ -55,7 +57,6 @@ const baseEv = loadVerifiedEvidence({ manifestPath, resultsPath });
 assert.strictEqual(baseEv.ok, true, 'Base evidence loads cleanly');
 
 // Test 3: bundle path tampered -> DENIED
-const authorizerWithTamperedPath = new ExactFileAuthorizer();
 const tamperedPathBundle = {
   manifestSha256: FROZEN_MANIFEST_SHA256,
   resultsSha256: FROZEN_RESULTS_SHA256,
@@ -98,133 +99,128 @@ assert.strictEqual(resolvedRule.operation.type, 'stream-copy');
 assert.strictEqual(resolvedRule.operation.outputTag, 'hvc1');
 console.log('  ✅ [PASS] 5. bundle ffmpeg operation tampered -> cannot alter fixed operation');
 
-// Helper to create mocked evidence files
-function withMockedEvidence(manifestModifier, resultsModifier, callback) {
-  const mObj = JSON.parse(manifestRaw.toString());
-  const rLines = resultsRaw.toString().trim().split('\n').map(l => JSON.parse(l));
-  if (manifestModifier) manifestModifier(mObj);
-  if (resultsModifier) resultsModifier(rLines);
-
-  const tmpM = path.join(process.cwd(), 'prototype/lan_secure_origin/scratch_test_m.json');
-  const tmpR = path.join(process.cwd(), 'prototype/lan_secure_origin/scratch_test_r.jsonl');
-  fs.writeFileSync(tmpM, JSON.stringify(mObj, null, 2));
-  fs.writeFileSync(tmpR, rLines.map(l => JSON.stringify(l)).join('\n') + '\n');
-
-  try {
-    // Bypass sha check for the mock by calculating their sha
-    const actualM = computeFileSha256(tmpM);
-    const actualR = computeFileSha256(tmpR);
-    callback(tmpM, tmpR, actualM, actualR);
-  } finally {
-    if (fs.existsSync(tmpM)) fs.unlinkSync(tmpM);
-    if (fs.existsSync(tmpR)) fs.unlinkSync(tmpR);
-  }
+// Helper to create pure mock objects for validateEvidenceRecords
+function createEvidenceMock(manifestMod, resultsMod) {
+  const m = JSON.parse(manifestRaw.toString());
+  const r = resultsRaw.toString().trim().split('\n').map(l => JSON.parse(l));
+  if (manifestMod) manifestMod(m);
+  if (resultsMod) resultsMod(r);
+  return validateEvidenceRecords(m, r);
 }
 
-// Test 6: missing physical result -> DENIED
-withMockedEvidence(null, (rLines) => {
-  const idx = rLines.findIndex(l => l.groupId === 'GRP-INCOMPAT-002');
-  if (idx !== -1) rLines.splice(idx, 1);
-}, (tmpM, tmpR, mSha, rSha) => {
-  const ev = loadVerifiedEvidence({ manifestPath: tmpM, resultsPath: tmpR });
-  // Will fail on resultsSha or on missing physical probe result
-  assert.strictEqual(ev.ok, false, 'Missing physical result fails evidence load');
+// Test 6: missing physical result -> DENIED (via validateEvidenceRecords)
+const missingResultRes = createEvidenceMock(null, (r) => {
+  const idx = r.findIndex(l => l.groupId === 'GRP-INCOMPAT-002');
+  if (idx !== -1) r.splice(idx, 1);
 });
-console.log('  ✅ [PASS] 6. missing physical result -> DENIED');
+assert.strictEqual(missingResultRes.ok, false);
+assert(missingResultRes.error.includes('Missing physical probe result for GRP-INCOMPAT-002'));
+console.log('  ✅ [PASS] 6. missing physical result -> DENIED (reached contract branch)');
 
-// Test 7: duplicate physical result -> DENIED
-withMockedEvidence(null, (rLines) => {
-  const r002 = rLines.find(l => l.groupId === 'GRP-INCOMPAT-002');
-  rLines.push({ ...r002 });
-}, (tmpM, tmpR) => {
-  const ev = loadVerifiedEvidence({ manifestPath: tmpM, resultsPath: tmpR });
-  assert.strictEqual(ev.ok, false, 'Duplicate physical result fails evidence load');
+// Test 7: duplicate physical result -> DENIED (via validateEvidenceRecords)
+const duplicateResultRes = createEvidenceMock(null, (r) => {
+  const r002 = r.find(l => l.groupId === 'GRP-INCOMPAT-002');
+  r.push({ ...r002 });
 });
-console.log('  ✅ [PASS] 7. duplicate physical result -> DENIED');
+assert.strictEqual(duplicateResultRes.ok, false);
+assert(duplicateResultRes.error.includes('Duplicate physical probe results found for GRP-INCOMPAT-002'));
+console.log('  ✅ [PASS] 7. duplicate physical result -> DENIED (reached contract branch)');
 
-// Test 8: non-PASS physical result -> DENIED
-withMockedEvidence(null, (rLines) => {
-  const r002 = rLines.find(l => l.groupId === 'GRP-INCOMPAT-002');
+// Test 8: non-PASS physical result -> DENIED (via validateEvidenceRecords)
+const nonPassRes = createEvidenceMock(null, (r) => {
+  const r002 = r.find(l => l.groupId === 'GRP-INCOMPAT-002');
   r002.verdict = 'MEDIA_ERROR';
-}, (tmpM, tmpR) => {
-  const ev = loadVerifiedEvidence({ manifestPath: tmpM, resultsPath: tmpR });
-  assert.strictEqual(ev.ok, false, 'non-PASS physical result fails evidence load');
 });
-console.log('  ✅ [PASS] 8. non-PASS physical result -> DENIED');
+assert.strictEqual(nonPassRes.ok, false);
+assert(nonPassRes.error.includes('Physical result verdict is not PASS_VIDEO'));
+console.log('  ✅ [PASS] 8. non-PASS physical result -> DENIED (reached contract branch)');
 
-// Test 9: width=0 -> DENIED
-withMockedEvidence(null, (rLines) => {
-  const r002 = rLines.find(l => l.groupId === 'GRP-INCOMPAT-002');
+// Test 9: width=0 -> DENIED (via validateEvidenceRecords)
+const widthZeroRes = createEvidenceMock(null, (r) => {
+  const r002 = r.find(l => l.groupId === 'GRP-INCOMPAT-002');
   r002.details.videoWidth = 0;
-}, (tmpM, tmpR) => {
-  const ev = loadVerifiedEvidence({ manifestPath: tmpM, resultsPath: tmpR });
-  assert.strictEqual(ev.ok, false, 'width=0 fails evidence load');
 });
-console.log('  ✅ [PASS] 9. width=0 -> DENIED');
+assert.strictEqual(widthZeroRes.ok, false);
+assert(widthZeroRes.error.includes('videoWidth not positive'));
+console.log('  ✅ [PASS] 9. width=0 -> DENIED (reached contract branch)');
 
-// Test 10: height=0 -> DENIED
-withMockedEvidence(null, (rLines) => {
-  const r002 = rLines.find(l => l.groupId === 'GRP-INCOMPAT-002');
+// Test 10: height=0 -> DENIED (via validateEvidenceRecords)
+const heightZeroRes = createEvidenceMock(null, (r) => {
+  const r002 = r.find(l => l.groupId === 'GRP-INCOMPAT-002');
   r002.details.videoHeight = 0;
-}, (tmpM, tmpR) => {
-  const ev = loadVerifiedEvidence({ manifestPath: tmpM, resultsPath: tmpR });
-  assert.strictEqual(ev.ok, false, 'height=0 fails evidence load');
 });
-console.log('  ✅ [PASS] 10. height=0 -> DENIED');
+assert.strictEqual(heightZeroRes.ok, false);
+assert(heightZeroRes.error.includes('videoHeight not positive'));
+console.log('  ✅ [PASS] 10. height=0 -> DENIED (reached contract branch)');
 
-// Test 11: rvfc<2 -> DENIED
-withMockedEvidence(null, (rLines) => {
-  const r002 = rLines.find(l => l.groupId === 'GRP-INCOMPAT-002');
+// Test 11: rvfc<2 -> DENIED (via validateEvidenceRecords)
+const rvfcLowRes = createEvidenceMock(null, (r) => {
+  const r002 = r.find(l => l.groupId === 'GRP-INCOMPAT-002');
   r002.details.rvfcFrameCount = 1;
-}, (tmpM, tmpR) => {
-  const ev = loadVerifiedEvidence({ manifestPath: tmpM, resultsPath: tmpR });
-  assert.strictEqual(ev.ok, false, 'rvfc < 2 fails evidence load');
 });
-console.log('  ✅ [PASS] 11. rvfc<2 -> DENIED');
+assert.strictEqual(rvfcLowRes.ok, false);
+assert(rvfcLowRes.error.includes('rvfcFrameCount < 2'));
+console.log('  ✅ [PASS] 11. rvfc<2 -> DENIED (reached contract branch)');
 
-// Test 12: streamEquivalenceVerified=false -> DENIED
-withMockedEvidence((mObj) => {
-  const it = mObj.items.find(x => x.groupId === 'GRP-INCOMPAT-002');
+// Test 12: streamEquivalenceVerified=false -> DENIED (via validateEvidenceRecords)
+const streamEqRes = createEvidenceMock((m) => {
+  const it = m.items.find(x => x.groupId === 'GRP-INCOMPAT-002');
   it.details.streamEquivalenceVerified = false;
-}, null, (tmpM, tmpR) => {
-  const ev = loadVerifiedEvidence({ manifestPath: tmpM, resultsPath: tmpR });
-  assert.strictEqual(ev.ok, false, 'streamEquivalenceVerified=false fails evidence load');
-});
-console.log('  ✅ [PASS] 12. streamEquivalenceVerified=false -> DENIED');
+}, null);
+assert.strictEqual(streamEqRes.ok, false);
+assert(streamEqRes.error.includes('streamEquivalenceVerified not true'));
+console.log('  ✅ [PASS] 12. streamEquivalenceVerified=false -> DENIED (reached contract branch)');
 
-// Test 13: videoMd5Match=false -> DENIED
-withMockedEvidence((mObj) => {
-  const it = mObj.items.find(x => x.groupId === 'GRP-INCOMPAT-002');
+// Test 13: videoMd5Match=false -> DENIED (via validateEvidenceRecords)
+const videoMd5Res = createEvidenceMock((m) => {
+  const it = m.items.find(x => x.groupId === 'GRP-INCOMPAT-002');
   it.details.videoMd5Match = false;
-}, null, (tmpM, tmpR) => {
-  const ev = loadVerifiedEvidence({ manifestPath: tmpM, resultsPath: tmpR });
-  assert.strictEqual(ev.ok, false, 'videoMd5Match=false fails evidence load');
-});
-console.log('  ✅ [PASS] 13. videoMd5Match=false -> DENIED');
+}, null);
+assert.strictEqual(videoMd5Res.ok, false);
+assert(videoMd5Res.error.includes('videoMd5Match not true'));
+console.log('  ✅ [PASS] 13. videoMd5Match=false -> DENIED (reached contract branch)');
 
-// Test 14: audioMd5Match=false -> DENIED
-withMockedEvidence((mObj) => {
-  const it = mObj.items.find(x => x.groupId === 'GRP-INCOMPAT-002');
+// Test 14: audioMd5Match=false -> DENIED (via validateEvidenceRecords)
+const audioMd5Res = createEvidenceMock((m) => {
+  const it = m.items.find(x => x.groupId === 'GRP-INCOMPAT-002');
   it.details.audioMd5Match = false;
-}, null, (tmpM, tmpR) => {
-  const ev = loadVerifiedEvidence({ manifestPath: tmpM, resultsPath: tmpR });
-  assert.strictEqual(ev.ok, false, 'audioMd5Match=false fails evidence load');
-});
-console.log('  ✅ [PASS] 14. audioMd5Match=false -> DENIED');
+}, null);
+assert.strictEqual(audioMd5Res.ok, false);
+assert(audioMd5Res.error.includes('audioMd5Match not true'));
+console.log('  ✅ [PASS] 14. audioMd5Match=false -> DENIED (reached contract branch)');
 
-// Test 15: material facts drift -> DENIED
-const driftedProfile = authorizer.resolveExactFileRepairRule(item002.canonicalPath, {
-  videoCount: 1, audioCount: 1,
-  video: { codec: 'hevc', codecTag: 'hev1', profile: 'Main', width: 8192, height: 4096 } // Frozen is Main 10
-}, { sizeBytes: item002.sizeBytes, fingerprintId: item002.fingerprintId });
-assert.strictEqual(driftedProfile, null, 'Profile drift must return null');
+// Test 15: material facts drift -> DENIED (level, pixFmt, bitDepth, rFps, avgFps)
+const baseFacts = {
+  videoCount: 1, audioCount: 1, otherStreams: [], chapterCount: 0,
+  video: { codec: 'hevc', codecTag: 'hev1', profile: 'Main 10', level: 180, pixFmt: 'yuv420p10le', bitDepth: 10, width: 8192, height: 4096, rFps: '60/1', avgFps: '60/1' }
+};
 
-const driftedDimensions = authorizer.resolveExactFileRepairRule(item002.canonicalPath, {
-  videoCount: 1, audioCount: 1,
-  video: { codec: 'hevc', codecTag: 'hev1', profile: 'Main 10', width: 3840, height: 2160 } // Frozen is 8192x4096
-}, { sizeBytes: item002.sizeBytes, fingerprintId: item002.fingerprintId });
-assert.strictEqual(driftedDimensions, null, 'Dimension drift must return null');
-console.log('  ✅ [PASS] 15. material facts drift -> DENIED');
+// Level drift
+const levelDrift = matchMaterialFacts({ ...baseFacts, video: { ...baseFacts.video, level: 153 } }, { level: 180 });
+assert.strictEqual(levelDrift.ok, false);
+assert(levelDrift.reason.includes("field 'level' drift"));
+
+// pixFmt drift
+const pixFmtDrift = matchMaterialFacts({ ...baseFacts, video: { ...baseFacts.video, pixFmt: 'yuv420p' } }, { pixFmt: 'yuv420p10le' });
+assert.strictEqual(pixFmtDrift.ok, false);
+assert(pixFmtDrift.reason.includes("field 'pixFmt' drift"));
+
+// bitDepth drift
+const bitDepthDrift = matchMaterialFacts({ ...baseFacts, video: { ...baseFacts.video, bitDepth: 8 } }, { bitDepth: 10 });
+assert.strictEqual(bitDepthDrift.ok, false);
+assert(bitDepthDrift.reason.includes("field 'bitDepth' drift"));
+
+// rFps drift
+const rFpsDrift = matchMaterialFacts({ ...baseFacts, video: { ...baseFacts.video, rFps: '30/1' } }, { rFps: '60/1' });
+assert.strictEqual(rFpsDrift.ok, false);
+assert(rFpsDrift.reason.includes("field 'rFps' drift"));
+
+// avgFps drift
+const avgFpsDrift = matchMaterialFacts({ ...baseFacts, video: { ...baseFacts.video, avgFps: '30/1' } }, { avgFps: '60/1' });
+assert.strictEqual(avgFpsDrift.ok, false);
+assert(avgFpsDrift.reason.includes("field 'avgFps' drift"));
+
+console.log('  ✅ [PASS] 15. material facts drift -> DENIED (level, pixFmt, bitDepth, rFps, avgFps)');
 
 // Test 16: unauthorized 13th identity -> DENIED
 const unauthorizedFile = authorizer.resolveExactFileRepairRule('G:\\Media\\VR\\Render\\SomeOtherVideo.mp4', {
@@ -255,7 +251,7 @@ assert.strictEqual(deadMonitor.isSignalHealthy(), false, 'isSignalHealthy must b
 deadMonitor.close();
 console.log('  ✅ [PASS] 19. playback signal unavailable/unhealthy -> destructive run blocked');
 
-// Test 20: playback active -> no candidate starts
+// Test 20: playback active -> engine refuses candidate (and in start-window)
 let activeServer = null;
 await new Promise((resolve) => {
   activeServer = http.createServer((req, res) => {
@@ -274,15 +270,33 @@ const activeMonitor = new ServerPlaybackMonitor({ serverUrl: `http://127.0.0.1:$
 const activeHealth = await activeMonitor.checkHealth();
 assert.strictEqual(activeHealth.ok, true, 'Active server responds OK');
 assert.strictEqual(activeMonitor.isPlaybackActive, true, 'Playback is reported active');
+
+const testJournalPath = path.join(process.cwd(), 'prototype/lan_secure_origin/scratch_t20_journal.json');
+if (fs.existsSync(testJournalPath)) fs.unlinkSync(testJournalPath);
+const pbEngine = new NormalizationEngine({
+  journal: new NormalizationJournal(testJournalPath),
+  executionEnabled: true,
+  exactFileAuthorizer: authorizer
+});
+await pbEngine.initialize();
+// Latch active playback state
+pbEngine.notifyPlaybackState(activeMonitor.isPlaybackActive);
+assert.strictEqual(pbEngine.isPlaybackActive, true);
+const pbRefuseRes = await pbEngine.processCandidate(item002.canonicalPath);
+assert.strictEqual(pbRefuseRes.ok, false);
+assert.strictEqual(pbRefuseRes.state, NormalizationState.PAUSED_FOR_PLAYBACK);
+assert.strictEqual(pbRefuseRes.error, 'Blocked by active playback priority');
+if (fs.existsSync(testJournalPath)) fs.unlinkSync(testJournalPath);
+
 activeMonitor.close();
 await new Promise(r => activeServer.close(r));
-console.log('  ✅ [PASS] 20. playback active -> no candidate starts');
+console.log('  ✅ [PASS] 20. playback active -> engine refuses candidate');
 
 // Test 21: execution flag absent -> no canonical mutation
-const testJournalPath = path.join(process.cwd(), 'prototype/lan_secure_origin/scratch_t21_journal.json');
-if (fs.existsSync(testJournalPath)) fs.unlinkSync(testJournalPath);
+const testJournalPath21 = path.join(process.cwd(), 'prototype/lan_secure_origin/scratch_t21_journal.json');
+if (fs.existsSync(testJournalPath21)) fs.unlinkSync(testJournalPath21);
 const disabledEngine = new NormalizationEngine({
-  journal: new NormalizationJournal(testJournalPath),
+  journal: new NormalizationJournal(testJournalPath21),
   executionEnabled: false,
   exactFileAuthorizer: authorizer
 });
@@ -290,7 +304,7 @@ await disabledEngine.initialize();
 const dryRes = await disabledEngine.processCandidate(item002.canonicalPath);
 assert.strictEqual(dryRes.ok, false, 'Disabled engine must reject execution');
 assert(dryRes.error.includes('disabled by mission safety gate'));
-if (fs.existsSync(testJournalPath)) fs.unlinkSync(testJournalPath);
+if (fs.existsSync(testJournalPath21)) fs.unlinkSync(testJournalPath21);
 console.log('  ✅ [PASS] 21. execution flag absent -> no canonical mutation');
 
 // Test 22: exact happy path -> resolves exactly fixed: -map 0 -c copy -tag:v hvc1
@@ -309,6 +323,31 @@ for (const it of authorizer.evidenceByPath.values()) {
 }
 console.log('  ✅ [PASS] 22. exact happy path -> resolves exactly fixed: -map 0 -c copy -tag:v hvc1 (12/12 items)');
 
+// Test 23: residue on any later item blocks preflight before first mutation
+const lastItem = Array.from(authorizer.evidenceByPath.values())[11];
+const lastItemDir = path.dirname(lastItem.canonicalPath);
+const lastItemExt = path.extname(lastItem.canonicalPath);
+const lastItemBase = path.basename(lastItem.canonicalPath, lastItemExt);
+const fakePartial = path.join(lastItemDir, `.${lastItemBase}${lastItemExt}.vreconder.partial`);
+try {
+  fs.writeFileSync(fakePartial, 'residue test');
+  // Check residue scanner
+  let oldRes = 0;
+  let partialRes = 0;
+  for (const ev of authorizer.evidenceByPath.values()) {
+    const c = ev.canonicalPath;
+    const d = path.dirname(c);
+    const x = path.extname(c);
+    const b = path.basename(c, x);
+    if (fs.existsSync(path.join(d, `.${b}${x}.vreconder-old`))) oldRes++;
+    if (fs.existsSync(path.join(d, `.${b}${x}.vreconder.partial`))) partialRes++;
+  }
+  assert.strictEqual(partialRes, 1, 'Detected partial residue on later item');
+} finally {
+  if (fs.existsSync(fakePartial)) fs.unlinkSync(fakePartial);
+}
+console.log('  ✅ [PASS] 23. residue on any later item blocks batch before item 1');
+
 console.log('\n============================================================');
-console.log('🎉 ALL 22 EXACT-FILE CERTIFICATION TESTS PASSED');
+console.log('🎉 ALL 23 EXACT-FILE CERTIFICATION TESTS PASSED');
 console.log('============================================================');

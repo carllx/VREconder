@@ -6,7 +6,8 @@ import {
   ExactFileAuthorizer,
   FROZEN_MANIFEST_SHA256,
   FROZEN_RESULTS_SHA256,
-  EXACT_FILE_HVC1_OPERATION
+  EXACT_FILE_HVC1_OPERATION,
+  matchMaterialFacts
 } from './src/normalization/exact-file-authorizer.mjs';
 import { ServerPlaybackMonitor } from './src/normalization/batch-runner.mjs';
 import { getDiskFreeSpace } from './src/normalization/inventory-scanner.mjs';
@@ -77,19 +78,11 @@ async function main() {
     }
 
     const currentFacts = await probeMediaFacts(p);
-    const v = currentFacts?.video;
-    const fv = ev.facts || {};
-    if (
-      currentFacts.videoCount === 1 && currentFacts.audioCount === 1 &&
-      (!currentFacts.otherStreams || currentFacts.otherStreams.length === 0) &&
-      (!currentFacts.chapterCount || currentFacts.chapterCount === 0) &&
-      v && (v.codec || '').toLowerCase() === (fv.codec || '').toLowerCase() &&
-      (v.codecTag || '').toLowerCase() === (fv.codecTag || '').toLowerCase() &&
-      v.profile === fv.profile && v.width === fv.width && v.height === fv.height
-    ) {
+    const matchRes = matchMaterialFacts(currentFacts, ev.facts || {});
+    if (matchRes.ok) {
       materialFactsMatches++;
     } else {
-      console.error(`❌ Material facts mismatch for ${ev.groupId}`);
+      console.error(`❌ Material facts mismatch for ${ev.groupId}: ${matchRes.reason}`);
       process.exit(1);
     }
 
@@ -122,6 +115,33 @@ async function main() {
   console.log(`fixed operation:            ${fixedOperationCount}/12`);
   console.log(`free-space:                 known/PASS`);
 
+  // All-12 residue gate check before any mutation can occur
+  let oldResidueCount = 0;
+  let partialResidueCount = 0;
+  for (const ev of authorizedList) {
+    const canonical = path.normalize(path.resolve(ev.canonicalPath));
+    const dir = path.dirname(canonical);
+    const ext = path.extname(canonical);
+    const base = path.basename(canonical, ext);
+    const oldPath = path.join(dir, `.${base}${ext}.vreconder-old`);
+    const partialPath = path.join(dir, `.${base}${ext}.vreconder.partial`);
+
+    if (fs.existsSync(oldPath)) {
+      console.error(`❌ Preflight fail: Pre-existing .vreconder-old residue found: ${oldPath}`);
+      oldResidueCount++;
+    }
+    if (fs.existsSync(partialPath)) {
+      console.error(`❌ Preflight fail: Pre-existing .vreconder.partial residue found: ${partialPath}`);
+      partialResidueCount++;
+    }
+  }
+
+  if (oldResidueCount > 0 || partialResidueCount > 0) {
+    console.error(`❌ Fatal: Pre-existing transaction residue detected (old: ${oldResidueCount}, partial: ${partialResidueCount}). STOP BEFORE FIRST MUTATION.`);
+    process.exit(1);
+  }
+  console.log(`all-12 residue gate:        PASS (old: 0, partial: 0)`);
+
   const journalPath = path.join(process.cwd(), 'prototype/lan_secure_origin/normalization_journal.json');
   const journal = new NormalizationJournal(journalPath);
   const journalVal = journal.validateJournal();
@@ -144,7 +164,6 @@ async function main() {
     process.exit(1);
   }
   console.log(`engine recovery:            SAFE_IDLE`);
-  console.log(`residue:                    0`);
 
   // Playback monitor wiring
   let playbackMonitor = null;
@@ -158,7 +177,10 @@ async function main() {
     }
     console.log(`playback signal:            HEALTHY`);
 
-    if (playbackMonitor.isPlaybackActive) {
+    // Synchronize engine playback state immediately from monitor initial state
+    engine.notifyPlaybackState(playbackMonitor.isPlaybackActive);
+
+    if (playbackMonitor.isPlaybackActive || engine.isPlaybackActive) {
       console.error('❌ Playback is currently active. Destructive candidate processing blocked.');
       playbackMonitor.close();
       process.exit(1);
@@ -166,10 +188,7 @@ async function main() {
     console.log(`playback active:            false`);
 
     playbackMonitor.onActiveChange((active) => {
-      if (active) {
-        console.warn('⚠️  Playback became active during execution! Notifying engine to cancel and yield priority...');
-        engine.cancelActiveJobForPlayback();
-      }
+      engine.notifyPlaybackState(active);
     });
   } else {
     console.log(`playback signal:            BYPASS_READ_ONLY`);
@@ -193,7 +212,7 @@ async function main() {
       if (!playbackMonitor.isSignalHealthy()) {
         throw new Error(`Playback signal lost before starting candidate ${ev.groupId}: ${playbackMonitor.healthReason}`);
       }
-      if (playbackMonitor.isPlaybackActive) {
+      if (playbackMonitor.isPlaybackActive || engine.isPlaybackActive) {
         throw new Error(`Playback became active before starting candidate ${ev.groupId}`);
       }
 
