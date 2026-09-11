@@ -121,8 +121,8 @@
   </style>
 </head>
 <body>
-  <h1><span>🔧</span> Issue #21 规范化修复验证 (Physical Device Batch)</h1>
-  <div class="subtitle">针对 15 个物理失败项生成的 14 个测试对象（12 个临时 hvc1 衍生流 + 2 个 25s 延长超时重试）</div>
+  <h1 id="pageTitle"><span>🔧</span> Issue #21 规范化修复验证 (Physical Device Batch)</h1>
+  <div id="pageSubtitle" class="subtitle">针对 15 个物理失败项生成的 14 个测试对象（12 个临时 hvc1 衍生流 + 2 个 25s 延长超时重试）</div>
 
   <div class="card">
     <div class="btn-row">
@@ -183,8 +183,19 @@
     const lblDimensions = document.getElementById('lblDimensions');
     const lblState = document.getElementById('lblState');
     const lblRvfc = document.getElementById('lblRvfc');
-    const lblVerdict = document.getElementById('lblVerdict');
-    const traceLog = document.getElementById('traceLog');
+    const pageTitle = document.getElementById('pageTitle');
+    const pageSubtitle = document.getElementById('pageSubtitle');
+
+    const urlParams = new URLSearchParams(window.location.search);
+    const isCanonicalMode = urlParams.get('mode') === 'canonical';
+    const queueUrl = isCanonicalMode ? '/api/repair/canonical-queue' : '/api/repair/queue';
+    const resultUrl = isCanonicalMode ? '/api/repair/canonical-result' : '/api/repair/result';
+
+    if (isCanonicalMode) {
+      if (pageTitle) pageTitle.innerHTML = '<span>🔧</span> Issue #21 规范化修复验证 (Exact-12 Canonical Mode)';
+      if (pageSubtitle) pageSubtitle.textContent = '针对 12 个已授权完成 hvc1 规范化流复制的正式 Canonical 文件的物理 iPhone Safari 验证';
+      document.title = 'VREconder - Issue #21 Canonical Repaired Probes';
+    }
 
     function logTrace(msg, type = 'info') {
       const d = document.createElement('div');
@@ -195,8 +206,8 @@
 
     async function initQueue() {
       try {
-        logTrace('获取 Issue #21 规范化修复测试清单...', 'info');
-        const res = await fetch('/api/repair/queue').then(r => r.json());
+        logTrace(`获取 Issue #21 ${isCanonicalMode ? 'Exact-12 Canonical' : '规范化修复'}测试清单 (${queueUrl})...`, 'info');
+        const res = await fetch(queueUrl).then(r => r.json());
         queue = res.queue || [];
         updateStats();
         logTrace(`队列初始化成功: 共 ${queue.length} 个待测目标`, 'info');
@@ -260,7 +271,7 @@
 
       // 严格持久化 Contract：probe -> prepare UI/result -> POST -> verify HTTP success -> parse JSON -> verify ok === true -> commit passCount/failCount -> currentIndex++ -> updateStats()
       try {
-        const res = await fetch('/api/repair/result', {
+        const res = await fetch(resultUrl, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({

@@ -17,10 +17,106 @@ import {
 } from './media-health-store.mjs';
 import { runStaticHealthScan } from './media-health-scanner.mjs';
 import { streamVideo } from '../media/video-streamer.mjs';
+import { AUTHORIZED_EXACT_FILE_GROUP_IDS } from '../normalization/exact-file-authorizer.mjs';
+import { getMediaFingerprint } from '../normalization/fingerprint.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const PROTOTYPE_DIR = path.resolve(__dirname, '..', '..');
+
+export const EXACT12_CANONICAL_RESULTS_FILE = 'issue21_exact12_canonical_results.processed.jsonl';
+
+/**
+ * Builds the verified exact-12 post-repair canonical media queue.
+ * Strictly checks existence, authoritative roots, journal DONE state, and replacement fingerprint.
+ * Fails closed if queue length !== 12.
+ * 
+ * @param {string} prototypeDir
+ * @returns {Array<{ groupId: string, type: string, filePath: string, targetTimeoutSec: number, expectedResult: string }>}
+ */
+export function buildExact12CanonicalQueue(prototypeDir = PROTOTYPE_DIR) {
+  const manifestPath = path.join(prototypeDir, 'canonical_repair_manifest.json');
+  const journalPath = path.join(prototypeDir, 'normalization_journal.json');
+
+  if (!fs.existsSync(manifestPath)) {
+    throw new Error(`Manifest not found: ${manifestPath}`);
+  }
+  if (!fs.existsSync(journalPath)) {
+    throw new Error(`Journal not found: ${journalPath}`);
+  }
+
+  const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+  const journal = JSON.parse(fs.readFileSync(journalPath, 'utf8'));
+
+  const queue = [];
+  const repairProbeRoot = path.normalize('G:\\VREconder_Repair_Probe');
+
+  for (const gid of AUTHORIZED_EXACT_FILE_GROUP_IDS) {
+    const mItem = (manifest.items || []).find(it => it.groupId === gid);
+    if (!mItem) {
+      throw new Error(`Authorized group ${gid} missing in manifest`);
+    }
+
+    const canonicalPath = path.normalize(path.resolve(mItem.canonicalPath));
+
+    // Must exist
+    if (!fs.existsSync(canonicalPath)) {
+      throw new Error(`Canonical file missing on disk for ${gid}: ${canonicalPath}`);
+    }
+
+    // Must NOT be in G:\VREconder_Repair_Probe
+    if (canonicalPath.toLowerCase().startsWith(repairProbeRoot.toLowerCase())) {
+      throw new Error(`File is within repair probe dir, expected canonical for ${gid}: ${canonicalPath}`);
+    }
+
+    // Must be within AUTHORITATIVE_HEALTH_ROOTS
+    const withinRoot = AUTHORITATIVE_HEALTH_ROOTS.some(r => {
+      const rel = path.relative(path.normalize(r), canonicalPath);
+      return rel && !rel.startsWith('..') && !path.isAbsolute(rel);
+    });
+    if (!withinRoot) {
+      throw new Error(`Canonical file not within authoritative health roots for ${gid}: ${canonicalPath}`);
+    }
+
+    // Must be in journal and DONE
+    const jEntry = (journal.entries || {})[mItem.canonicalPath] || (journal.entries || {})[canonicalPath];
+    if (!jEntry) {
+      throw new Error(`Missing journal entry for ${gid}: ${canonicalPath}`);
+    }
+    if (jEntry.currentState !== 'DONE') {
+      throw new Error(`Journal state not DONE for ${gid} (state=${jEntry.currentState})`);
+    }
+
+    // Must match post-repair replacement fingerprint
+    const expectedFp = jEntry.replacementFingerprint || jEntry.meta?.replacementFingerprint;
+    if (!expectedFp) {
+      throw new Error(`Missing replacementFingerprint in journal for ${gid}`);
+    }
+
+    const liveFp = getMediaFingerprint(canonicalPath);
+    if (!liveFp) {
+      throw new Error(`Failed to compute live fingerprint for ${gid}: ${canonicalPath}`);
+    }
+
+    if (liveFp.sizeBytes !== expectedFp.sizeBytes || liveFp.mtimeMs !== expectedFp.mtimeMs) {
+      throw new Error(`Replacement fingerprint mismatch for ${gid}: expected size=${expectedFp.sizeBytes} mtime=${expectedFp.mtimeMs}, got size=${liveFp.sizeBytes} mtime=${liveFp.mtimeMs}`);
+    }
+
+    queue.push({
+      groupId: gid,
+      type: 'CANONICAL_REPAIRED_PROBE',
+      filePath: canonicalPath,
+      targetTimeoutSec: 15,
+      expectedResult: 'PASS_VIDEO'
+    });
+  }
+
+  if (queue.length !== 12) {
+    throw new Error(`Canonical queue length violation: expected exactly 12, got ${queue.length}`);
+  }
+
+  return queue;
+}
 
 let cachedScanReport = null;
 let scanInProgress = false;
@@ -124,6 +220,38 @@ export function handleMediaHealthRoutes(req, res, pathname) {
       } catch (err) {
         res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' });
         res.end(JSON.stringify({ error: err.message }));
+      }
+    });
+    return true;
+  }
+
+  // 1e. Exact-12 Repaired Canonical Queue: GET /api/repair/canonical-queue
+  if (pathname === '/api/repair/canonical-queue' && req.method === 'GET') {
+    try {
+      const queue = buildExact12CanonicalQueue(PROTOTYPE_DIR);
+      res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+      res.end(JSON.stringify({ ok: true, queue }));
+    } catch (err) {
+      res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8' });
+      res.end(JSON.stringify({ ok: false, error: err.message }));
+    }
+    return true;
+  }
+
+  // 1f. Record Exact-12 Repaired Canonical Probe Result: POST /api/repair/canonical-result
+  if (pathname === '/api/repair/canonical-result' && req.method === 'POST') {
+    let body = '';
+    req.on('data', chunk => { body += chunk; });
+    req.on('end', () => {
+      try {
+        const payload = JSON.parse(body);
+        const resultsFile = path.join(PROTOTYPE_DIR, EXACT12_CANONICAL_RESULTS_FILE);
+        fs.appendFileSync(resultsFile, JSON.stringify(payload) + '\n', 'utf8');
+        res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+        res.end(JSON.stringify({ ok: true }));
+      } catch (err) {
+        res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' });
+        res.end(JSON.stringify({ ok: false, error: err.message }));
       }
     });
     return true;
