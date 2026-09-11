@@ -11,12 +11,38 @@ const probeCache = new DeviceProbeCache();
 const engine = new NormalizationEngine({ executionEnabled: false });
 const admissionCache = new Map();
 
+export function extractCheapMediaFacts(facts) {
+  if (!facts) return null;
+  const v = facts.video || (facts.videoStreams && facts.videoStreams[0]) || null;
+  return {
+    codec: v?.codec || null,
+    codecTag: v?.codecTag || null,
+    profile: v?.profile || null,
+    level: v?.level ?? null,
+    pixFmt: v?.pixFmt || null,
+    bitDepth: v?.bitDepth ?? null,
+    width: v?.width || 0,
+    height: v?.height || 0,
+    fps: v?.rFps || v?.avgFps || null,
+    topology: {
+      videoCount: facts.videoCount ?? (facts.videoStreams ? facts.videoStreams.length : 0),
+      audioCount: facts.audioCount ?? (facts.audioStreams ? facts.audioStreams.length : 0),
+      chapterCount: facts.chapterCount ?? (facts.chapters ? facts.chapters.length : 0),
+      otherStreamsCount: facts.otherStreams ? facts.otherStreams.length : 0
+    }
+  };
+}
+
+export function getCachedAdmission(fingerprintId) {
+  return admissionCache.get(fingerprintId) || null;
+}
+
 /**
  * Check if a file is admitted for Safari playback based on Issue #21 compatibility authority.
  * Keyed in-memory by file fingerprint (canonicalPath, size, mtimeMs).
  *
  * @param {string} filePath
- * @returns {Promise<{ allowed: boolean, classification: string, reason: string, matchedEnvelopeId: string | null, allowedNextActions: string[] }>}
+ * @returns {Promise<{ allowed: boolean, classification: string, reason: string, matchedEnvelopeId: string | null, allowedNextActions: string[], fingerprintId?: string, admissionId?: string, mediaFacts?: object | null }>}
  */
 export async function checkPlaybackAdmission(filePath) {
   if (!filePath || !fs.existsSync(filePath)) {
@@ -47,12 +73,17 @@ export async function checkPlaybackAdmission(filePath) {
   try {
     const decision = await preflightIncomingMedia(fp.canonicalPath, { probeCache });
     const allowed = Boolean(decision && decision.mayPromoteToVrReady);
+    const mediaFacts = extractCheapMediaFacts(decision?.facts);
+    const admissionId = `adm_${Date.now()}_${fp.fingerprintId.slice(0, 8)}`;
     const result = {
       allowed,
       classification: (decision && decision.classification) || 'UNKNOWN',
       reason: (decision && decision.reason) || 'No policy reason provided',
       matchedEnvelopeId: (decision && decision.matchedEnvelopeId) || null,
-      allowedNextActions: (decision && decision.allowedNextActions) || []
+      allowedNextActions: (decision && decision.allowedNextActions) || [],
+      fingerprintId: fp.fingerprintId,
+      admissionId,
+      mediaFacts
     };
     admissionCache.set(fp.fingerprintId, result);
 
@@ -68,7 +99,11 @@ export async function checkPlaybackAdmission(filePath) {
           reason: result.reason,
           matchedEnvelopeId: result.matchedEnvelopeId,
           allowedNextActions: result.allowedNextActions,
-          occurrenceSource: 'server_admission_gate'
+          occurrenceSource: 'server_admission_gate',
+          metadata: {
+            admissionId,
+            mediaFacts
+          }
         });
       } catch (logErr) {
         console.warn('[PreflightRouter] Failed to persist denied admission incident:', logErr.message);

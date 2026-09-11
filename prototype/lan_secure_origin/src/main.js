@@ -15,13 +15,21 @@ import { initAudioContext } from './controls/audio-haptics.js';
 import { profileStorage, computeMediaFingerprint, getEffectiveViewerProfile } from './core/projection-profile.js';
 import { CalibrationUI } from './controls/calibration-ui.js';
 import { ControllerInputProbe, setRemoteLogFunction } from './controls/controller-input-probe.js';
+import { getSessionId } from './telemetry/session.js';
 
 // Global error handlers & Remote Diagnostics
 export function remoteLog(level, message, data = null) {
   fetch('/api/log', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ level, message, data, url: location.href, time: new Date().toISOString() })
+    body: JSON.stringify({
+      level,
+      message,
+      data,
+      sessionId: getSessionId(),
+      url: location.href,
+      time: new Date().toISOString()
+    })
   }).catch(() => {});
 }
 setRemoteLogFunction(remoteLog);
@@ -164,7 +172,7 @@ const btnVrExit = document.getElementById('btnVrExit');
 // Instantiate Subsystems
 const vrRenderer = new VRRenderer(glCanvas);
 const diagnosticOverlay = new DiagnosticOverlay(uiCanvas);
-const mediaController = new MediaController(video, null);
+const mediaController = new MediaController(video, null, { sessionId: getSessionId() });
 mediaController.attachRenderer(vrRenderer);
 mediaController.setRemoteLogHook(remoteLog);
 const commandModel = new CommandModel(mediaController);

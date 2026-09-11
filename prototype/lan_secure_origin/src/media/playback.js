@@ -20,6 +20,12 @@ export class MediaController {
     this.renderer = null;
     this.remoteLogHook = null;
 
+    // Issue #28: Session & canonical media correlation state
+    this.sessionId = (options && options.sessionId) || null;
+    this.currentFingerprintId = null;
+    this.currentAdmissionId = null;
+    this.currentMediaFacts = null;
+
     // Issue #23: Playback Admission Gate integration
     this.admissionChecker = (options && options.admissionChecker) || null;
     this.syncAdmissionBypass = options && typeof options.syncAdmissionBypass === 'boolean'
@@ -27,6 +33,10 @@ export class MediaController {
       : (typeof window === 'undefined');
 
     this.initListeners();
+  }
+
+  setSessionId(sessionId) {
+    this.sessionId = sessionId;
   }
 
   attachRenderer(renderer) {
@@ -151,9 +161,24 @@ export class MediaController {
         this.renderer.resetVideoTexture();
       }
 
+      // Issue #28: Extract DOM playback metrics cheaply
+      const currentTime = this.video ? this.video.currentTime : 0;
+      let bufferAheadSec = 0;
+      if (this.video && this.video.buffered && this.video.buffered.length > 0) {
+        for (let i = 0; i < this.video.buffered.length; i++) {
+          if (this.video.buffered.start(i) <= currentTime && currentTime <= this.video.buffered.end(i)) {
+            bufferAheadSec = parseFloat((this.video.buffered.end(i) - currentTime).toFixed(3));
+            break;
+          }
+        }
+      }
+
       // Structured error event for telemetry & remote logging seam
       const errEvent = {
         generation: generation,
+        sessionId: this.sessionId,
+        fingerprintId: this.currentFingerprintId || null,
+        admissionId: this.currentAdmissionId || null,
         mediaPath: mediaPath || '',
         mediaName: mediaPath ? mediaPath.split('/').pop() : '',
         code: codeNum,
@@ -161,8 +186,11 @@ export class MediaController {
         message: msg,
         readyState: this.video ? this.video.readyState : 0,
         networkState: this.video ? this.video.networkState : 0,
+        currentTime: parseFloat(currentTime.toFixed(3)),
+        bufferAheadSec: bufferAheadSec,
         videoWidth: this.video ? this.video.videoWidth : 0,
-        videoHeight: this.video ? this.video.videoHeight : 0
+        videoHeight: this.video ? this.video.videoHeight : 0,
+        mediaFacts: this.currentMediaFacts || null
       };
       if (this.remoteLogHook) {
         this.remoteLogHook('ERROR', 'MEDIA_PLAYBACK_ERROR', errEvent);
@@ -268,6 +296,9 @@ export class MediaController {
     }
 
     // 4. Reset state for new media
+    this.currentFingerprintId = null;
+    this.currentAdmissionId = null;
+    this.currentMediaFacts = null;
     state.videoPath = relPath;
     if (Array.isArray(state.videoList) && state.videoList.length > 0) {
       const foundIdx = state.videoList.findIndex(v => v.relPath === relPath);
@@ -298,6 +329,12 @@ export class MediaController {
         return false;
       }
 
+      if (admission) {
+        this.currentFingerprintId = admission.fingerprintId || null;
+        this.currentAdmissionId = admission.admissionId || null;
+        this.currentMediaFacts = admission.mediaFacts || null;
+      }
+
       if (!admission || !admission.allowed) {
         let statusMsg = 'Unsupported media';
         const classification = admission ? admission.classification : 'UNKNOWN';
@@ -316,12 +353,16 @@ export class MediaController {
         if (this.remoteLogHook) {
           this.remoteLogHook('WARN', 'MEDIA_PLAYBACK_BLOCKED_BY_POLICY', {
             generation,
+            sessionId: this.sessionId,
+            fingerprintId: this.currentFingerprintId,
+            admissionId: this.currentAdmissionId,
             mediaPath: relPath,
             mediaName: relPath ? relPath.split('/').pop() : '',
             classification,
             reason: admission ? admission.reason : 'Admission denied',
             matchedEnvelopeId: admission ? admission.matchedEnvelopeId || null : null,
-            allowedNextActions: admission ? admission.allowedNextActions || [] : []
+            allowedNextActions: admission ? admission.allowedNextActions || [] : [],
+            mediaFacts: this.currentMediaFacts
           });
         }
         return false;

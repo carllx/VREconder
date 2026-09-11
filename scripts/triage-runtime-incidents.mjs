@@ -8,6 +8,22 @@ import {
   readProcessedIncidents,
   acknowledgeIncidents
 } from '../prototype/lan_secure_origin/src/telemetry/incident-store.mjs';
+import {
+  clusterIncidents,
+  routeIncident,
+  sanitizeReason,
+  determineIncidentStatus,
+  getHypothesisDetails,
+  IncidentStatus
+} from '../prototype/lan_secure_origin/src/telemetry/incident-cluster.mjs';
+
+export {
+  routeIncident,
+  sanitizeReason,
+  determineIncidentStatus,
+  getHypothesisDetails,
+  IncidentStatus
+};
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -35,118 +51,30 @@ Options:
 }
 
 /**
- * Maps an incident to the appropriate GitHub issue and category.
- * Routing rules:
- * - Media-health / compatibility findings -> Issue #21 (Normalization & Codec Authority):
- *   - NORMALIZATION_CANDIDATE_CERTIFIED
- *   - EXACT_CERTIFIED_NORMALIZATION_CANDIDATE
- *   - EXPERIMENT_DERIVATIVE
- *   - NEEDS_BUCKET_CERTIFICATION
- *   - NEEDS_DEVICE_PROBE
- *   - UNSUPPORTED_UNKNOWN_FIX
- *   - UNREADABLE_MEDIA
- *   - INVALID_MEDIA
- * - Actual runtime playback failures -> Issue #23 (Runtime Playback Recovery):
- *   - MEDIA_ERR_SRC_NOT_SUPPORTED
- *   - MEDIA_ERR_ABORTED
- *   - MEDIA_ERR_NETWORK
- *   - MEDIA_ERR_DECODE
- *   - MEDIA_PLAYBACK_ERROR
- * - Incident pipeline / logging lifecycle defects & unclassified pipeline failures -> Issue #24 (Incident Triage Pipeline)
- */
-export function routeIncident(incident) {
-  const c = incident.classification || '';
-  const r = incident.reason || '';
-  const e = incident.eventType || '';
-
-  // Actual runtime playback failures -> Issue #23
-  if (
-    c === 'MEDIA_ERR_SRC_NOT_SUPPORTED' ||
-    c === 'MEDIA_ERR_DECODE' ||
-    c === 'MEDIA_ERR_NETWORK' ||
-    c === 'MEDIA_ERR_ABORTED' ||
-    r.includes('MEDIA_ERR_SRC_NOT_SUPPORTED') ||
-    e === 'MEDIA_PLAYBACK_ERROR'
-  ) {
-    return { targetIssue: 23, topic: 'Runtime Playback Recovery' };
-  }
-
-  // Media-health / compatibility findings -> Issue #21
-  if (
-    c === 'NORMALIZATION_CANDIDATE_CERTIFIED' ||
-    c === 'EXACT_CERTIFIED_NORMALIZATION_CANDIDATE' ||
-    c === 'EXPERIMENT_DERIVATIVE' ||
-    c === 'NEEDS_BUCKET_CERTIFICATION' ||
-    c === 'NEEDS_DEVICE_PROBE' ||
-    c === 'UNSUPPORTED_UNKNOWN_FIX' ||
-    c === 'UNREADABLE_MEDIA' ||
-    c === 'INVALID_MEDIA' ||
-    e === 'PLAYBACK_ADMISSION_DENIED'
-  ) {
-    return { targetIssue: 21, topic: 'Media Normalization / Policy Compatibility' };
-  }
-
-  // Incident pipeline lifecycle / unclassified defects -> Issue #24
-  return { targetIssue: 24, topic: 'Runtime Incident Triage' };
-}
-
-/**
- * Sanitizes reason strings to remove any absolute paths or private media filenames.
- */
-function sanitizeReason(reason) {
-  if (!reason || typeof reason !== 'string') return '';
-  // Replace Windows and Unix file paths with [path]
-  let sanitized = reason.replace(/[a-zA-Z]:\\[^ \n\r\t,"]+/g, '[path]');
-  sanitized = sanitized.replace(/\/[^ \n\r\t,"]+\.(mp4|m4v|mkv|mov|webm)/gi, '[path]');
-  return sanitized;
-}
-
-/**
- * Sanitizes an incident report so NO private filenames or absolute paths are exposed.
+ * Sanitizes an incident report so NO private filenames or absolute paths are exposed,
+ * and clusters incidents by stable failure signature with paired admission correlation.
  */
 export function generateSanitizedTriage(pendingList) {
   if (!pendingList || pendingList.length === 0) {
-    return { groups: [], totalCount: 0 };
+    return { groups: [], clusters: [], totalCount: 0, totalLogicalOccurrences: 0 };
   }
 
-  // Group by (targetIssue, classification, matchedEnvelopeId, reason)
-  const groupMap = new Map();
+  const { clusters, totalRawEvents, totalLogicalOccurrences } = clusterIncidents(pendingList);
 
-  for (const inc of pendingList) {
-    const route = routeIncident(inc);
-    const cleanReason = sanitizeReason(inc.reason);
-    const key = `${route.targetIssue}::${inc.classification}::${inc.matchedEnvelopeId || 'NONE'}::${cleanReason}`;
-
-    if (!groupMap.has(key)) {
-      groupMap.set(key, {
-        targetIssue: route.targetIssue,
-        topic: route.topic,
-        classification: inc.classification,
-        matchedEnvelopeId: inc.matchedEnvelopeId || null,
-        reason: cleanReason,
-        allowedNextActions: inc.allowedNextActions || [],
-        incidentIds: [],
-        fingerprintIds: new Set(),
-        occurrenceSources: new Set(),
-        count: 0
-      });
-    }
-
-    const g = groupMap.get(key);
-    g.count++;
-    g.incidentIds.push(inc.incidentId);
-    if (inc.fingerprintId) g.fingerprintIds.add(inc.fingerprintId);
-    if (inc.occurrenceSource) g.occurrenceSources.add(inc.occurrenceSource);
-  }
-
-  const groups = Array.from(groupMap.values()).map(g => ({
-    ...g,
-    fingerprintCount: g.fingerprintIds.size,
-    fingerprintIds: Array.from(g.fingerprintIds),
-    occurrenceSources: Array.from(g.occurrenceSources)
+  const groups = clusters.map(c => ({
+    ...c,
+    count: c.rawEventCount,
+    fingerprintCount: c.mediaCount,
+    fingerprintIds: c.affectedMedia.map(m => m.fingerprintId).filter(Boolean),
+    incidentIds: c.rawIncidentIds
   }));
 
-  return { groups, totalCount: pendingList.length };
+  return {
+    groups,
+    clusters: groups,
+    totalCount: totalRawEvents,
+    totalLogicalOccurrences
+  };
 }
 
 export function formatMarkdownSummary(triage) {
@@ -154,23 +82,34 @@ export function formatMarkdownSummary(triage) {
     return '### Runtime Incident Triage\n\nNo pending runtime incidents found in `runtime_incidents.pending.jsonl`.\n';
   }
 
-  let md = `### Runtime Incident Triage Summary (${triage.totalCount} pending incidents)\n\n`;
-  md += '| Target Issue | Classification | Envelope | Events | Unique Media | Reason |\n';
-  md += '|:---|:---|:---|:---:|:---:|:---|\n';
+  let md = `### Runtime Incident Triage Summary (${triage.totalCount} raw incidents across ${triage.groups.length} logical clusters)\n\n`;
+  md += '| Target Issue | Status | Classification | Envelope | Occurrences (Raw) | Media | Time Window | Reason |\n';
+  md += '|:---|:---|:---|:---|:---:|:---:|:---|:---|' + '\n';
 
   for (const g of triage.groups) {
     const env = g.matchedEnvelopeId ? `\`${g.matchedEnvelopeId}\`` : 'None';
     const cleanReason = (g.reason || '').replace(/\|/g, '\\|');
-    md += `| #${g.targetIssue} (${g.topic}) | \`${g.classification}\` | ${env} | ${g.count} | ${g.fingerprintCount} | ${cleanReason} |\n`;
+    const firstStr = g.firstSeen ? g.firstSeen.slice(11, 19) : '--';
+    const lastStr = g.lastSeen ? g.lastSeen.slice(11, 19) : '--';
+    const timeWin = firstStr === lastStr ? firstStr : `${firstStr}..${lastStr}`;
+    md += `| #${g.targetIssue} (${g.topic}) | \`${g.status}\` | \`${g.classification}\` | ${env} | ${g.occurrenceCount} (${g.count}) | ${g.fingerprintCount} | ${timeWin} | ${cleanReason} |\n`;
   }
 
-  md += '\n#### Group Details (Sanitized)\n\n';
+  md += '\n#### Cluster Details (Sanitized)\n\n';
   for (let i = 0; i < triage.groups.length; i++) {
     const g = triage.groups[i];
-    md += `**Group ${i + 1} -> Issue #${g.targetIssue}**\n`;
+    md += `**Cluster ${i + 1} [${g.status}] -> Issue #${g.targetIssue} (${g.topic})**\n`;
+    md += `- **Signature**: \`${g.signature}\`\n`;
+    md += `- **Status**: \`${g.status}\`\n`;
     md += `- **Classification**: \`${g.classification}\`\n`;
     md += `- **Matched Envelope**: ${g.matchedEnvelopeId ? `\`${g.matchedEnvelopeId}\`` : 'None'}\n`;
     md += `- **Reason**: ${g.reason}\n`;
+    if (g.hypothesisDetails) {
+      md += `- **Hypothesis / Targeted Follow-up**: ${g.hypothesisDetails}\n`;
+    }
+    md += `- **Occurrences**: ${g.occurrenceCount} logical selections (${g.count} raw events${g.pairedEventsCount > 0 ? `, ${g.pairedEventsCount} paired server/client` : ''})\n`;
+    md += `- **First Seen**: ${g.firstSeen || 'unknown'}\n`;
+    md += `- **Last Seen**: ${g.lastSeen || 'unknown'}\n`;
     md += `- **Occurrence Sources**: ${g.occurrenceSources.join(', ') || 'unknown'}\n`;
     md += `- **Allowed Next Actions**: ${g.allowedNextActions.length > 0 ? g.allowedNextActions.join(', ') : 'None'}\n`;
     md += `- **Incident IDs**: \`${g.incidentIds.join(', ')}\`\n`;
@@ -231,15 +170,18 @@ export function executeTriage({
     for (const [issueNum, issueGroups] of byIssue.entries()) {
       let issueComment = `### Runtime Incidents Triage Report\n\n`;
       issueComment += `Automated report from pending runtime incidents inbox.\n\n`;
-      issueComment += '| Classification | Envelope | Events | Unique Media | Reason |\n';
-      issueComment += '|:---|:---|:---:|:---:|:---|\n';
+      issueComment += '| Status | Classification | Envelope | Occurrences (Raw) | Media | Reason |\n';
+      issueComment += '|:---|:---|:---|:---:|:---:|:---|\n';
       for (const g of issueGroups) {
         const env = g.matchedEnvelopeId ? `\`${g.matchedEnvelopeId}\`` : 'None';
-        issueComment += `| \`${g.classification}\` | ${env} | ${g.count} | ${g.fingerprintCount} | ${(g.reason || '').replace(/\|/g, '\\|')} |\n`;
+        issueComment += `| \`${g.status}\` | \`${g.classification}\` | ${env} | ${g.occurrenceCount} (${g.count}) | ${g.fingerprintCount} | ${(g.reason || '').replace(/\|/g, '\\|')} |\n`;
       }
       issueComment += '\n**Sanitized Reference Incident IDs**:\n';
       for (const g of issueGroups) {
-        issueComment += `- \`${g.classification}\`: ${g.incidentIds.join(', ')}\n`;
+        issueComment += `- [${g.status}] \`${g.classification}\`: ${g.incidentIds.join(', ')}\n`;
+        if (g.hypothesisDetails) {
+          issueComment += `  * Note: ${g.hypothesisDetails}\n`;
+        }
       }
 
       const postSuccess = poster(issueNum, issueComment);

@@ -206,6 +206,29 @@ export async function probeMediaFacts(filePath, options = {}) {
 }
 
 /**
+ * Retrieves cached facts by fingerprintId without triggering ffprobe.
+ * 
+ * @param {string} fingerprintId 
+ * @returns {object | null}
+ */
+export function getCachedFacts(fingerprintId) {
+  if (!fingerprintId) return null;
+  return factsMemoryCache.get(fingerprintId) || null;
+}
+
+/**
+ * Manually inject facts into the memory cache (e.g. for testing or preflight seeding).
+ * 
+ * @param {string} fingerprintId 
+ * @param {object} facts 
+ */
+export function setCachedFacts(fingerprintId, facts) {
+  if (fingerprintId && facts) {
+    factsMemoryCache.set(fingerprintId, facts);
+  }
+}
+
+/**
  * Clears the facts memory cache.
  */
 export function clearFactsCache() {

@@ -16,6 +16,7 @@ import { streamVideo, getRecentRangeLifecycles, onActiveStreamCountChange } from
 import { handlePreflightRoutes, getEngineInstance, notifyPlaybackChange, checkPlaybackAdmission } from './src/server/preflight-router.mjs';
 import { handleProfileRoutes } from './src/server/profile-router.mjs';
 import { recordIncident } from './src/telemetry/incident-store.mjs';
+import { enrichIncidentFromRequest } from './src/telemetry/incident-enricher.mjs';
 import { handleMediaHealthRoutes } from './src/health/media-health-router.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -199,28 +200,13 @@ function handleRequest(req, res, isHttps) {
         // Ingest policy blocks and playback errors into persistent incident store
         if (item.message === 'MEDIA_PLAYBACK_BLOCKED_BY_POLICY' || item.message === 'MEDIA_PLAYBACK_ERROR') {
           try {
-            const d = item.data || {};
-            recordIncident({
-              eventType: item.message,
-              severity: item.level === 'ERROR' ? 'ERROR' : 'WARN',
-              fingerprintId: d.fingerprintId || null,
-              localMediaName: d.mediaName || (d.mediaPath ? d.mediaPath.split('/').pop() : ''),
-              localMediaPath: d.mediaPath || '',
-              classification: d.classification || (item.message === 'MEDIA_PLAYBACK_ERROR' ? (d.name || 'MEDIA_PLAYBACK_ERROR') : 'UNCLASSIFIED'),
-              reason: d.reason || (d.message ? `${d.name || 'ERROR'}: ${d.message}` : (d.name || item.message)),
-              matchedEnvelopeId: d.matchedEnvelopeId || null,
-              allowedNextActions: Array.isArray(d.allowedNextActions) ? d.allowedNextActions : [],
-              occurrenceSource: 'client_telemetry',
-              metadata: {
-                clientIp: req.socket.remoteAddress,
-                generation: d.generation,
-                code: d.code,
-                readyState: d.readyState,
-                networkState: d.networkState,
-                videoWidth: d.videoWidth,
-                videoHeight: d.videoHeight
-              }
+            const enriched = enrichIncidentFromRequest({
+              req,
+              item,
+              allowedRoots: [getActiveMediaRoot()],
+              resolveMediaPath: (rel) => path.resolve(getActiveMediaRoot(), rel)
             });
+            recordIncident(enriched);
           } catch (incErr) {
             console.warn('[Server] Failed to record client incident:', incErr.message);
           }
