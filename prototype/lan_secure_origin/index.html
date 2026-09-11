@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="VREconder">
+  <meta name="apple-touch-fullscreen" content="yes">
+  <link rel="manifest" href="/manifest.json">
+  <link rel="stylesheet" href="./styles.css?v=20260824_v3">
+  <title>VREconder - Optics & Projection Calibration</title>
+  <script>
+    window.onerror = function(msg, url, line, col, err) {
+      var banner = document.getElementById('errorBanner');
+      if (banner) {
+        banner.style.display = 'block';
+        banner.textContent = '❌ JS ERROR: ' + msg + ' (L' + line + ')';
+      }
+      fetch('/api/log', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ level: 'CRITICAL_ERROR', message: msg + ' at ' + url + ':' + line + ':' + col, stack: err ? err.stack : null })
+      }).catch(function() {});
+    };
+    window.onunhandledrejection = function(e) {
+      var reason = e.reason ? (e.reason.message || e.reason.stack || String(e.reason)) : 'Unhandled rejection';
+      var banner = document.getElementById('errorBanner');
+      if (banner) {
+        banner.style.display = 'block';
+        banner.textContent = '❌ REJECTION: ' + reason;
+      }
+      fetch('/api/log', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ level: 'CRITICAL_REJECTION', message: reason })
+      }).catch(function() {});
+    };
+  </script>
+</head>
+<body>
+
+  <!-- Background WebGL Stereo VR / Rectilinear Diagnostic Canvas -->
+  <canvas id="glCanvas"></canvas>
+
+  <!-- 2D Stereo Reticle / Diagnostic Grid Overlay (Unobstructed in Stage A) -->
+  <canvas id="uiCanvas"></canvas>
+
+  <video id="sourceVideo" playsinline preload="auto" crossorigin="anonymous" muted loop></video>
+
+  <!-- Minimal Floating Banner in Stage A (Non-obstructive) -->
+  <div id="stageBanner">
+    <button id="btnEnterVR" class="arm-btn">
+      <span>🛡️ 授权传感器并进入 VR (Arm & Enter VR)</span>
+    </button>
+    <div id="stageStatusText">Stage A: Flat Diagnostic (Unobstructed) | Controlled via PC</div>
+  </div>
+
+  <!-- In-VR Floating Emergency Bar -->
+  <div id="vrFloatingBar" class="fade-out">
+    <button class="vr-btn vr-btn-reset" id="btnVrReset">🎯 Recenter</button>
+    <button class="vr-btn vr-btn-exit" id="btnVrExit">⚙ Exit VR</button>
+  </div>
+
+  <div id="errorBanner"></div>
+
+  <!-- Hidden Focus Trap for Bluetooth Keyboard/HID Controller on iOS Safari -->
+  <input id="controllerFocusTrap" type="text" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" inputmode="none" style="position:fixed; top:0; left:0; width:1px; height:1px; opacity:0.01; border:none; outline:none; pointer-events:auto;" aria-hidden="true">
+
+  <script type="module" src="./src/main.js?v=20260824_v5"></script>
+</body>
+</html>

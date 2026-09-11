@@ -50,4 +50,32 @@ backup_old_files/
 
 # 忽略配置文件中的敏感信息
 config/*.env
-config/*.key 
+config/*.key
+
+# Prototype runtime persistence files
+prototype/lan_secure_origin/prototype_viewer_profile.json
+prototype/lan_secure_origin/prototype_video_profiles.json
+prototype_viewer_profile.json
+prototype_video_profiles.json
+*.pending.jsonl
+*.processed.jsonl
+runtime_incidents.*.jsonl
+media_health_registry.jsonl
+media_health_checkpoint.json
+media_health_facts_cache.json
+prototype/lan_secure_origin/media_health_registry.jsonl
+prototype/lan_secure_origin/media_health_checkpoint.json
+prototype/lan_secure_origin/media_health_facts_cache.json
+prototype/lan_secure_origin/asset_integrity_cleanup_manifest.json
+asset_integrity_cleanup_manifest.json
+prototype/lan_secure_origin/asset_integrity_quarantine_receipt.json
+asset_integrity_quarantine_receipt.json
+prototype/lan_secure_origin/asset_integrity_final_cleanup_receipt.json
+asset_integrity_final_cleanup_receipt.json
+prototype/lan_secure_origin/canonical_repair_manifest.json
+canonical_repair_manifest.json
+prototype/lan_secure_origin/canonical_repair_probe_results.jsonl
+canonical_repair_probe_results.jsonl
+prototype/lan_secure_origin/canonical_exact_file_authorization.json
+canonical_exact_file_authorization.json
+*exact_file_authorization*.json

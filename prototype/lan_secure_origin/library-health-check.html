@@ -1,0 +1,485 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>VREconder - T1 全库媒体健康检查 (iPhone Safari Harness)</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: #090d16;
+      color: #f8fafc;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, monospace;
+      padding: 14px;
+      line-height: 1.4;
+    }
+    h1 {
+      font-size: 1.15rem;
+      color: #38bdf8;
+      margin-bottom: 6px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .subtitle {
+      font-size: 0.78rem;
+      color: #94a3b8;
+      margin-bottom: 12px;
+    }
+    .card {
+      background: #131b2e;
+      border: 1px solid #243048;
+      border-radius: 8px;
+      padding: 12px;
+      margin-bottom: 12px;
+    }
+    .btn-row {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-bottom: 10px;
+    }
+    button {
+      background: #1e293b;
+      color: #fff;
+      border: 1px solid #334155;
+      padding: 10px 16px;
+      border-radius: 6px;
+      font-size: 0.88rem;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+    .btn-primary { background: #0284c7; border-color: #38bdf8; }
+    .btn-action { background: #059669; border-color: #34d399; }
+    .btn-pause { background: #d97706; border-color: #fbbf24; }
+    .btn-danger { background: #dc2626; border-color: #f87171; }
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+    @media (max-width: 600px) {
+      .stats-grid { grid-template-columns: repeat(2, 1fr); }
+    }
+    .stat-box {
+      background: #0b1120;
+      border: 1px solid #1e293b;
+      border-radius: 6px;
+      padding: 8px;
+      text-align: center;
+    }
+    .stat-val { font-size: 1.25rem; font-weight: bold; color: #38bdf8; }
+    .stat-label { font-size: 0.72rem; color: #94a3b8; text-transform: uppercase; }
+    .test-viewport {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      background: #020617;
+      border: 1px solid #1e293b;
+      border-radius: 8px;
+      padding: 10px;
+      margin-bottom: 12px;
+    }
+    video {
+      width: 140px;
+      height: 80px;
+      background: #000;
+      border-radius: 4px;
+      border: 1px solid #334155;
+      object-fit: contain;
+    }
+    .video-info {
+      font-size: 0.78rem;
+      color: #94a3b8;
+      flex: 1;
+    }
+    .video-info div { margin-bottom: 3px; }
+    .badge {
+      display: inline-block;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 0.72rem;
+      font-weight: bold;
+    }
+    .badge-ok { background: rgba(16, 185, 129, 0.2); color: #34d399; }
+    .badge-err { background: rgba(239, 68, 68, 0.2); color: #f87171; }
+    .badge-warn { background: rgba(245, 158, 11, 0.2); color: #fbbf24; }
+    .badge-info { background: rgba(56, 189, 248, 0.2); color: #38bdf8; }
+    .badge-pending { background: #334155; color: #94a3b8; }
+    .trace-box {
+      max-height: 220px;
+      overflow-y: auto;
+      font-size: 0.75rem;
+      background: #0b1120;
+      padding: 8px;
+      border-radius: 6px;
+      border: 1px solid #1e293b;
+    }
+    .trace-item {
+      padding: 4px 0;
+      border-bottom: 1px solid #1e293b;
+      display: flex;
+      justify-content: space-between;
+    }
+    .trace-item:last-child { border-bottom: none; }
+  </style>
+</head>
+<body>
+  <h1><span>🏥</span> VREconder T1 Media Health Harness</h1>
+  <div class="subtitle">全库 iPhone Safari 硬件解码健康体检 Harness (Unresolved-Only Physical Queue)</div>
+
+  <div class="card">
+    <div class="btn-row">
+      <button id="btnStart" class="btn-primary" onclick="startQueue()">Start Unresolved</button>
+      <button id="btnResume" class="btn-action" onclick="resumeQueue()">Resume</button>
+      <button id="btnPause" class="btn-pause" onclick="pauseQueue()" disabled>Pause / Stop</button>
+      <button id="btnReload" onclick="location.reload()">Reload Page</button>
+    </div>
+    <div class="stats-grid">
+      <div class="stat-box">
+        <div id="valProgress" class="stat-val">0 / 0</div>
+        <div class="stat-label">Progress</div>
+      </div>
+      <div class="stat-box">
+        <div id="valPass" class="stat-val" style="color:#34d399;">0</div>
+        <div class="stat-label">PASS (Video)</div>
+      </div>
+      <div class="stat-box">
+        <div id="valFail" class="stat-val" style="color:#f87171;">0</div>
+        <div class="stat-label">FAIL / Error</div>
+      </div>
+      <div class="stat-box">
+        <div id="valRemaining" class="stat-val" style="color:#fbbf24;">0</div>
+        <div class="stat-label">Remaining</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card test-viewport">
+    <video id="probeVideo" playsinline webkit-playsinline muted preload="auto"></video>
+    <div class="video-info">
+      <div><b>当前测试对象:</b> <span id="lblItemName" style="color:#f8fafc;">None</span></div>
+      <div>分辨率: <b id="lblDimensions">--</b></div>
+      <div>readyState: <span id="lblState">--</span> | networkState: <span id="lblNetState">--</span></div>
+      <div>rVFC 视频帧数: <b id="lblRvfc" style="color:#38bdf8;">0</b></div>
+      <div>当前状态 / 结论: <span id="lblVerdict" class="badge badge-pending">IDLE</span></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div style="font-size:0.8rem; font-weight:bold; color:#94a3b8; margin-bottom:6px;">执行跟踪 (Live Trace)</div>
+    <div id="traceLog" class="trace-box"></div>
+  </div>
+
+  <script>
+    let queue = [];
+    let currentIndex = 0;
+    let isRunning = false;
+    let currentGeneration = 0;
+
+    const video = document.getElementById('probeVideo');
+    const btnStart = document.getElementById('btnStart');
+    const btnResume = document.getElementById('btnResume');
+    const btnPause = document.getElementById('btnPause');
+    const valProgress = document.getElementById('valProgress');
+    const valPass = document.getElementById('valPass');
+    const valFail = document.getElementById('valFail');
+    const valRemaining = document.getElementById('valRemaining');
+    const lblItemName = document.getElementById('lblItemName');
+    const lblDimensions = document.getElementById('lblDimensions');
+    const lblState = document.getElementById('lblState');
+    const lblNetState = document.getElementById('lblNetState');
+    const lblRvfc = document.getElementById('lblRvfc');
+    const lblVerdict = document.getElementById('lblVerdict');
+    const traceLog = document.getElementById('traceLog');
+
+    function logTrace(msg, type = 'info') {
+      const d = document.createElement('div');
+      d.className = 'trace-item';
+      d.innerHTML = `<span>[${new Date().toLocaleTimeString()}] ${msg}</span><span class="badge badge-${type}">${type.toUpperCase()}</span>`;
+      traceLog.prepend(d);
+    }
+
+    async function initHarness() {
+      try {
+        logTrace('正在从服务器获取健康检查状态与队列...', 'info');
+        const statusRes = await fetch('/api/health/status').then(r => r.json());
+        
+        if (!statusRes.hasStaticScan) {
+          logTrace('服务器尚未运行 PC 静态扫描，正在触发静态扫描...', 'warn');
+          await fetch('/api/health/scan', { method: 'POST' }).then(r => r.json());
+        }
+
+        const qRes = await fetch('/api/health/queue').then(r => r.json());
+        queue = qRes.queue || [];
+        currentIndex = qRes.cursor || 0;
+
+        updateStats(statusRes.checkpoint);
+        logTrace(`队列初始化完成: 共 ${queue.length} 个未解决项, 当前 Cursor=${currentIndex}`, 'info');
+
+        if (statusRes.checkpoint && statusRes.checkpoint.status === 'RUNNING') {
+          logTrace('检测到上次正在运行的状态，可点击 Resume 继续', 'warn');
+        }
+      } catch (err) {
+        logTrace(`初始化失败: ${err.message}`, 'err');
+      }
+    }
+
+    function updateStats(cp) {
+      const pass = cp ? (cp.passCount || 0) : 0;
+      const fail = cp ? (cp.failCount || 0) : 0;
+      const total = queue.length;
+      valProgress.textContent = `${currentIndex} / ${total}`;
+      valPass.textContent = String(pass);
+      valFail.textContent = String(fail);
+      valRemaining.textContent = String(Math.max(0, total - currentIndex));
+    }
+
+    async function startQueue() {
+      if (isRunning) return;
+      isRunning = true;
+      btnStart.disabled = true;
+      btnResume.disabled = true;
+      btnPause.disabled = false;
+      await fetch('/api/health/checkpoint', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'start' })
+      });
+      logTrace('开始执行物理设备测试队列...', 'info');
+      runNextItem();
+    }
+
+    async function resumeQueue() {
+      if (isRunning) return;
+      isRunning = true;
+      btnStart.disabled = true;
+      btnResume.disabled = true;
+      btnPause.disabled = false;
+      await fetch('/api/health/checkpoint', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'resume' })
+      });
+      logTrace(`恢复队列测试 (从第 ${currentIndex + 1} 项继续)...`, 'info');
+      runNextItem();
+    }
+
+    async function pauseQueue() {
+      isRunning = false;
+      btnStart.disabled = false;
+      btnResume.disabled = false;
+      btnPause.disabled = true;
+      await fetch('/api/health/checkpoint', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'pause' })
+      });
+      logTrace('队列已暂停', 'warn');
+    }
+
+    async function runNextItem() {
+      if (!isRunning) return;
+      if (currentIndex >= queue.length) {
+        isRunning = false;
+        btnStart.disabled = false;
+        btnResume.disabled = true;
+        btnPause.disabled = true;
+        logTrace('🎉 全库未解决媒体设备体检全部完成！', 'ok');
+        lblVerdict.textContent = 'COMPLETED';
+        lblVerdict.className = 'badge badge-ok';
+        return;
+      }
+
+      const item = queue[currentIndex];
+      // Skip if already completed
+      if (item.isCompleted) {
+        logTrace(`跳过已完成项: ${item.neutralId} (${item.recordedVerdict})`, 'info');
+        currentIndex++;
+        valProgress.textContent = `${currentIndex} / ${queue.length}`;
+        valRemaining.textContent = String(Math.max(0, queue.length - currentIndex));
+        runNextItem();
+        return;
+      }
+
+      currentGeneration++;
+      const token = currentGeneration;
+      lblItemName.textContent = item.neutralId;
+      lblDimensions.textContent = '--';
+      lblRvfc.textContent = '0';
+      lblVerdict.textContent = 'PROBING...';
+      lblVerdict.className = 'badge badge-info';
+      logTrace(`[#${currentIndex + 1}/${queue.length}] 探测: ${item.neutralId}`, 'info');
+
+      try {
+        const result = await probeMedia(item, token);
+        if (token !== currentGeneration) {
+          logTrace(`收到过期的 Token 回调 (${token} vs ${currentGeneration}), 丢弃`, 'warn');
+          return;
+        }
+
+        // Persist before advancing
+        logTrace(`持久化结果: ${item.neutralId} => ${result.verdict}`, result.verdict === 'PASS_VIDEO' ? 'ok' : 'err');
+        
+        let postRes;
+        try {
+          const res = await fetch('/api/health/probe-result', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              queueIndex: currentIndex,
+              generation: token,
+              neutralId: item.neutralId,
+              fingerprintId: item.fingerprintId,
+              filePath: item.filePath,
+              region: item.region,
+              staticClassification: item.staticClassification,
+              verdict: result.verdict,
+              videoWidth: result.videoWidth,
+              videoHeight: result.videoHeight,
+              rvfcFrameCount: result.rvfcFrameCount,
+              readyState: result.readyState,
+              networkState: result.networkState,
+              error: result.error,
+              elapsedMs: result.elapsedMs
+            })
+          });
+
+          if (!res.ok) {
+            throw new Error(`HTTP ${res.status} ${res.statusText}`);
+          }
+          postRes = await res.json();
+          if (!postRes || !postRes.ok) {
+            throw new Error(postRes?.error || 'Server rejected probe-result');
+          }
+        } catch (persistErr) {
+          logTrace(`⚠️ 持久化失败，暂停队列以保留 Resume 游标: ${persistErr.message}`, 'err');
+          await pauseQueue();
+          lblVerdict.textContent = 'PERSIST_ERROR';
+          lblVerdict.className = 'badge badge-err';
+          return;
+        }
+
+        // Advance queue ONLY on verified successful persistence
+        updateStats(postRes.checkpoint);
+        currentIndex++;
+        valProgress.textContent = `${currentIndex} / ${queue.length}`;
+        valRemaining.textContent = String(Math.max(0, queue.length - currentIndex));
+
+        if (isRunning) {
+          setTimeout(runNextItem, 300);
+        }
+      } catch (err) {
+        logTrace(`探测执行异常: ${err.message}，暂停队列`, 'err');
+        await pauseQueue();
+        lblVerdict.textContent = 'PROBE_ERROR';
+        lblVerdict.className = 'badge badge-err';
+      }
+    }
+
+    function probeMedia(item, token) {
+      return new Promise((resolve) => {
+        let resolved = false;
+        let timeoutId = null;
+        let rvfcId = null;
+        let rvfcCount = 0;
+        const startTime = Date.now();
+
+        function cleanup() {
+          if (timeoutId) clearTimeout(timeoutId);
+          if (rvfcId && 'cancelVideoFrameCallback' in video) {
+            video.cancelVideoFrameCallback(rvfcId);
+          }
+          ['loadstart', 'loadedmetadata', 'loadeddata', 'canplay', 'playing', 'error'].forEach(evt => {
+            video.removeEventListener(evt, onEvent);
+          });
+          video.pause();
+          video.removeAttribute('src');
+          video.load();
+        }
+
+        function finish(verdict, err = null) {
+          if (resolved) return;
+          resolved = true;
+          const capturedWidth = video.videoWidth || 0;
+          const capturedHeight = video.videoHeight || 0;
+          const capturedReadyState = video.readyState;
+          const capturedNetworkState = video.networkState;
+          const elapsedMs = Date.now() - startTime;
+
+          cleanup();
+
+          lblVerdict.textContent = verdict;
+          lblVerdict.className = (verdict === 'PASS_VIDEO') ? 'badge badge-ok' : 'badge badge-err';
+
+          resolve({
+            verdict,
+            videoWidth: capturedWidth,
+            videoHeight: capturedHeight,
+            rvfcFrameCount: rvfcCount,
+            readyState: capturedReadyState,
+            networkState: capturedNetworkState,
+            error: err,
+            elapsedMs
+          });
+        }
+
+        function onRvfc(now, metadata) {
+          if (resolved || token !== currentGeneration) return;
+          rvfcCount++;
+          lblRvfc.textContent = String(rvfcCount);
+
+          if (video.videoWidth > 0 && video.videoHeight > 0 && rvfcCount >= 2) {
+            finish('PASS_VIDEO', null);
+            return;
+          }
+          if ('requestVideoFrameCallback' in video && !resolved) {
+            rvfcId = video.requestVideoFrameCallback(onRvfc);
+          }
+        }
+
+        const onEvent = (e) => {
+          if (resolved || token !== currentGeneration) return;
+          lblDimensions.textContent = `${video.videoWidth} × ${video.videoHeight}`;
+          lblState.textContent = String(video.readyState);
+          lblNetState.textContent = String(video.networkState);
+
+          if (e.type === 'error') {
+            const err = video.error;
+            const errInfo = err ? { code: err.code, message: err.message } : { code: -1, message: 'Unknown error' };
+            finish('MEDIA_ERROR', errInfo);
+          }
+        };
+
+        ['loadstart', 'loadedmetadata', 'loadeddata', 'canplay', 'playing', 'error'].forEach(evt => {
+          video.addEventListener(evt, onEvent);
+        });
+
+        if ('requestVideoFrameCallback' in video) {
+          rvfcId = video.requestVideoFrameCallback(onRvfc);
+        }
+
+        // 8-second bounded timeout per item
+        timeoutId = setTimeout(() => {
+          if (!resolved && token === currentGeneration) {
+            finish('TIMEOUT', { code: 'TIMEOUT', message: 'Probe timed out after 8s' });
+          }
+        }, 8000);
+
+        // Health-specific streaming endpoint
+        video.src = '/api/health/video?path=' + encodeURIComponent(item.filePath);
+        video.load();
+        video.play().catch(() => {});
+      });
+    }
+
+    // Initialize on page load
+    window.addEventListener('DOMContentLoaded', initHarness);
+  </script>
+</body>
+</html>

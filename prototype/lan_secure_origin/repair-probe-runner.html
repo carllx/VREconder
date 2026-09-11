@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>VREconder - Issue #21 Canonical Repair Probes</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: #090d16;
+      color: #f8fafc;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, monospace;
+      padding: 14px;
+      line-height: 1.4;
+    }
+    h1 {
+      font-size: 1.15rem;
+      color: #38bdf8;
+      margin-bottom: 6px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .subtitle {
+      font-size: 0.78rem;
+      color: #94a3b8;
+      margin-bottom: 12px;
+    }
+    .card {
+      background: #131b2e;
+      border: 1px solid #243048;
+      border-radius: 8px;
+      padding: 12px;
+      margin-bottom: 12px;
+    }
+    .btn-row {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-bottom: 10px;
+    }
+    button {
+      background: #1e293b;
+      color: #fff;
+      border: 1px solid #334155;
+      padding: 10px 16px;
+      border-radius: 6px;
+      font-size: 0.88rem;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+    .btn-primary { background: #0284c7; border-color: #38bdf8; }
+    .btn-pause { background: #d97706; border-color: #fbbf24; }
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+    .stat-box {
+      background: #0b1120;
+      border: 1px solid #1e293b;
+      border-radius: 6px;
+      padding: 8px;
+      text-align: center;
+    }
+    .stat-val { font-size: 1.25rem; font-weight: bold; color: #38bdf8; }
+    .stat-label { font-size: 0.72rem; color: #94a3b8; text-transform: uppercase; }
+    .test-viewport {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      background: #020617;
+      border: 1px solid #1e293b;
+      border-radius: 8px;
+      padding: 10px;
+      margin-bottom: 12px;
+    }
+    video {
+      width: 140px;
+      height: 80px;
+      background: #000;
+      border-radius: 4px;
+      border: 1px solid #334155;
+      object-fit: contain;
+    }
+    .video-info {
+      font-size: 0.78rem;
+      color: #94a3b8;
+      flex: 1;
+    }
+    .trace-box {
+      background: #060911;
+      border: 1px solid #1e293b;
+      border-radius: 6px;
+      padding: 8px;
+      height: 220px;
+      overflow-y: auto;
+      font-size: 0.75rem;
+    }
+    .trace-item {
+      padding: 3px 0;
+      border-bottom: 1px solid #111827;
+      display: flex;
+      justify-content: space-between;
+    }
+    .badge {
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 0.68rem;
+      font-weight: 600;
+    }
+    .badge-pass { background: rgba(16, 185, 129, 0.2); color: #34d399; }
+    .badge-fail { background: rgba(239, 68, 68, 0.2); color: #f87171; }
+    .badge-warn { background: rgba(245, 158, 11, 0.2); color: #fbbf24; }
+    .badge-info { background: rgba(56, 189, 248, 0.2); color: #38bdf8; }
+  </style>
+</head>
+<body>
+  <h1 id="pageTitle"><span>🔧</span> Issue #21 规范化修复验证 (Physical Device Batch)</h1>
+  <div id="pageSubtitle" class="subtitle">针对 15 个物理失败项生成的 14 个测试对象（12 个临时 hvc1 衍生流 + 2 个 25s 延长超时重试）</div>
+
+  <div class="card">
+    <div class="btn-row">
+      <button id="btnStart" class="btn-primary" onclick="startQueue()">开始测试队列 (Start Batch)</button>
+      <button id="btnPause" class="btn-pause" onclick="pauseQueue()" disabled>暂停 (Pause)</button>
+    </div>
+    <div class="stats-grid">
+      <div class="stat-box">
+        <div id="valProgress" class="stat-val">0 / 14</div>
+        <div class="stat-label">进度</div>
+      </div>
+      <div class="stat-box">
+        <div id="valPass" class="stat-val" style="color:#34d399;">0</div>
+        <div class="stat-label">PASS</div>
+      </div>
+      <div class="stat-box">
+        <div id="valFail" class="stat-val" style="color:#f87171;">0</div>
+        <div class="stat-label">FAIL / Timeout</div>
+      </div>
+      <div class="stat-box">
+        <div id="valRemaining" class="stat-val" style="color:#fbbf24;">14</div>
+        <div class="stat-label">剩余</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card test-viewport">
+    <video id="probeVideo" playsinline webkit-playsinline muted preload="auto"></video>
+    <div class="video-info">
+      <div><b>当前对象:</b> <span id="lblItemName" style="color:#f8fafc;">None</span></div>
+      <div>类型: <span id="lblType" style="color:#38bdf8;">--</span> | 分辨率: <b id="lblDimensions">--</b></div>
+      <div>readyState: <span id="lblState">--</span> | rVFC 帧数: <b id="lblRvfc" style="color:#34d399;">0</b></div>
+      <div>测试结论: <span id="lblVerdict" class="badge badge-info">IDLE</span></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div style="font-size:0.8rem; font-weight:bold; color:#94a3b8; margin-bottom:6px;">实时日志 (Live Trace)</div>
+    <div id="traceLog" class="trace-box"></div>
+  </div>
+
+  <script>
+    let queue = [];
+    let currentIndex = 0;
+    let isRunning = false;
+    let passCount = 0;
+    let failCount = 0;
+
+    const video = document.getElementById('probeVideo');
+    const btnStart = document.getElementById('btnStart');
+    const btnPause = document.getElementById('btnPause');
+    const valProgress = document.getElementById('valProgress');
+    const valPass = document.getElementById('valPass');
+    const valFail = document.getElementById('valFail');
+    const valRemaining = document.getElementById('valRemaining');
+    const lblItemName = document.getElementById('lblItemName');
+    const lblType = document.getElementById('lblType');
+    const lblDimensions = document.getElementById('lblDimensions');
+    const lblState = document.getElementById('lblState');
+    const lblRvfc = document.getElementById('lblRvfc');
+    const lblVerdict = document.getElementById('lblVerdict');
+    const traceLog = document.getElementById('traceLog');
+    const pageTitle = document.getElementById('pageTitle');
+    const pageSubtitle = document.getElementById('pageSubtitle');
+
+    const urlParams = new URLSearchParams(window.location.search);
+    const isCanonicalMode = urlParams.get('mode') === 'canonical';
+    const queueUrl = isCanonicalMode ? '/api/repair/canonical-queue' : '/api/repair/queue';
+    const resultUrl = isCanonicalMode ? '/api/repair/canonical-result' : '/api/repair/result';
+
+    if (isCanonicalMode) {
+      if (pageTitle) pageTitle.innerHTML = '<span>🔧</span> Issue #21 规范化修复验证 (Exact-12 Canonical Mode)';
+      if (pageSubtitle) pageSubtitle.textContent = '针对 12 个已授权完成 hvc1 规范化流复制的正式 Canonical 文件的物理 iPhone Safari 验证';
+      document.title = 'VREconder - Issue #21 Canonical Repaired Probes';
+    }
+
+    // Keep Start disabled until queue initialization succeeds
+    btnStart.disabled = true;
+
+    function logTrace(msg, type = 'info') {
+      const d = document.createElement('div');
+      d.className = 'trace-item';
+      d.innerHTML = `<span>[${new Date().toLocaleTimeString()}] ${msg}</span><span class="badge badge-${type}">${type.toUpperCase()}</span>`;
+      traceLog.prepend(d);
+    }
+
+    async function initQueue() {
+      try {
+        logTrace(`获取 Issue #21 ${isCanonicalMode ? 'Exact-12 Canonical' : '规范化修复'}测试清单 (${queueUrl})...`, 'info');
+        const res = await fetch(queueUrl);
+        if (!res.ok) {
+          throw new Error(`HTTP ${res.status} ${res.statusText}`);
+        }
+        const data = await res.json();
+        if (isCanonicalMode) {
+          if (!data || data.ok !== true) {
+            throw new Error(data?.error || 'Canonical response ok !== true');
+          }
+          if (!Array.isArray(data.queue) || data.queue.length !== 12) {
+            throw new Error(`Canonical queue length violation: expected exactly 12, got ${data?.queue?.length}`);
+          }
+        }
+        queue = data.queue || [];
+        if (queue.length === 0) {
+          throw new Error('测试队列为空，无法开始测试');
+        }
+        updateStats();
+        btnStart.disabled = false;
+        logTrace(`队列初始化成功: 共 ${queue.length} 个待测目标`, 'info');
+      } catch (err) {
+        queue = [];
+        updateStats();
+        btnStart.disabled = true;
+        if (lblVerdict) {
+          lblVerdict.textContent = 'INIT_FAILED';
+          lblVerdict.className = 'badge badge-fail';
+        }
+        logTrace(`加载队列失败: ${err.message}`, 'fail');
+      }
+    }
+
+    function updateStats() {
+      valProgress.textContent = `${currentIndex} / ${queue.length}`;
+      valPass.textContent = String(passCount);
+      valFail.textContent = String(failCount);
+      valRemaining.textContent = String(Math.max(0, queue.length - currentIndex));
+    }
+
+    async function startQueue() {
+      if (isRunning || currentIndex >= queue.length) return;
+      isRunning = true;
+      btnStart.disabled = true;
+      btnPause.disabled = false;
+      runNextItem();
+    }
+
+    function pauseQueue() {
+      isRunning = false;
+      btnStart.disabled = false;
+      btnPause.disabled = true;
+      logTrace('测试队列已暂停', 'warn');
+    }
+
+    async function runNextItem() {
+      if (!isRunning || currentIndex >= queue.length) {
+        isRunning = false;
+        btnStart.disabled = false;
+        btnPause.disabled = true;
+        logTrace('测试队列已全部完成!', 'pass');
+        return;
+      }
+
+      const item = queue[currentIndex];
+      lblItemName.textContent = item.groupId + ': ' + item.filePath.split(/[\\\\/]/).pop();
+      lblType.textContent = item.type;
+      lblDimensions.textContent = '--';
+      lblState.textContent = '--';
+      lblRvfc.textContent = '0';
+      lblVerdict.className = 'badge badge-info';
+      lblVerdict.textContent = 'PROBING...';
+
+      logTrace(`开始测试 [${currentIndex + 1}/${queue.length}] ${item.groupId} (超时: ${item.targetTimeoutSec}s)...`, 'info');
+
+      const result = await probeSingleVideo(item);
+      if (result.verdict === 'PASS_VIDEO') {
+        lblVerdict.className = 'badge badge-pass';
+        lblVerdict.textContent = `PASS (${result.elapsedMs}ms, ${result.videoWidth}x${result.videoHeight})`;
+        logTrace(`${item.groupId} 成功播放: ${result.videoWidth}x${result.videoHeight}, rVFC=${result.rvfcFrameCount} (${result.elapsedMs}ms)`, 'pass');
+      } else {
+        lblVerdict.className = 'badge badge-fail';
+        lblVerdict.textContent = `${result.verdict} (${result.elapsedMs}ms)`;
+        logTrace(`${item.groupId} 测试未通过: ${result.verdict} (${result.elapsedMs}ms)`, 'fail');
+      }
+
+      // 严格持久化 Contract：probe -> prepare UI/result -> POST -> verify HTTP success -> parse JSON -> verify ok === true -> commit passCount/failCount -> currentIndex++ -> updateStats()
+      try {
+        const res = await fetch(resultUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            groupId: item.groupId,
+            type: item.type,
+            filePath: item.filePath,
+            verdict: result.verdict,
+            details: result,
+            timestamp: new Date().toISOString()
+          })
+        });
+
+        if (!res.ok) {
+          throw new Error(`HTTP ${res.status} ${res.statusText}`);
+        }
+        const postRes = await res.json();
+        if (!postRes || postRes.ok !== true) {
+          throw new Error(postRes?.error || 'Server response ok !== true');
+        }
+      } catch (e) {
+        logTrace(`⚠️ 持久化失败，暂停队列以保留 Resume 游标: ${e.message}`, 'fail');
+        pauseQueue();
+        lblVerdict.textContent = 'PERSIST_ERROR';
+        lblVerdict.className = 'badge badge-fail';
+        // Note: passCount, failCount, and currentIndex remain untouched
+        return;
+      }
+
+      // Commit counters and advance queue ONLY on verified successful persistence
+      if (result.verdict === 'PASS_VIDEO') {
+        passCount++;
+      } else {
+        failCount++;
+      }
+      currentIndex++;
+      updateStats();
+
+      if (isRunning) {
+        setTimeout(runNextItem, 800);
+      }
+    }
+
+    function probeSingleVideo(item) {
+      return new Promise(resolve => {
+        let finished = false;
+        let rvfcCount = 0;
+        let timer = null;
+        const startTime = Date.now();
+
+        function cleanup() {
+          if (timer) clearTimeout(timer);
+          video.onloadedmetadata = null;
+          video.oncanplay = null;
+          video.onerror = null;
+          video.pause();
+          video.removeAttribute('src');
+          video.load();
+        }
+
+        function done(verdict, errObj = null) {
+          if (finished) return;
+          finished = true;
+
+          // 1. Snapshot immutable evidence BEFORE any teardown or cleanup
+          const snapshot = {
+            verdict,
+            videoWidth: video.videoWidth || 0,
+            videoHeight: video.videoHeight || 0,
+            rvfcFrameCount: rvfcCount,
+            readyState: video.readyState,
+            networkState: video.networkState,
+            error: errObj,
+            elapsedMs: Date.now() - startTime
+          };
+
+          // 2. Perform teardown / DOM reset
+          cleanup();
+
+          // 3. Resolve with the immutable pre-teardown snapshot
+          resolve(snapshot);
+        }
+
+        const timeoutLimitMs = (item.targetTimeoutSec || 15) * 1000;
+        timer = setTimeout(() => {
+          done('TIMEOUT', { message: `Timeout after ${item.targetTimeoutSec}s` });
+        }, timeoutLimitMs);
+
+        video.onerror = () => {
+          const err = video.error;
+          done('MEDIA_ERROR', { code: err ? err.code : 4, message: err ? err.message : '' });
+        };
+
+        video.onloadedmetadata = () => {
+          lblDimensions.textContent = `${video.videoWidth}x${video.videoHeight}`;
+        };
+
+        function onFrame() {
+          if (finished) return;
+          rvfcCount++;
+          lblRvfc.textContent = String(rvfcCount);
+          if (rvfcCount >= 2 && video.videoWidth > 0 && video.videoHeight > 0) {
+            done('PASS_VIDEO');
+            return;
+          }
+          if ('requestVideoFrameCallback' in video) {
+            video.requestVideoFrameCallback(onFrame);
+          }
+        }
+
+        video.oncanplay = () => {
+          lblState.textContent = String(video.readyState);
+          video.play().catch(e => {
+            logTrace(`play() rejected: ${e.message}`, 'warn');
+          });
+          if ('requestVideoFrameCallback' in video) {
+            video.requestVideoFrameCallback(onFrame);
+          } else {
+            // Strict Contract: requestVideoFrameCallback is required to verify actual frame presentation
+            done('RVFC_UNSUPPORTED', { message: 'requestVideoFrameCallback is not supported in this environment' });
+          }
+        };
+
+        const streamUrl = `/api/health/video?path=${encodeURIComponent(item.filePath)}`;
+        video.src = streamUrl;
+        video.load();
+      });
+    }
+
+    initQueue();
+  </script>
+</body>
+</html>

@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>VREconder - PC Calibration Controller</title>
+  <style>
+    :root { --bg: #090d16; --card: #131b2e; --border: #243048; --text: #f8fafc; --muted: #94a3b8; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; padding: 16px 16px 120px 16px; line-height: 1.4; }
+    .container { max-width: 960px; margin: 0 auto; display: flex; flex-direction: column; gap: 12px; }
+    .card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 12px 16px; }
+    h1 { font-size: 1.15rem; font-weight: 700; color: #fff; display: flex; align-items: center; justify-content: space-between; }
+    .subtitle { font-size: 0.78rem; color: var(--muted); margin-top: 2px; }
+    .badge { display: inline-block; padding: 3px 8px; border-radius: 6px; font-size: 0.75rem; font-weight: bold; }
+    .badge-green { background: #065f46; color: #34d399; }
+    .badge-amber { background: #78350f; color: #fbbf24; }
+    .badge-red { background: #7f1d1d; color: #f87171; }
+    .badge-slate { background: #334155; color: #94a3b8; }
+    .card-dim { opacity: 0.55; filter: grayscale(40%); transition: opacity 0.3s ease; }
+    .stage-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-top: 8px; }
+    .stage-btn { padding: 10px 8px; background: #1e293b; color: #94a3b8; border: 2px solid #334155; border-radius: 8px; font-size: 0.82rem; font-weight: 700; cursor: pointer; text-align: center; }
+    .stage-btn:hover { border-color: #64748b; color: #fff; }
+    .stage-btn.active { background: #1e3a8a; color: #fff; border-color: #38bdf8; box-shadow: 0 0 12px rgba(56, 189, 248, 0.35); }
+    .btn-row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 6px; }
+    .action-btn { padding: 7px 12px; border-radius: 6px; border: none; font-size: 0.78rem; font-weight: 600; cursor: pointer; color: #fff; background: #334155; display: flex; align-items: center; gap: 4px; }
+    .action-btn:hover { opacity: 0.9; }
+    .action-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+    .action-btn.active { background: #0284c7; border: 1px solid #38bdf8; }
+    .btn-lens-on { background: #059669; }
+    .btn-lens-off { background: #475569; }
+    .btn-recenter { background: #0284c7; }
+    .btn-exit { background: #dc2626; }
+    .btn-save { background: #059669; }
+    .control-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 8px; }
+    .slider-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 4px; font-size: 0.78rem; }
+    .slider-row input[type="range"] { flex: 1; accent-color: #38bdf8; }
+    .slider-row input[type="range"]:disabled { opacity: 0.35; }
+    .slider-row .val { width: 65px; text-align: right; font-family: monospace; color: #38bdf8; font-weight: bold; }
+    .timing-table { width: 100%; border-collapse: collapse; font-size: 0.75rem; font-family: ui-monospace, monospace; margin-top: 6px; }
+    .timing-table th, .timing-table td { border: 1px solid #334155; padding: 4px 8px; text-align: left; }
+    .timing-table th { background: #1e293b; color: #cbd5e1; }
+    /* Fixed Bottom Transport Bar (Issue #19) */
+    .bottom-transport-bar {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      background: rgba(13, 20, 36, 0.96);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border-top: 1px solid var(--border);
+      padding: 10px 16px;
+      z-index: 9999;
+      box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.6);
+    }
+    .transport-inner { max-width: 960px; margin: 0 auto; display: flex; flex-direction: column; gap: 6px; }
+    .transport-meta-row { display: flex; justify-content: space-between; align-items: center; font-size: 0.78rem; gap: 8px; }
+    .transport-title-wrap { display: flex; align-items: center; gap: 6px; }
+    .transport-media-select { flex: 1; min-width: 0; padding: 4px 8px; background: #1e293b; color: #fff; border: 1px solid #334155; border-radius: 6px; font-size: 0.78rem; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; overflow: hidden; }
+    .transport-media-select:focus { outline: none; border-color: #38bdf8; }
+    .transport-time { font-family: ui-monospace, monospace; color: #38bdf8; font-weight: 700; font-size: 0.78rem; white-space: nowrap; }
+    .transport-scrub-row { display: flex; align-items: center; width: 100%; }
+    .transport-scrubber { width: 100%; height: 6px; border-radius: 3px; accent-color: #38bdf8; cursor: pointer; }
+    .transport-btn-row { display: flex; justify-content: center; gap: 8px; flex-wrap: wrap; margin-top: 2px; }
+    .btn-playpause { min-width: 80px; justify-content: center; background: #0284c7; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="card">
+      <h1>
+        <span>🎛️ VREconder PC Calibration Controller</span>
+        <div style="display:flex; gap:6px; flex-wrap:wrap;">
+          <span class="badge badge-green" id="badgeServerConnection">🟢 Server: Connected</span>
+          <span class="badge badge-slate" id="badgeIphoneConnection">⚪ iPhone: Offline</span>
+          <span class="badge badge-amber" id="badgeArmStatus">🟡 iPhone Unarmed</span>
+        </div>
+      </h1>
+      <div class="subtitle">Authoritative Calibration & Verification Gate (Issue #13 SSOT Control Surface)</div>
+    </div>
+
+    <!-- Mutually Exclusive Calibration Stages -->
+    <div class="card">
+      <div style="font-size:0.8rem; font-weight:700; color:var(--muted); text-transform:uppercase;">1. Active Calibration Stage</div>
+      <div class="stage-grid">
+        <button class="stage-btn active" id="btnStageA" onclick="setStage('A')">
+          Stage A: Video Mapping<br>
+          <span style="font-size:0.68rem; font-weight:normal; opacity:0.85;">Flat Diagnostic (No Optics)</span>
+        </button>
+        <button class="stage-btn" id="btnStageB" onclick="setStage('B')">
+          Stage B: Viewer Calibration<br>
+          <span style="font-size:0.68rem; font-weight:normal; opacity:0.85;">Live Tuning (Grid / Video+Grid)</span>
+        </button>
+        <button class="stage-btn" id="btnStageC" onclick="setStage('C')">
+          Stage C: Verification<br>
+          <span style="font-size:0.68rem; font-weight:normal; opacity:0.85;">Real Video (Locked Optics)</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Stage A: Diagnostic Tools & Video Mapping Panel -->
+    <div class="card" id="cardStageA">
+      <div style="display:flex; justify-content:space-between; align-items:center;">
+        <div>
+          <div style="font-size:0.8rem; font-weight:700; color:var(--muted); text-transform:uppercase;">2. Stage A — Diagnostic Tools & Video Mapping</div>
+          <div id="txtVideoMappingStatus" style="font-size:0.72rem; color:#f87171; font-weight:bold;">⚠️ Unconfirmed Video Mapping</div>
+        </div>
+        <button class="action-btn btn-save" id="btnSaveVideoMapping" onclick="saveVideoMapping()">💾 Save Video Mapping</button>
+      </div>
+
+      <!-- Diagnostic Overlays (Stage A only) -->
+      <div style="margin-top:8px; padding:8px 12px; background:rgba(0,0,0,0.25); border-radius:8px;">
+        <div style="font-size:0.72rem; font-weight:700; color:var(--muted); text-transform:uppercase;">Flat Diagnostic Inspection Tools:</div>
+        <div class="btn-row" style="margin-top:4px;">
+          <button class="action-btn" id="btnDiagEye" onclick="toggleDiagnosticEye()">👁 Eye: Left</button>
+          <button class="action-btn active" id="btnDiagGrid" onclick="toggleDiagnosticOverlay('showGrid')">▦ Grid</button>
+          <button class="action-btn active" id="btnDiagPlumb" onclick="toggleDiagnosticOverlay('showPlumbLines')">⫯ Plumb</button>
+          <button class="action-btn active" id="btnDiagHorizon" onclick="toggleDiagnosticOverlay('showHorizon')">━ Horizon</button>
+        </div>
+      </div>
+
+      <!-- Video Pose Adjustment -->
+      <div style="margin-top:8px; padding:8px 12px; background:rgba(0,0,0,0.25); border-radius:8px;">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <div style="font-size:0.72rem; font-weight:700; color:var(--muted); text-transform:uppercase;">Camera Pose Level Correction:</div>
+          <button class="action-btn" onclick="resetPose()" style="padding:2px 8px; font-size:0.7rem;">Reset Pose</button>
+        </div>
+        <div class="control-grid" style="margin-top:4px;">
+          <div>
+            <div class="slider-row">
+              <span style="width:50px;">Yaw:</span>
+              <input type="range" id="rngPoseYaw" min="-30" max="30" step="0.5" value="0" oninput="onPoseChange()">
+              <span class="val" id="valPoseYaw">0°</span>
+            </div>
+            <div class="slider-row">
+              <span style="width:50px;">Pitch:</span>
+              <input type="range" id="rngPosePitch" min="-30" max="30" step="0.5" value="0" oninput="onPoseChange()">
+              <span class="val" id="valPosePitch">0°</span>
+            </div>
+          </div>
+          <div>
+            <div class="slider-row">
+              <span style="width:50px;">Roll:</span>
+              <input type="range" id="rngPoseRoll" min="-30" max="30" step="0.5" value="0" oninput="onPoseChange()">
+              <span class="val" id="valPoseRoll">0°</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Video Geometry Mapping Form -->
+      <div class="control-grid" style="margin-top:8px;">
+        <div>
+          <div class="slider-row">
+            <span style="width:110px;">Projection:</span>
+            <select id="selProjection" onchange="onVideoMappingChange()" style="flex:1; background:#1e293b; color:#fff; border:1px solid #334155; padding:4px 6px; border-radius:4px; font-size:0.75rem;">
+              <option value="unknown">-- Select Projection --</option>
+              <option value="equirectangular">Equirectangular (Spherical)</option>
+              <option value="flat">Flat / Rectilinear (2D)</option>
+            </select>
+          </div>
+          <div class="slider-row">
+            <span style="width:110px;">Stereo Mode:</span>
+            <select id="selStereo" onchange="onVideoMappingChange()" style="flex:1; background:#1e293b; color:#fff; border:1px solid #334155; padding:4px 6px; border-radius:4px; font-size:0.75rem;">
+              <option value="unknown">-- Select Stereo --</option>
+              <option value="left-right">Side-by-Side (SBS 3D)</option>
+              <option value="top-bottom">Top-Bottom (Over-Under)</option>
+              <option value="mono">Mono (2D)</option>
+            </select>
+          </div>
+        </div>
+        <div>
+          <div class="slider-row">
+            <span style="width:120px;">Coverage FOV:</span>
+            <select id="selCoverageFov" onchange="onVideoMappingChange()" style="flex:1; background:#1e293b; color:#fff; border:1px solid #334155; padding:4px 6px; border-radius:4px; font-size:0.75rem;">
+              <option value="unknown">-- Unconfirmed --</option>
+              <option value="180">180° Half-Dome VR</option>
+              <option value="360">360° Full Sphere</option>
+            </select>
+          </div>
+          <div class="slider-row">
+            <span style="width:120px;">Eye Order:</span>
+            <select id="selEyeOrder" onchange="onVideoMappingChange()" style="flex:1; background:#1e293b; color:#fff; border:1px solid #334155; padding:4px 6px; border-radius:4px; font-size:0.75rem;">
+              <option value="unknown">-- Select Eye Order --</option>
+              <option value="left-right">Normal (Left-Right)</option>
+              <option value="right-left">Swapped (Right-Left)</option>
+            </select>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Viewer Optics Live Tuning Panel (Stage B & Stage C) -->
+    <div class="card" id="cardOptics">
+      <div style="display:flex; justify-content:space-between; align-items:center;">
+        <div>
+          <div style="font-size:0.8rem; font-weight:700; color:var(--muted); text-transform:uppercase;">3. Viewer Optics Calibration (Stage B/C)</div>
+          <div id="txtProfileStatus" style="font-size:0.72rem; color:#f87171; font-weight:bold;">⚠️ Unknown / Uncalibrated Profile</div>
+        </div>
+        <button class="action-btn btn-save" id="btnSaveViewer" onclick="saveMyViewerProfile()">💾 Save My Viewer Profile</button>
+      </div>
+
+      <div class="control-row" style="margin-top:8px;">
+        <div style="font-size:0.75rem; font-weight:700; color:var(--muted); text-transform:uppercase;">Active Viewer Profile (Stage B Only):</div>
+        <select id="selViewerPreset" onchange="onViewerPresetSelect(this.value)" style="width:100%; margin-top:4px; padding:6px 10px; background:#1e293b; color:#fff; border:1px solid #334155; border-radius:6px; font-size:0.8rem; font-weight:600;">
+          <option value="cardboard:reference_50deg">Cardboard-inspired Reference (50° Guidance) [Reference / Not Ground Truth]</option>
+          <option value="viewer:my_profile">My Viewer Profile (Saved Working Profile)</option>
+        </select>
+      </div>
+
+      <!-- Stage B Visual Reference Sub-modes -->
+      <div id="stageBVisualRefPanel" style="margin-top:8px;">
+        <div style="font-size:0.74rem; font-weight:700; color:var(--muted); text-transform:uppercase;">Stage B Visual Reference:</div>
+        <div class="stage-grid" style="grid-template-columns: 1fr 1fr; margin-top:4px;">
+          <button class="stage-btn active" id="btnVisualGridOnly" onclick="setViewerVisualMode('grid_only')">
+            ▦ Grid Only<br>
+            <span style="font-size:0.68rem; font-weight:normal; opacity:0.85;">Pure Synthetic Lines & 90° Corners</span>
+          </button>
+          <button class="stage-btn" id="btnVisualVideoGrid" onclick="setViewerVisualMode('video_grid')">
+            🎬 Video + Grid<br>
+            <span style="font-size:0.68rem; font-weight:normal; opacity:0.85;">Real VR Video + Stereo Reference Grid</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="btn-row" style="margin-top:8px;">
+        <button class="action-btn btn-lens-off" id="btnLensToggle" onclick="toggleLensCorrection()">⚪ LENS CORRECTION: OFF</button>
+        <button class="action-btn btn-recenter" onclick="sendAction('recenter')">🎯 Recenter View</button>
+        <button class="action-btn btn-exit" onclick="sendAction('exit_vr')">⚙ Exit VR</button>
+      </div>
+
+      <div id="lockNotice" style="display:none; margin-top:6px; font-size:0.72rem; color:#38bdf8; background:rgba(2,132,199,0.15); padding:4px 8px; border-radius:4px; border:1px solid rgba(56,189,248,0.3);">
+        🔒 Stage C Lock: Physical geometry & distortion coefficients are strictly locked. Test Video A / Video B under identical Viewer Profile.
+      </div>
+
+      <div id="stageCVerificationPanel" style="display:none; margin-top:6px; padding:8px 12px; background:rgba(30,58,138,0.25); border:1px solid #1e40af; border-radius:8px;">
+        <div style="font-size:0.74rem; font-weight:700; color:#60a5fa; text-transform:uppercase;">Stage C Verification Tools</div>
+        <label style="display:flex; align-items:center; gap:8px; font-size:0.8rem; font-weight:600; color:#38bdf8; cursor:pointer; margin-top:4px;">
+          <input type="checkbox" id="chkReferenceGrid" onchange="toggleReferenceGrid(this.checked)" style="accent-color:#38bdf8; width:16px; height:16px; cursor:pointer;">
+          <span>Show Reference Grid (Verification Overlay in Stereo Engine)</span>
+        </label>
+      </div>
+
+      <div class="control-grid" id="opticsControlsGrid" style="margin-top:8px;">
+        <div>
+          <div class="slider-row">
+            <span style="width:110px;">Distortion k1:</span>
+            <input type="range" id="rngK1" min="-0.50" max="0.80" step="0.005" value="0.0" oninput="onOpticsChange()">
+            <span class="val" id="valK1">--</span>
+          </div>
+          <div class="slider-row">
+            <span style="width:110px;">Distortion k2:</span>
+            <input type="range" id="rngK2" min="-0.30" max="0.80" step="0.005" value="0.0" oninput="onOpticsChange()">
+            <span class="val" id="valK2">--</span>
+          </div>
+          <div class="slider-row">
+            <span style="width:110px;">Max FOV (°):</span>
+            <input type="range" id="rngFov" min="40.0" max="75.0" step="0.5" value="50.0" oninput="onOpticsChange()">
+            <span class="val" id="valFov">--</span>
+          </div>
+        </div>
+        <div>
+          <div class="slider-row">
+            <span style="width:130px;">Screen-to-Lens (mm):</span>
+            <input type="range" id="rngScreenToLens" min="30.0" max="55.0" step="0.1" value="39.3" oninput="onOpticsChange()">
+            <span class="val" id="valScreenToLens">--</span>
+          </div>
+          <div class="slider-row">
+            <span style="width:130px;">Inter-Lens IPD (mm):</span>
+            <input type="range" id="rngInterLens" min="50.0" max="75.0" step="0.1" value="63.9" oninput="onOpticsChange()">
+            <span class="val" id="valInterLens">--</span>
+          </div>
+          <div class="slider-row">
+            <span style="width:130px;">Tray-to-Lens (mm):</span>
+            <input type="range" id="rngTrayToLens" min="25.0" max="45.0" step="0.1" value="35.0" oninput="onOpticsChange()">
+            <span class="val" id="valTrayToLens">--</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Performance Diagnostics & A/B Mode Selector (Issue #14) -->
+    <div class="card" id="cardPerformance">
+      <div style="font-size:0.8rem; font-weight:700; color:var(--muted); text-transform:uppercase;">4. Performance Harness &amp; A/B Matrix (Issue #14)</div>
+      <div class="control-grid" style="margin-top:8px;">
+        <div>
+          <div class="slider-row">
+            <span style="width:130px; font-weight:bold;">Upload Mode:</span>
+            <select id="selPerfMode" onchange="onPerformanceModeChange(this.value)" style="flex:1; background:#1e293b; color:#fff; border:1px solid #334155; padding:4px 6px; border-radius:4px; font-size:0.75rem;">
+              <option value="baseline">0. Baseline (Unconstrained Uploads)</option>
+              <option value="strict-rvfc">1. Strict rVFC (Hardware Decoded Only)</option>
+              <option value="strict-rvfc-dirty-ui" selected>2. Strict rVFC + Dirty UI Bypass</option>
+            </select>
+          </div>
+        </div>
+        <div>
+          <div class="slider-row">
+            <span style="width:130px; font-weight:bold;">Render Scale:</span>
+            <select id="selRenderScale" onchange="onRenderScaleChange(this.value)" style="flex:1; background:#1e293b; color:#fff; border:1px solid #334155; padding:4px 6px; border-radius:4px; font-size:0.75rem;">
+              <option value="1.0">1.00 (Native 100% DPR)</option>
+              <option value="0.85">0.85 (Balanced -28% Pixels)</option>
+              <option value="0.70">0.70 (Performance -51% Pixels)</option>
+            </select>
+          </div>
+        </div>
+      </div>
+      <div id="txtPerfSummary" style="margin-top:6px; font-size:0.72rem; color:#38bdf8; background:rgba(2,132,199,0.15); padding:4px 8px; border-radius:4px; border:1px solid rgba(56,189,248,0.3);">
+        Mode: <b id="valActivePerfMode">baseline</b> | Scale: <b id="valActiveRenderScale">1.00x</b> | FBO: <span id="valEyeFboSize">--</span> | Buffer Ahead: <span id="valBufferAhead">--</span>
+      </div>
+    </div>
+
+    <!-- iPhone Telemetry & Measured Timings -->
+    <div class="card" id="cardPerfTelemetry">
+      <div style="display:flex; justify-content:space-between; align-items:center;">
+        <div style="font-size:0.8rem; font-weight:700; color:var(--muted); text-transform:uppercase;">5. iPhone Telemetry &amp; Measured Performance</div>
+        <span id="badgePerfFreshness" style="font-size:0.72rem; font-weight:600; color:var(--muted);">Awaiting telemetry...</span>
+      </div>
+      <table class="timing-table">
+        <tr><th>Metric Group</th><th>Cadence / Rates</th><th>Details / Quality</th></tr>
+        <tr><td>Cadence (per sec)</td><td id="valPerfCadence">rAF: -- | rVFC: --</td><td id="valUploadCadence">VideoUp: -- | UIUp: --</td></tr>
+        <tr><td>Frame Time (ms)</td><td id="valFrameTimeAvg">avg: -- | p95: --</td><td id="valFrameTimeMax">max: --</td></tr>
+        <tr><td>Video Quality</td><td id="valVideoQuality">total: -- | drop: --</td><td id="valVideoDropRate">--</td></tr>
+        <tr><td>Display &amp; Viewport</td><td id="valDisplayViewport">Viewport: -- (DPR: --)</td><td id="valDrawingBuffer">DrawBuf: --</td></tr>
+        <tr><td>Playback &amp; Buffer</td><td id="valPlaybackStates">readyState: -- | net: --</td><td id="valBufferDetails">bufAhead: --</td></tr>
+        <tr><td>WebGL State</td><td id="valGlError">NO_ERROR</td><td id="valGlContextLoss">Loss/Restore: 0/0</td></tr>
+        <tr><td>First-Frame Latency</td><td id="valMetaAt">--</td><td id="valTotalLat" style="color:#34d399;font-weight:bold;">--</td></tr>
+        <tr><td>SHINECON Controller</td><td id="valControllerStatus" style="color:#38bdf8;font-weight:bold;">Standby</td><td id="valControllerEvent">--</td></tr>
+      </table>
+    </div>
+  </div>
+
+
+  <!-- Fixed Bottom Playback Transport Bar (Issue #19 SSOT Surface) -->
+  <div class="bottom-transport-bar" id="bottomTransportBar">
+    <div class="transport-inner">
+      <!-- Media Root / Folder Row (Issue #19 SSOT Media Source Placement) -->
+      <div class="transport-folder-row" style="display:flex; justify-content:space-between; align-items:center; font-size:0.75rem; color:var(--muted); gap:8px;">
+        <div style="display:flex; align-items:center; gap:6px; min-width:0; overflow:hidden;">
+          <span style="font-weight:700; text-transform:uppercase; white-space:nowrap;">📁 Folder:</span>
+          <span id="txtCurrentMediaRoot" style="font-family:monospace; color:#38bdf8; text-overflow:ellipsis; overflow:hidden; white-space:nowrap;" title="Current Media Root">--</span>
+          <span id="txtMediaRootCount" style="color:#34d399; font-weight:bold; white-space:nowrap;">--</span>
+        </div>
+        <div style="display:flex; align-items:center; gap:6px; white-space:nowrap;">
+          <span id="txtMediaRootStatus" style="font-size:0.7rem; font-weight:bold; color:#34d399;">Active</span>
+          <button class="action-btn" id="btnToggleMediaRootEditor" onclick="toggleMediaRootEditor()" style="padding:2px 8px; font-size:0.7rem; height:22px;">Change</button>
+        </div>
+      </div>
+
+      <!-- Collapsible Media Root Editor -->
+      <div id="mediaRootEditorPanel" style="display:none; margin-top:2px; padding:6px 8px; background:rgba(0,0,0,0.4); border:1px solid #334155; border-radius:6px;">
+        <div style="display:flex; gap:6px; align-items:center;">
+          <input type="text" id="inpMediaRoot" placeholder="Enter absolute directory (e.g. G:\Media\VR\Test)" style="flex:1; background:#0f172a; color:#f8fafc; border:1px solid #334155; padding:5px 8px; border-radius:4px; font-size:0.75rem; font-family:monospace;">
+          <button class="action-btn btn-save" id="btnApplyMediaRoot" onclick="applyMediaRoot()" style="padding:5px 10px; font-size:0.75rem; white-space:nowrap;">Apply &amp; Rescan</button>
+          <button class="action-btn" onclick="toggleMediaRootEditor(false)" style="padding:5px 8px; font-size:0.75rem;">✕</button>
+        </div>
+      </div>
+
+      <div class="transport-meta-row">
+        <div class="transport-title-wrap" style="flex:1; min-width:0; margin-right:12px;">
+          <span style="font-size:0.75rem; font-weight:700; color:var(--muted); text-transform:uppercase; white-space:nowrap;">🎬 Media:</span>
+          <select id="selMediaList" onchange="onSelectMedia(this.value)" class="transport-media-select">
+            <option value="">Loading videos...</option>
+          </select>
+        </div>
+        <div id="transportVideoTime" class="transport-time">0:00 / 0:00</div>
+      </div>
+      <div class="transport-scrub-row">
+        <input type="range" id="timelineScrubber" min="0" max="100" step="0.1" value="0" class="transport-scrubber" aria-label="Playback Timeline Scrubber">
+      </div>
+      <div class="transport-btn-row">
+        <button class="action-btn" onclick="sendAction('previous')" title="Previous Video">⏮ Prev</button>
+        <button class="action-btn" onclick="sendSeek(-5)" title="Step Back 5s">⏪ -5s</button>
+        <button class="action-btn" onclick="sendSeek(-1)" title="Step Back 1s">◀ -1s</button>
+        <button class="action-btn btn-playpause" id="btnPlayPause" onclick="sendAction('playPause')" title="Play/Pause Video">⏸ Freeze</button>
+        <button class="action-btn" onclick="sendSeek(1)" title="Step Forward 1s">+1s ▶</button>
+        <button class="action-btn" onclick="sendSeek(5)" title="Step Forward 5s">+5s ⏩</button>
+        <button class="action-btn" onclick="sendAction('next')" title="Next Video">⏭ Next</button>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="./src/controls/controller-app.js?v=20260824_v3"></script>
+</body>
+</html>
