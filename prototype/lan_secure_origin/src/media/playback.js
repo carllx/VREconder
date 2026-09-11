@@ -144,6 +144,7 @@ export class MediaController {
       // Update status and fail-closed state for this generation
       state.firstFrameTimings.statusText = errText;
       state.firstFrameTimings.ready = false;
+      state.firstFrameTimings.terminalFailure = true;
       this.videoFrameNeedsUpload = false;
 
       // Invalidate displayed texture so failed source never leaves stale frame
@@ -289,6 +290,7 @@ export class MediaController {
       firstTextureUploadAt: 0,
       firstRenderAt: 0,
       ready: false,
+      terminalFailure: false,
       statusText: 'Checking compatibility...'
     };
 
@@ -312,6 +314,7 @@ export class MediaController {
         }
         state.firstFrameTimings.statusText = statusMsg;
         state.firstFrameTimings.ready = false;
+        state.firstFrameTimings.terminalFailure = true;
 
         if (this.remoteLogHook) {
           this.remoteLogHook('WARN', 'MEDIA_PLAYBACK_BLOCKED_BY_POLICY', {

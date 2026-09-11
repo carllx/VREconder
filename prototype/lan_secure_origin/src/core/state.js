@@ -35,6 +35,7 @@ export const state = {
     firstTextureUploadAt: 0,
     firstRenderAt: 0,
     ready: false,
+    terminalFailure: false,
     statusText: 'Ready'
   },
 

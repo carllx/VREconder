@@ -6,7 +6,7 @@ import { GazeEngine } from './src/controls/gaze-engine.js';
 import { CommandModel } from './src/controls/command-model.js';
 import { renderStereoUI } from './src/controls/stereo-ui.js';
 import { state } from './src/core/state.js';
-import { TIMELINE_GEOMETRY, sphericalToDir } from './src/controls/patterns.js';
+import { TIMELINE_GEOMETRY, sphericalToDir, getActiveInteractiveItems } from './src/controls/patterns.js';
 import { getEffectiveViewerProfile } from './src/core/projection-profile.js';
 
 console.log('=== RUNNING DETERMINISTIC INTERACTION REGRESSION CHECKS ===\n');
@@ -465,18 +465,9 @@ console.log('\nIssue 23 - Check 5: Telemetry Error Seam Event Structure:');
   }
 }
 
-// Issue 23 - Check 6: Global Navigation Survivability During Stage C Unready/Error State
-console.log('\nIssue 23 - Check 6: Global Navigation Survivability During Stage C Unready/Error State:');
+// Issue 23 - Check 6: Global Navigation Survivability During Stage C Unready / Terminal Failure State
+console.log('\nIssue 23 - Check 6: Global Navigation Survivability During Stage C Unready / Terminal Failure State:');
 {
-  // 1. Setup Stage C unready/error state
-  state.inVR = true;
-  state.calibrationStage = 'C';
-  state.firstFrameTimings.ready = false;
-  state.firstFrameTimings.statusText = 'MEDIA_ERR_SRC_NOT_SUPPORTED';
-  state.activePattern = 'B';
-  state.patternB_open = false;
-  state.uiIsDirty = true;
-
   const mockCtx = {
     save: () => {},
     restore: () => {},
@@ -503,6 +494,31 @@ console.log('\nIssue 23 - Check 6: Global Navigation Survivability During Stage 
     shadowBlur: 0
   };
 
+  // ----------------------------------------------------
+  // Part A: Normal Loading / Unready Stage C (NOT terminal failure)
+  // When menu is closed: recovery controls MUST NOT be exposed!
+  // ----------------------------------------------------
+  state.inVR = true;
+  state.calibrationStage = 'C';
+  state.firstFrameTimings.ready = false;
+  state.firstFrameTimings.terminalFailure = false;
+  state.firstFrameTimings.statusText = 'Loading Frame...';
+  state.activePattern = 'B';
+  state.patternB_open = false;
+  state.uiIsDirty = true;
+
+  const normalVideo = new MockVideoElement();
+  const normalItems = getActiveInteractiveItems(new CommandModel({ video: normalVideo }), normalVideo);
+  const passNormalNoItems = (normalItems.length === 0);
+
+  // ----------------------------------------------------
+  // Part B: Terminal Failure Stage C (e.g. Media error / admission blocked)
+  // Menu is CLOSED (patternB_open === false), user has NOT pressed any controller button.
+  // Recovery controls (Next & Prev) MUST be exposed and reachable via gaze!
+  // ----------------------------------------------------
+  state.firstFrameTimings.terminalFailure = true;
+  state.firstFrameTimings.statusText = 'MEDIA_ERR_SRC_NOT_SUPPORTED';
+
   let nextCalled = false;
   const mockMedia = {
     video: new MockVideoElement(),
@@ -513,25 +529,22 @@ console.log('\nIssue 23 - Check 6: Global Navigation Survivability During Stage 
 
   const gazeEngine = new GazeEngine(commandModel, mockMedia.video);
 
-  // When menu is closed, renderStereoUI draws the unready status card without crashing
-  renderStereoUI(mockCtx, gazeEngine, commandModel, mockMedia.video, 1000, 1920, 1080);
-  const statusDrawn = mockCtx.drawnTexts.some(t => t.includes('MEDIA_ERR_SRC_NOT_SUPPORTED'));
+  // Even with patternB_open === false, active interactive items must include Next and Prev
+  const recoveryItems = getActiveInteractiveItems(commandModel, mockMedia.video);
+  const hasNextItem = recoveryItems.some(i => i.id === 'next');
+  const hasPrevItem = recoveryItems.some(i => i.id === 'prev');
+  const hasDismissItem = recoveryItems.some(i => i.id === 'close_radial'); // should be false since menu was not opened
 
-  // User confirms via controller: SINGLE_CONFIRM calls commandModel.toggleControls()
-  commandModel.toggleControls();
-  const menuOpened = state.patternB_open === true;
-
-  // Render stereo UI with menu open in unready Stage C
+  // Render stereo UI during closed-menu terminal recovery
   mockCtx.drawnTexts = [];
   state.uiIsDirty = true;
-  const rendered = renderStereoUI(mockCtx, gazeEngine, commandModel, mockMedia.video, 1010, 1920, 1080);
+  renderStereoUI(mockCtx, gazeEngine, commandModel, mockMedia.video, 1000, 1920, 1080);
 
-  // Verify interactive menu items including Next ('⏭') and Prev ('⏮') are drawn
+  const statusDrawn = mockCtx.drawnTexts.some(t => t.includes('MEDIA_ERR_SRC_NOT_SUPPORTED'));
   const nextDrawn = mockCtx.drawnTexts.includes('⏭');
   const prevDrawn = mockCtx.drawnTexts.includes('⏮');
-  const dismissDrawn = mockCtx.drawnTexts.includes('✕');
 
-  // Verify gaze reticle and navigation execution via gaze dwell
+  // Verify gaze hover and dwell execution on Next without any physical controller press
   // Floor radial Next is at yaw = 15*cos(-30°), pitch = -34 + 15*sin(-30°)
   const rad = -30 * (Math.PI / 180);
   const targetYaw = 15.0 * Math.cos(rad);
@@ -544,12 +557,32 @@ console.log('\nIssue 23 - Check 6: Global Navigation Survivability During Stage 
   gazeEngine.update(3050); // Hold dwell for >1000ms
   const passNextExecution = (nextCalled === true);
 
-  const passCheck6 = (statusDrawn && menuOpened && nextDrawn && prevDrawn && dismissDrawn && hoveredNext && passNextExecution);
+  // ----------------------------------------------------
+  // Part C: Media selection lifecycle clears terminalFailure
+  // ----------------------------------------------------
+  const controller = new MediaController(new MockVideoElement(), null);
+  // Terminal failure is active:
+  state.firstFrameTimings.terminalFailure = true;
+  controller.selectVideo('next_playable.mp4');
+  const passClearedOnSelect = (state.firstFrameTimings.terminalFailure === false);
+
+  const passCheck6 = (
+    passNormalNoItems &&
+    hasNextItem &&
+    hasPrevItem &&
+    !hasDismissItem &&
+    statusDrawn &&
+    nextDrawn &&
+    prevDrawn &&
+    hoveredNext &&
+    passNextExecution &&
+    passClearedOnSelect
+  );
 
   if (passCheck6) {
-    console.log('  ✅ Issue 23 - Check 6 PASSED (Navigation remains fully functional while media unready)');
+    console.log('  ✅ Issue 23 - Check 6 PASSED (Terminal failure exposes in-headset recovery independently of controller; cleared on selection)');
   } else {
-    console.log(`  ❌ Issue 23 - Check 6 FAILED: status=${statusDrawn}, menuOpened=${menuOpened}, nextDrawn=${nextDrawn}, prevDrawn=${prevDrawn}, hoveredNext=${hoveredNext}, passNext=${passNextExecution}`);
+    console.log(`  ❌ Issue 23 - Check 6 FAILED: passNormalNoItems=${passNormalNoItems}, hasNext=${hasNextItem}, hasPrev=${hasPrevItem}, statusDrawn=${statusDrawn}, nextDrawn=${nextDrawn}, prevDrawn=${prevDrawn}, hoveredNext=${hoveredNext}, passNext=${passNextExecution}, passCleared=${passClearedOnSelect}`);
     allPassed = false;
   }
 }

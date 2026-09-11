@@ -91,7 +91,9 @@ export function isStereoUIDynamic(gazeEngine, now) {
   const isMenuOpen = (state.activePattern === 'A' && state.patternA_open) ||
                      (state.activePattern === 'B' && state.patternB_open) ||
                      (state.activePattern === 'C' && state.patternC_open);
-  if (isMenuOpen) {
+  const isTerminalRecovery = (state.calibrationStage === 'C' && state.firstFrameTimings.terminalFailure);
+
+  if (isMenuOpen || isTerminalRecovery) {
     if (gazeEngine && (gazeEngine.dwellProgress > 0 || gazeEngine.currentHoveredItem !== null)) return true;
     return true; // Timeline/playhead or menu animations active
   }
@@ -232,7 +234,8 @@ export function renderStereoUI(uiCtx, gazeEngine, commandModel, videoElement, no
     }
 
     const isOpticsMode = (state.calibrationStage === 'B' || state.calibrationStage === 'C');
-    if (isOpticsMode && !state.patternB_open) {
+    const isTerminalRecovery = (state.calibrationStage === 'C' && state.firstFrameTimings.terminalFailure);
+    if (isOpticsMode && !state.patternB_open && !isTerminalRecovery) {
       uiCtx.restore();
       continue;
     }

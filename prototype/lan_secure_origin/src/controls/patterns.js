@@ -32,9 +32,11 @@ export function getActiveInteractiveItems(commandModel, videoElement) {
                      (state.activePattern === 'B' && state.patternB_open) ||
                      (state.activePattern === 'C' && state.patternC_open);
 
+  const isTerminalRecovery = (state.calibrationStage === 'C' && state.firstFrameTimings.terminalFailure);
+
   if (state.activePattern === 'A') {
-    // Pattern A: Floor Arc (Only return items when menu is OPEN)
-    if (state.patternA_open) {
+    // Pattern A: Floor Arc (Return items when menu is OPEN, or during Stage C terminal failure)
+    if (state.patternA_open || isTerminalRecovery) {
       const arcNodes = [
         { id: 'prev', icon: '⏮', yaw: -20, pitch: floorAnchorPitch, radiusDeg: 3.6, cmd: () => commandModel.previous() },
         { id: 'seek_back', icon: '⏪', yaw: -10, pitch: floorAnchorPitch, radiusDeg: 3.6, cmd: () => commandModel.seekBackward(10) },
@@ -49,22 +51,24 @@ export function getActiveInteractiveItems(commandModel, videoElement) {
       });
     }
   } else if (state.activePattern === 'B') {
-    // Pattern B: Floor Radial (Only return items when menu is OPEN)
-    if (state.patternB_open) {
+    // Pattern B: Floor Radial (Return items when menu is OPEN, or during Stage C terminal failure)
+    if (state.patternB_open || isTerminalRecovery) {
       const radialR = 15.0;
 
-      // Center Dismiss Button
-      items.push({
-        id: 'close_radial',
-        icon: '✕',
-        pattern: 'B',
-        yaw: 0,
-        pitch: floorAnchorPitch,
-        radiusDeg: 4.0,
-        color: '#ef4444',
-        cmd: () => commandModel.closeControls(),
-        dirWorld: sphericalToDir(0, floorAnchorPitch)
-      });
+      // Center Dismiss Button (only needed if menu was explicitly opened)
+      if (state.patternB_open) {
+        items.push({
+          id: 'close_radial',
+          icon: '✕',
+          pattern: 'B',
+          yaw: 0,
+          pitch: floorAnchorPitch,
+          radiusDeg: 4.0,
+          color: '#ef4444',
+          cmd: () => commandModel.closeControls(),
+          dirWorld: sphericalToDir(0, floorAnchorPitch)
+        });
+      }
 
       // 6 Radial Nodes
       const radialNodes = [
@@ -94,8 +98,8 @@ export function getActiveInteractiveItems(commandModel, videoElement) {
       });
     }
   } else if (state.activePattern === 'C') {
-    // Pattern C: Floor HUD (Only return items when menu is OPEN)
-    if (state.patternC_open) {
+    // Pattern C: Floor HUD (Return items when menu is OPEN, or during Stage C terminal failure)
+    if (state.patternC_open || isTerminalRecovery) {
       const hudNodes = [
         { id: 'seek_b60', icon: '⏮ 60s', yaw: -18, pitch: floorAnchorPitch + 5, radiusDeg: 3.4, cmd: () => commandModel.seekBackward(60) },
         { id: 'seek_b10', icon: '⏪ 10s', yaw: -6, pitch: floorAnchorPitch + 5, radiusDeg: 3.4, cmd: () => commandModel.seekBackward(10) },
