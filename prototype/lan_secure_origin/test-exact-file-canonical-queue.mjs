@@ -181,20 +181,67 @@ assert(artifactAfter.includes('"groupId":"GRP-INCOMPAT-002"'), 'Artifact must co
 
 // Restore artifact file to pre-test state
 if (artifactBefore === null) {
-  fs.unlinkSync(testArtifactPath);
+  if (fs.existsSync(testArtifactPath)) fs.unlinkSync(testArtifactPath);
 } else {
   fs.writeFileSync(testArtifactPath, artifactBefore, 'utf8');
 }
 console.log('  ✅ [PASS] 8. Result isolation: written to ignored artifact, frozen results untouched');
 
-// 6. Check runner HTML contains canonical mode logic and references correct endpoints
+// Test POST /api/repair/canonical-result DETERMINISTIC PERSISTENCE FAILURE
+// We back up the artifact if it exists, replace the artifact path with a directory so fs.appendFileSync fails,
+// verify fail-closed HTTP 400 with { ok: false }, and restore the environment in a finally block.
+const backupArtifact = fs.existsSync(testArtifactPath) ? fs.readFileSync(testArtifactPath, 'utf8') : null;
+try {
+  if (fs.existsSync(testArtifactPath)) {
+    fs.unlinkSync(testArtifactPath);
+  }
+  // Create directory at exact artifact path to force appendFileSync to throw EISDIR
+  fs.mkdirSync(testArtifactPath);
+
+  mockReq = {
+    method: 'POST',
+    url: '/api/repair/canonical-result',
+    on(event, handler) {
+      if (event === 'data') handler(JSON.stringify(testPayload));
+      if (event === 'end') handler();
+    }
+  };
+  mockRes = createMockRes();
+  handled = handleMediaHealthRoutes(mockReq, mockRes, '/api/repair/canonical-result');
+  assert.strictEqual(handled, true, 'Handler must handle POST /api/repair/canonical-result');
+  assert.strictEqual(resStatusCode, 400, 'Persistence error must return HTTP 400');
+  const errResp = JSON.parse(resData);
+  assert.strictEqual(errResp.ok, false, 'Response ok must be false on persistence error');
+  assert.ok(errResp.error, 'Error message must be present in response');
+
+  // Also verify frozen evidence remains untouched even during failure
+  assert.strictEqual(
+    computeFileSha256(resultsPath),
+    FROZEN_RESULTS_SHA256,
+    'Frozen results file SHA must remain completely untouched during persistence failure'
+  );
+} finally {
+  // Safe deterministic cleanup
+  if (fs.existsSync(testArtifactPath) && fs.statSync(testArtifactPath).isDirectory()) {
+    fs.rmdirSync(testArtifactPath);
+  }
+  if (backupArtifact !== null) {
+    fs.writeFileSync(testArtifactPath, backupArtifact, 'utf8');
+  }
+}
+console.log('  ✅ [PASS] 9. Deterministic persistence failure: fail-closed HTTP 400, ok=false, frozen intact');
+
+// 6. Check runner HTML contains canonical mode logic, explicit DOM bindings, and fail-loud checks
 const htmlPath = path.join(PROTOTYPE_DIR, 'repair-probe-runner.html');
 const htmlContent = fs.readFileSync(htmlPath, 'utf8');
+assert(htmlContent.includes("const lblVerdict = document.getElementById('lblVerdict');"), 'HTML must explicitly bind lblVerdict');
+assert(htmlContent.includes("const traceLog = document.getElementById('traceLog');"), 'HTML must explicitly bind traceLog');
+assert(htmlContent.includes('btnStart.disabled = true;'), 'HTML must keep btnStart disabled until verified init');
 assert(htmlContent.includes('/api/repair/canonical-queue'), 'HTML must reference /api/repair/canonical-queue');
 assert(htmlContent.includes('/api/repair/canonical-result'), 'HTML must reference /api/repair/canonical-result');
-assert(htmlContent.includes('mode'), 'HTML must inspect mode param');
-assert(htmlContent.includes('Exact-12 Canonical Mode'), 'HTML must provide canonical mode title');
-console.log('  ✅ [PASS] 9. Runner HTML cleanly integrates canonical mode');
+assert(htmlContent.includes('Canonical queue length violation'), 'HTML must fail loud on canonical queue length !== 12');
+assert(htmlContent.includes('INIT_FAILED'), 'HTML must set INIT_FAILED verdict on failure');
+console.log('  ✅ [PASS] 10. Runner HTML restores explicit DOM bindings and fail-loud canonical initialization');
 
 // 7. Verify code structure limits (< 600 physical lines)
 const routerFile = path.join(PROTOTYPE_DIR, 'src/health/media-health-router.mjs');
@@ -203,8 +250,8 @@ assert(routerLines < 600, 'media-health-router.mjs exceeds 600 lines: ' + router
 
 const testLines = fs.readFileSync(__filename, 'utf8').split('\n').length;
 assert(testLines < 600, 'test-exact-file-canonical-queue.mjs exceeds 600 lines: ' + testLines);
-console.log('  ✅ [PASS] 10. File line limits satisfied (router=' + routerLines + ', test=' + testLines + ' < 600)');
+console.log('  ✅ [PASS] 11. File line limits satisfied (router=' + routerLines + ', test=' + testLines + ' < 600)');
 
 console.log('============================================================');
-console.log('🎉 ALL 10 TEST SECTIONS PASSED SUCCESSFULLY!');
+console.log('🎉 ALL 11 TEST SECTIONS PASSED SUCCESSFULLY!');
 console.log('============================================================');

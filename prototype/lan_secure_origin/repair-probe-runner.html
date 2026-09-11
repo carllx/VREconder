@@ -183,6 +183,8 @@
     const lblDimensions = document.getElementById('lblDimensions');
     const lblState = document.getElementById('lblState');
     const lblRvfc = document.getElementById('lblRvfc');
+    const lblVerdict = document.getElementById('lblVerdict');
+    const traceLog = document.getElementById('traceLog');
     const pageTitle = document.getElementById('pageTitle');
     const pageSubtitle = document.getElementById('pageSubtitle');
 
@@ -197,6 +199,9 @@
       document.title = 'VREconder - Issue #21 Canonical Repaired Probes';
     }
 
+    // Keep Start disabled until queue initialization succeeds
+    btnStart.disabled = true;
+
     function logTrace(msg, type = 'info') {
       const d = document.createElement('div');
       d.className = 'trace-item';
@@ -207,11 +212,34 @@
     async function initQueue() {
       try {
         logTrace(`获取 Issue #21 ${isCanonicalMode ? 'Exact-12 Canonical' : '规范化修复'}测试清单 (${queueUrl})...`, 'info');
-        const res = await fetch(queueUrl).then(r => r.json());
-        queue = res.queue || [];
+        const res = await fetch(queueUrl);
+        if (!res.ok) {
+          throw new Error(`HTTP ${res.status} ${res.statusText}`);
+        }
+        const data = await res.json();
+        if (isCanonicalMode) {
+          if (!data || data.ok !== true) {
+            throw new Error(data?.error || 'Canonical response ok !== true');
+          }
+          if (!Array.isArray(data.queue) || data.queue.length !== 12) {
+            throw new Error(`Canonical queue length violation: expected exactly 12, got ${data?.queue?.length}`);
+          }
+        }
+        queue = data.queue || [];
+        if (queue.length === 0) {
+          throw new Error('测试队列为空，无法开始测试');
+        }
         updateStats();
+        btnStart.disabled = false;
         logTrace(`队列初始化成功: 共 ${queue.length} 个待测目标`, 'info');
       } catch (err) {
+        queue = [];
+        updateStats();
+        btnStart.disabled = true;
+        if (lblVerdict) {
+          lblVerdict.textContent = 'INIT_FAILED';
+          lblVerdict.className = 'badge badge-fail';
+        }
         logTrace(`加载队列失败: ${err.message}`, 'fail');
       }
     }
