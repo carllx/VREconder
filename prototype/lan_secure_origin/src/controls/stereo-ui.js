@@ -210,8 +210,6 @@ export function renderStereoUI(uiCtx, gazeEngine, commandModel, videoElement, no
       uiCtx.textAlign = 'center';
       uiCtx.textBaseline = 'middle';
       uiCtx.fillText('⏳ ' + (state.firstFrameTimings.statusText || 'Loading Frame...'), eyeCenterX, eyeCenterY);
-      uiCtx.restore();
-      continue;
     }
 
     // Always show feedback toast (Farther / Closer / Recenter / Menu)

@@ -3,6 +3,8 @@
 // ==========================================
 import assert from 'node:assert';
 import { GazeEngine } from './src/controls/gaze-engine.js';
+import { CommandModel } from './src/controls/command-model.js';
+import { renderStereoUI } from './src/controls/stereo-ui.js';
 import { state } from './src/core/state.js';
 import { TIMELINE_GEOMETRY, sphericalToDir } from './src/controls/patterns.js';
 import { getEffectiveViewerProfile } from './src/core/projection-profile.js';
@@ -459,6 +461,95 @@ console.log('\nIssue 23 - Check 5: Telemetry Error Seam Event Structure:');
     console.log('  ✅ Issue 23 - Check 5 PASSED');
   } else {
     console.log('  ❌ Issue 23 - Check 5 FAILED');
+    allPassed = false;
+  }
+}
+
+// Issue 23 - Check 6: Global Navigation Survivability During Stage C Unready/Error State
+console.log('\nIssue 23 - Check 6: Global Navigation Survivability During Stage C Unready/Error State:');
+{
+  // 1. Setup Stage C unready/error state
+  state.inVR = true;
+  state.calibrationStage = 'C';
+  state.firstFrameTimings.ready = false;
+  state.firstFrameTimings.statusText = 'MEDIA_ERR_SRC_NOT_SUPPORTED';
+  state.activePattern = 'B';
+  state.patternB_open = false;
+  state.uiIsDirty = true;
+
+  const mockCtx = {
+    save: () => {},
+    restore: () => {},
+    beginPath: () => {},
+    closePath: () => {},
+    moveTo: () => {},
+    lineTo: () => {},
+    quadraticCurveTo: () => {},
+    arc: () => {},
+    rect: () => {},
+    clip: () => {},
+    fill: () => {},
+    stroke: () => {},
+    clearRect: () => {},
+    fillText: function(text, x, y) { this.drawnTexts.push(text); },
+    drawnTexts: [],
+    fillStyle: '',
+    strokeStyle: '',
+    lineWidth: 1,
+    font: '',
+    textAlign: '',
+    textBaseline: '',
+    shadowColor: '',
+    shadowBlur: 0
+  };
+
+  let nextCalled = false;
+  const mockMedia = {
+    video: new MockVideoElement(),
+    selectVideo: () => Promise.resolve({ allowed: true })
+  };
+  const commandModel = new CommandModel(mockMedia);
+  commandModel.next = () => { nextCalled = true; return Promise.resolve({ allowed: true }); };
+
+  const gazeEngine = new GazeEngine(commandModel, mockMedia.video);
+
+  // When menu is closed, renderStereoUI draws the unready status card without crashing
+  renderStereoUI(mockCtx, gazeEngine, commandModel, mockMedia.video, 1000, 1920, 1080);
+  const statusDrawn = mockCtx.drawnTexts.some(t => t.includes('MEDIA_ERR_SRC_NOT_SUPPORTED'));
+
+  // User confirms via controller: SINGLE_CONFIRM calls commandModel.toggleControls()
+  commandModel.toggleControls();
+  const menuOpened = state.patternB_open === true;
+
+  // Render stereo UI with menu open in unready Stage C
+  mockCtx.drawnTexts = [];
+  state.uiIsDirty = true;
+  const rendered = renderStereoUI(mockCtx, gazeEngine, commandModel, mockMedia.video, 1010, 1920, 1080);
+
+  // Verify interactive menu items including Next ('⏭') and Prev ('⏮') are drawn
+  const nextDrawn = mockCtx.drawnTexts.includes('⏭');
+  const prevDrawn = mockCtx.drawnTexts.includes('⏮');
+  const dismissDrawn = mockCtx.drawnTexts.includes('✕');
+
+  // Verify gaze reticle and navigation execution via gaze dwell
+  // Floor radial Next is at yaw = 15*cos(-30°), pitch = -34 + 15*sin(-30°)
+  const rad = -30 * (Math.PI / 180);
+  const targetYaw = 15.0 * Math.cos(rad);
+  const targetPitch = -34 + 15.0 * Math.sin(rad);
+  state.cameraForward = sphericalToDir(targetYaw, targetPitch);
+
+  gazeEngine.update(2000);
+  const hoveredNext = (gazeEngine.currentHoveredItem && gazeEngine.currentHoveredItem.id === 'next');
+
+  gazeEngine.update(3050); // Hold dwell for >1000ms
+  const passNextExecution = (nextCalled === true);
+
+  const passCheck6 = (statusDrawn && menuOpened && nextDrawn && prevDrawn && dismissDrawn && hoveredNext && passNextExecution);
+
+  if (passCheck6) {
+    console.log('  ✅ Issue 23 - Check 6 PASSED (Navigation remains fully functional while media unready)');
+  } else {
+    console.log(`  ❌ Issue 23 - Check 6 FAILED: status=${statusDrawn}, menuOpened=${menuOpened}, nextDrawn=${nextDrawn}, prevDrawn=${prevDrawn}, hoveredNext=${hoveredNext}, passNext=${passNextExecution}`);
     allPassed = false;
   }
 }
