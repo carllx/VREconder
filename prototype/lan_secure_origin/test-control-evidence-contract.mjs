@@ -5,11 +5,15 @@
 // 1. PC owns experimental commandId and server preserves it unchanged.
 // 2. HTTP 200 / serverAccepted alone yields SERVER_ACCEPTED / UNPROVEN, NEVER PASS.
 // 3. iPhone ACK without matching renderer readback yields APPLIED, NOT PASS.
-// 4. Stale renderer readback (older than apply time) does NOT satisfy PASS.
-// 5. Mismatched commandId in renderer readback does NOT satisfy PASS (Command B readback cannot satisfy Command A).
+// 4. Stale/non-monotonic renderer readback does NOT satisfy PASS.
+// 5. Mismatched commandId or action in renderer readback does NOT satisfy PASS.
 // 6. Generic latest-state snapshot without matching commandId NEVER satisfies PASS.
-// 7. Full causal match: request.commandId === ack.commandId === renderEvidence.commandId + matching effective state -> PASS.
-// 8. Timeout handling: disconnected / absent telemetry results in TIMEOUT.
+// 7. Fail closed on effective-state verification: unsupported / absent expectation NEVER yields PASS.
+// 8. Unsupported/untracked commands do not start 4s polling and never receive scientific PASS.
+// 9. Full causal match: request.commandId === ack.commandId === renderEvidence.commandId + monotonic timing + state match -> PASS.
+// 10. Runtime condition modeling: Receive Command A, receive Command B before a render commit, retain independently correlated evidence without cross-talk or lost PASS.
+// 11. Conflicting Commands A and B before render commit: Command A's overwritten state never receives PASS.
+// 12. Timeout handling: disconnected / absent telemetry results in TIMEOUT.
 
 import assert from 'assert';
 import { ControlEvidenceClient } from './src/controls/control-evidence-client.js';
@@ -61,8 +65,8 @@ test('2. Missing ACK remains SERVER_ACCEPTED / UNPROVEN, never PASS', () => {
   const telem = {
     controlEvidence: {
       renderFrameSeq: 10,
-      lastAck: null,
-      lastRenderEvidence: null
+      acks: [],
+      renderEvidence: []
     }
   };
   const evalResult = client.evaluateTelemetryEvidence(record, telem);
@@ -77,15 +81,15 @@ test('3. Matching ACK alone yields APPLIED, never PASS', () => {
   const telem = {
     controlEvidence: {
       renderFrameSeq: 15,
-      lastAck: {
+      acks: [{
         commandId: 'cmd_102',
         action: 'set_diagnostic_overlay',
         status: 'applied',
         phoneReceivedAt: 1000,
         appliedAt: 1005,
         appliedState: { key: 'showGrid', value: false }
-      },
-      lastRenderEvidence: null
+      }],
+      renderEvidence: []
     }
   };
   const evalResult = client.evaluateTelemetryEvidence(record, telem);
@@ -101,22 +105,22 @@ test('4. Command B renderEvidence does NOT satisfy Command A', () => {
   const telem = {
     controlEvidence: {
       renderFrameSeq: 20,
-      lastAck: {
+      acks: [{
         commandId: 'cmd_A',
         action: 'set_diagnostic_overlay',
         status: 'applied',
         phoneReceivedAt: 1000,
         appliedAt: 1005,
         appliedState: { key: 'showGrid', value: false }
-      },
+      }],
       // Render evidence is from Command B!
-      lastRenderEvidence: {
+      renderEvidence: [{
         commandId: 'cmd_B',
         action: 'set_diagnostic_overlay',
         frameSeq: 20,
         readbackAt: 1010,
         effectiveState: { diagOverlay: { showGrid: false } }
-      }
+      }]
     }
   };
   const evalResult = client.evaluateTelemetryEvidence(recordA, telem);
@@ -124,27 +128,76 @@ test('4. Command B renderEvidence does NOT satisfy Command A', () => {
   assert.notStrictEqual(evalResult.verdict, 'PASS');
 });
 
-// Test 5: Stale readback timestamp older than appliedAt is rejected
-test('5. Readback older than appliedAt does not yield PASS', () => {
+// Test 5: Action mismatch in ACK or render evidence does not yield PASS
+test('5. Action mismatch in ACK or render evidence does not yield PASS', () => {
   const client = new ControlEvidenceClient();
   const record = { commandId: 'cmd_103', action: 'set_diagnostic_overlay' };
-  const telem = {
+  const telemAckMismatch = {
     controlEvidence: {
       renderFrameSeq: 25,
-      lastAck: {
+      acks: [{
+        commandId: 'cmd_103',
+        action: 'set_reference_grid', // Mismatch!
+        status: 'applied',
+        phoneReceivedAt: 2000,
+        appliedAt: 2005
+      }],
+      renderEvidence: []
+    }
+  };
+  const evalResult = client.evaluateTelemetryEvidence(record, telemAckMismatch);
+  assert.strictEqual(evalResult.verdict, 'REJECTED');
+
+  const telemRenderMismatch = {
+    controlEvidence: {
+      renderFrameSeq: 25,
+      acks: [{
         commandId: 'cmd_103',
         action: 'set_diagnostic_overlay',
         status: 'applied',
         phoneReceivedAt: 2000,
         appliedAt: 2005
-      },
-      lastRenderEvidence: {
+      }],
+      renderEvidence: [{
         commandId: 'cmd_103',
+        action: 'set_reference_grid', // Mismatch!
+        frameSeq: 25,
+        readbackAt: 2010,
+        effectiveState: {}
+      }]
+    }
+  };
+  const evalResult2 = client.evaluateTelemetryEvidence(record, telemRenderMismatch);
+  assert.strictEqual(evalResult2.verdict, 'APPLIED');
+  assert.notStrictEqual(evalResult2.verdict, 'PASS');
+});
+
+// Test 6: Stale / non-monotonic timing is rejected
+test('6. Non-monotonic causal timing does not yield PASS', () => {
+  const client = new ControlEvidenceClient();
+  const record = {
+    commandId: 'cmd_104',
+    action: 'set_diagnostic_overlay',
+    issuedAt: 3000,
+    serverAcceptedAt: 3002
+  };
+  const telem = {
+    controlEvidence: {
+      renderFrameSeq: 25,
+      acks: [{
+        commandId: 'cmd_104',
         action: 'set_diagnostic_overlay',
-        frameSeq: 24,
-        readbackAt: 1999, // Stale!
+        status: 'applied',
+        phoneReceivedAt: 3005,
+        appliedAt: 3010
+      }],
+      renderEvidence: [{
+        commandId: 'cmd_104',
+        action: 'set_diagnostic_overlay',
+        frameSeq: 25,
+        readbackAt: 3008, // Stale! readbackAt < appliedAt
         effectiveState: { diagOverlay: { showGrid: false } }
-      }
+      }]
     }
   };
   const evalResult = client.evaluateTelemetryEvidence(record, telem);
@@ -152,150 +205,246 @@ test('5. Readback older than appliedAt does not yield PASS', () => {
   assert.notStrictEqual(evalResult.verdict, 'PASS');
 });
 
-// Test 6: Effective state mismatch fails validator predicate
-test('6. Effective state mismatch does not yield PASS', () => {
+// Test 7: Fail closed when no supported expectation exists
+test('7. Fail closed on unsupported action: never PASS', () => {
   const client = new ControlEvidenceClient();
-  const record = { commandId: 'cmd_104', action: 'set_diagnostic_overlay' };
+  const record = {
+    commandId: 'cmd_105',
+    action: 'set_viewer_params', // Non-allowlisted experimental action
+    payload: { action: 'set_viewer_params', k1: 0.1 },
+    issuedAt: 4000,
+    serverAcceptedAt: 4002
+  };
   const telem = {
     controlEvidence: {
       renderFrameSeq: 30,
-      lastAck: {
-        commandId: 'cmd_104',
-        action: 'set_diagnostic_overlay',
+      acks: [{
+        commandId: 'cmd_105',
+        action: 'set_viewer_params',
         status: 'applied',
-        phoneReceivedAt: 3000,
-        appliedAt: 3005
-      },
-      lastRenderEvidence: {
-        commandId: 'cmd_104',
-        action: 'set_diagnostic_overlay',
+        phoneReceivedAt: 4005,
+        appliedAt: 4010
+      }],
+      renderEvidence: [{
+        commandId: 'cmd_105',
+        action: 'set_viewer_params',
         frameSeq: 30,
-        readbackAt: 3010,
-        effectiveState: { diagOverlay: { showGrid: true } } // Mismatched! Expected false
-      }
+        readbackAt: 4015,
+        effectiveState: { k1: 0.1 }
+      }]
     }
   };
-  const expectationFn = (t, eff) => eff.diagOverlay && eff.diagOverlay.showGrid === false;
-  const evalResult = client.evaluateTelemetryEvidence(record, telem, expectationFn);
+  const evalResult = client.evaluateTelemetryEvidence(record, telem);
+  assert.strictEqual(evalResult.verdict, 'UNPROVEN', 'Must fail closed when expectation is absent');
+  assert.notStrictEqual(evalResult.verdict, 'PASS');
+});
+
+// Test 8: Effective state mismatch fails
+test('8. Effective state mismatch fails validator expectation', () => {
+  const client = new ControlEvidenceClient();
+  const record = {
+    commandId: 'cmd_106',
+    action: 'set_diagnostic_overlay',
+    payload: { action: 'set_diagnostic_overlay', key: 'showGrid', value: false },
+    issuedAt: 5000,
+    serverAcceptedAt: 5002
+  };
+  const telem = {
+    controlEvidence: {
+      renderFrameSeq: 35,
+      acks: [{
+        commandId: 'cmd_106',
+        action: 'set_diagnostic_overlay',
+        status: 'applied',
+        phoneReceivedAt: 5005,
+        appliedAt: 5010
+      }],
+      renderEvidence: [{
+        commandId: 'cmd_106',
+        action: 'set_diagnostic_overlay',
+        frameSeq: 35,
+        readbackAt: 5015,
+        effectiveState: { diagOverlay: { showGrid: true } } // Mismatch: expected false
+      }]
+    }
+  };
+  const evalResult = client.evaluateTelemetryEvidence(record, telem);
   assert.strictEqual(evalResult.verdict, 'APPLIED');
   assert.notStrictEqual(evalResult.verdict, 'PASS');
 });
 
-// Test 7: Full causal chain satisfied: PASS
-test('7. Complete causal chain (request -> server -> phone -> render readback -> state match) yields PASS', () => {
+// Test 9: Complete causal chain satisfied: PASS
+test('9. Complete causal chain (request -> server -> phone -> render readback -> state match) yields PASS', () => {
   const client = new ControlEvidenceClient();
-  const record = { commandId: 'cmd_105', action: 'set_diagnostic_overlay' };
+  const record = {
+    commandId: 'cmd_107',
+    action: 'set_diagnostic_overlay',
+    payload: { action: 'set_diagnostic_overlay', key: 'showGrid', value: false },
+    issuedAt: 6000,
+    serverAcceptedAt: 6002
+  };
   const telem = {
     controlEvidence: {
-      renderFrameSeq: 35,
-      lastAck: {
-        commandId: 'cmd_105',
+      renderFrameSeq: 40,
+      acks: [{
+        commandId: 'cmd_107',
         action: 'set_diagnostic_overlay',
         status: 'applied',
-        phoneReceivedAt: 4000,
-        appliedAt: 4005,
+        phoneReceivedAt: 6005,
+        appliedAt: 6010,
         appliedState: { key: 'showGrid', value: false }
-      },
-      lastRenderEvidence: {
-        commandId: 'cmd_105',
+      }],
+      renderEvidence: [{
+        commandId: 'cmd_107',
         action: 'set_diagnostic_overlay',
-        frameSeq: 35,
-        readbackAt: 4010,
+        frameSeq: 40,
+        readbackAt: 6015,
         effectiveState: { diagOverlay: { showGrid: false, showPlumbLines: true, showHorizon: true } }
-      }
+      }]
     }
   };
-  const expectationFn = (t, eff) => eff.diagOverlay && eff.diagOverlay.showGrid === false;
-  const evalResult = client.evaluateTelemetryEvidence(record, telem, expectationFn);
+  const evalResult = client.evaluateTelemetryEvidence(record, telem);
   assert.strictEqual(evalResult.verdict, 'PASS');
   assert.strictEqual(evalResult.renderConfirmed, true);
   assert.strictEqual(evalResult.iphoneAckReceived, true);
 });
 
-// Test 8: Rejected action on phone yields REJECTED
-test('8. iPhone rejection yields REJECTED verdict', () => {
+// Test 10: Runtime modeling: Command A and Command B received before next render commit
+test('10. Runtime condition: Commands A and B arrive before next render commit and both obtain independent PASS', () => {
   const client = new ControlEvidenceClient();
-  const record = { commandId: 'cmd_106', action: 'invalid_action' };
-  const telem = {
-    controlEvidence: {
-      renderFrameSeq: 40,
-      lastAck: {
-        commandId: 'cmd_106',
-        action: 'invalid_action',
-        status: 'rejected',
-        reason: 'Unrecognized action',
-        phoneReceivedAt: 5000,
-        appliedAt: 5001
-      },
-      lastRenderEvidence: null
-    }
+  const recordA = {
+    commandId: 'cmd_rapid_A',
+    action: 'set_diagnostic_overlay',
+    payload: { action: 'set_diagnostic_overlay', key: 'showGrid', value: false },
+    issuedAt: 7000,
+    serverAcceptedAt: 7002
   };
-  const evalResult = client.evaluateTelemetryEvidence(record, telem);
-  assert.strictEqual(evalResult.verdict, 'REJECTED');
-});
+  const recordB = {
+    commandId: 'cmd_rapid_B',
+    action: 'set_diagnostic_overlay',
+    payload: { action: 'set_diagnostic_overlay', key: 'showHorizon', value: false },
+    issuedAt: 7003,
+    serverAcceptedAt: 7004
+  };
 
-// Test 9: Rapid succession - Command A followed by Command B
-test('9. Rapid succession: Command A and Command B maintain distinct causal evidence without crosstalk', () => {
-  const client = new ControlEvidenceClient();
-  const recordA = { commandId: 'cmd_seq_A', action: 'set_diagnostic_overlay' };
-  const recordB = { commandId: 'cmd_seq_B', action: 'set_diagnostic_overlay' };
-
-  // Telemetry when Command A applied and rendered
-  const telemA = {
+  // Telemetry representing single subsequent render frame where both pending commits were drained
+  const telemBoth = {
     controlEvidence: {
       renderFrameSeq: 50,
-      lastAck: {
-        commandId: 'cmd_seq_A',
-        action: 'set_diagnostic_overlay',
-        status: 'applied',
-        phoneReceivedAt: 6000,
-        appliedAt: 6005
-      },
-      lastRenderEvidence: {
-        commandId: 'cmd_seq_A',
-        action: 'set_diagnostic_overlay',
-        frameSeq: 50,
-        readbackAt: 6010,
-        effectiveState: { diagOverlay: { showGrid: false } }
-      }
+      acks: [
+        {
+          commandId: 'cmd_rapid_B',
+          action: 'set_diagnostic_overlay',
+          status: 'applied',
+          phoneReceivedAt: 7006,
+          appliedAt: 7008,
+          appliedState: { key: 'showHorizon', value: false }
+        },
+        {
+          commandId: 'cmd_rapid_A',
+          action: 'set_diagnostic_overlay',
+          status: 'applied',
+          phoneReceivedAt: 7005,
+          appliedAt: 7007,
+          appliedState: { key: 'showGrid', value: false }
+        }
+      ],
+      renderEvidence: [
+        {
+          commandId: 'cmd_rapid_B',
+          action: 'set_diagnostic_overlay',
+          frameSeq: 50,
+          readbackAt: 7015,
+          effectiveState: { diagOverlay: { showGrid: false, showHorizon: false } }
+        },
+        {
+          commandId: 'cmd_rapid_A',
+          action: 'set_diagnostic_overlay',
+          frameSeq: 50,
+          readbackAt: 7015,
+          effectiveState: { diagOverlay: { showGrid: false, showHorizon: false } }
+        }
+      ]
     }
   };
 
-  const evalA = client.evaluateTelemetryEvidence(recordA, telemA, (t, eff) => !eff.diagOverlay.showGrid);
-  assert.strictEqual(evalA.verdict, 'PASS');
+  const evalA = client.evaluateTelemetryEvidence(recordA, telemBoth);
+  const evalB = client.evaluateTelemetryEvidence(recordB, telemBoth);
 
-  // Next frame: Command B arrives and is applied and rendered
-  const telemB = {
-    controlEvidence: {
-      renderFrameSeq: 51,
-      lastAck: {
-        commandId: 'cmd_seq_B',
-        action: 'set_diagnostic_overlay',
-        status: 'applied',
-        phoneReceivedAt: 6015,
-        appliedAt: 6020
-      },
-      lastRenderEvidence: {
-        commandId: 'cmd_seq_B',
-        action: 'set_diagnostic_overlay',
-        frameSeq: 51,
-        readbackAt: 6025,
-        effectiveState: { diagOverlay: { showHorizon: false } }
-      }
-    }
-  };
-
-  const evalB = client.evaluateTelemetryEvidence(recordB, telemB, (t, eff) => !eff.diagOverlay.showHorizon);
-  assert.strictEqual(evalB.verdict, 'PASS');
-
-  // Verify that evaluating telemB against recordA does NOT falsely satisfy recordA
-  const evalA_on_B = client.evaluateTelemetryEvidence(recordA, telemB);
-  assert.notStrictEqual(evalA_on_B.verdict, 'PASS');
+  assert.strictEqual(evalA.verdict, 'PASS', 'Command A must PASS independently');
+  assert.strictEqual(evalB.verdict, 'PASS', 'Command B must PASS independently');
 });
 
-// Test 10: Mock dispatchTrackedCommand network integration with timeout (offline client)
-await testAsync('10. Mock dispatchTrackedCommand times out when telemetry never arrives', async () => {
-  // Mock fetch: server accepts POST, but GET /api/telemetry returns no evidence
+// Test 11: Conflicting Commands A and B on same property before render: Overwritten A never PASSes
+test('11. Conflicting Commands A and B before render: Overwritten A never PASSes', () => {
+  const client = new ControlEvidenceClient();
+  const recordA = {
+    commandId: 'cmd_conflict_A',
+    action: 'set_diagnostic_overlay',
+    payload: { action: 'set_diagnostic_overlay', key: 'showGrid', value: false }, // Wanted false
+    issuedAt: 8000,
+    serverAcceptedAt: 8002
+  };
+  const recordB = {
+    commandId: 'cmd_conflict_B',
+    action: 'set_diagnostic_overlay',
+    payload: { action: 'set_diagnostic_overlay', key: 'showGrid', value: true }, // Overwrote with true before render
+    issuedAt: 8003,
+    serverAcceptedAt: 8004
+  };
+
+  const telemConflict = {
+    controlEvidence: {
+      renderFrameSeq: 60,
+      acks: [
+        { commandId: 'cmd_conflict_B', action: 'set_diagnostic_overlay', status: 'applied', phoneReceivedAt: 8006, appliedAt: 8008 },
+        { commandId: 'cmd_conflict_A', action: 'set_diagnostic_overlay', status: 'applied', phoneReceivedAt: 8005, appliedAt: 8007 }
+      ],
+      renderEvidence: [
+        { commandId: 'cmd_conflict_B', action: 'set_diagnostic_overlay', frameSeq: 60, readbackAt: 8015, effectiveState: { diagOverlay: { showGrid: true } } },
+        { commandId: 'cmd_conflict_A', action: 'set_diagnostic_overlay', frameSeq: 60, readbackAt: 8015, effectiveState: { diagOverlay: { showGrid: true } } }
+      ]
+    }
+  };
+
+  const evalA = client.evaluateTelemetryEvidence(recordA, telemConflict);
+  const evalB = client.evaluateTelemetryEvidence(recordB, telemConflict);
+
+  assert.strictEqual(evalA.verdict, 'APPLIED', 'Overwritten Command A must NOT PASS because rendered state was true');
+  assert.strictEqual(evalB.verdict, 'PASS', 'Command B matches rendered state and PASSes');
+});
+
+// Test 12: Unsupported / general controller commands remain untracked and do not poll
+await testAsync('12. Unsupported / general controller commands remain untracked and do not poll', async () => {
+  let postCount = 0;
+  let telemCount = 0;
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url, opts) => {
+    if (url === '/api/calibration/control') {
+      postCount++;
+      return { ok: true, json: async () => ({ status: 'ok', broadcasted: true }) };
+    }
+    if (url === '/api/telemetry') {
+      telemCount++;
+      return { ok: true, json: async () => ({ latestTelemetry: {} }) };
+    }
+    return { ok: false, status: 404 };
+  };
+
+  try {
+    const client = new ControlEvidenceClient();
+    const result = await client.dispatchTrackedCommand({ action: 'select_media', relPath: 'test.mp4' });
+    assert.strictEqual(result.untracked, true, 'Marked as untracked');
+    assert.strictEqual(result.verdict, 'UNPROVEN', 'Verdict is UNPROVEN');
+    assert.strictEqual(postCount, 1, 'Sent POST once');
+    assert.strictEqual(telemCount, 0, 'Did NOT poll telemetry for unsupported command');
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+// Test 13: Mock dispatchTrackedCommand network integration with timeout (offline client)
+await testAsync('13. Mock dispatchTrackedCommand times out when telemetry never arrives', async () => {
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async (url, opts) => {
     if (url === '/api/calibration/control') {

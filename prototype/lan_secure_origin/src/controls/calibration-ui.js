@@ -28,9 +28,9 @@ export class CalibrationUI {
     this.activeVideoProfile = null;
     this.activeViewerProfile = this.storage.activeViewerProfile;
 
-    // Control Evidence Contract tracking
-    this.lastCommandAck = null;
-    this.pendingRenderCommit = null;
+    // Control Evidence Contract tracking (bounded collections)
+    this.recentCommandAcks = [];
+    this.pendingRenderCommits = [];
 
     this.initDOM();
     this.initSSEBridge();
@@ -227,24 +227,63 @@ export class CalibrationUI {
       }
     }
 
-    // Control Evidence Contract: Record mutation ACK & arm renderer readback
+    // Control Evidence Contract: Explicit tracked-action handling only
+    // Only safe, synchronously observable actions receive scientific ACK semantics.
+    // Malformed / unsupported tracked commands are rejected or untracked; never fall through to applied.
     if (commandId) {
-      const appliedAt = Date.now();
-      const appliedState = this.captureAppliedStateForAction(act, msg);
-      this.lastCommandAck = {
-        commandId,
-        action: act,
-        status: 'applied',
-        phoneReceivedAt,
-        appliedAt,
-        appliedState
-      };
-      this.pendingRenderCommit = {
-        commandId,
-        action: act,
-        appliedAt,
-        appliedState
-      };
+      const isTrackedAction = (
+        act === 'set_diagnostic_overlay' ||
+        act === 'set_reference_grid' ||
+        act === 'set_diagnostic_eye'
+      );
+
+      if (isTrackedAction) {
+        let isApplied = false;
+        let rejectReason = null;
+
+        if (act === 'set_diagnostic_overlay') {
+          if (['showGrid', 'showPlumbLines', 'showHorizon'].includes(msg.key) && typeof msg.value === 'boolean' && this.diagnosticOverlay) {
+            isApplied = true;
+          } else {
+            rejectReason = 'Invalid diagnostic overlay key or value';
+          }
+        } else if (act === 'set_reference_grid') {
+          if (typeof msg.enabled === 'boolean') {
+            isApplied = true;
+          } else {
+            rejectReason = 'Invalid reference grid enabled flag';
+          }
+        } else if (act === 'set_diagnostic_eye') {
+          if (typeof msg.eye === 'number' && (msg.eye === 0 || msg.eye === 1)) {
+            isApplied = true;
+          } else {
+            rejectReason = 'Invalid diagnostic eye value';
+          }
+        }
+
+        const ack = {
+          commandId,
+          action: act,
+          status: isApplied ? 'applied' : 'rejected',
+          reason: rejectReason,
+          phoneReceivedAt,
+          appliedAt: Date.now(),
+          appliedState: isApplied ? this.captureAppliedStateForAction(act, msg) : null
+        };
+
+        this.recentCommandAcks.unshift(ack);
+        if (this.recentCommandAcks.length > 16) this.recentCommandAcks.pop();
+
+        if (isApplied) {
+          this.pendingRenderCommits.push({
+            commandId,
+            action: act,
+            appliedAt: ack.appliedAt,
+            appliedState: ack.appliedState
+          });
+          if (this.pendingRenderCommits.length > 16) this.pendingRenderCommits.shift();
+        }
+      }
     }
   }
 
@@ -265,12 +304,6 @@ export class CalibrationUI {
     }
     if (act === 'set_reference_grid') {
       return { showReferenceGrid: state.showReferenceGrid === true };
-    }
-    if (act === 'set_stage') {
-      return { stage: state.calibrationStage };
-    }
-    if (act === 'set_viewer_visual_mode') {
-      return { viewerVisualMode: state.viewerVisualMode };
     }
     return { action: act };
   }

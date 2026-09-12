@@ -354,7 +354,7 @@ let lastFpsTime = performance.now();
 let frameCounter = 0;
 let lastFrameTime = performance.now();
 let renderFrameSeq = 0;
-let lastRenderEvidence = null;
+const recentRenderEvidence = [];
 
 function renderLoop(now) {
   requestAnimationFrame(renderLoop);
@@ -441,27 +441,31 @@ function renderLoop(now) {
 
   // Control Evidence Contract: Sample renderer-effective readback on actual rendered frame
   renderFrameSeq++;
-  if (calibrationUI.pendingRenderCommit) {
-    const pending = calibrationUI.pendingRenderCommit;
-    calibrationUI.pendingRenderCommit = null;
+  if (calibrationUI.pendingRenderCommits && calibrationUI.pendingRenderCommits.length > 0) {
+    const commits = calibrationUI.pendingRenderCommits.splice(0);
     const nowMs = Date.now();
-    lastRenderEvidence = {
-      commandId: pending.commandId,
-      action: pending.action,
-      frameSeq: renderFrameSeq,
-      readbackAt: nowMs,
-      effectiveState: {
-        stage: state.calibrationStage,
-        selectedEye: calibrationUI.selectedEye || 0,
-        diagOverlay: {
-          showGrid: !!(calibrationUI.diagnosticOverlay && calibrationUI.diagnosticOverlay.showGrid),
-          showPlumbLines: !!(calibrationUI.diagnosticOverlay && calibrationUI.diagnosticOverlay.showPlumbLines),
-          showHorizon: !!(calibrationUI.diagnosticOverlay && calibrationUI.diagnosticOverlay.showHorizon)
-        },
-        showReferenceGrid: state.showReferenceGrid === true,
-        viewerVisualMode: state.viewerVisualMode || 'grid_only'
-      }
+    const currentEffectiveState = {
+      selectedEye: calibrationUI.selectedEye || 0,
+      diagOverlay: {
+        showGrid: !!(calibrationUI.diagnosticOverlay && calibrationUI.diagnosticOverlay.showGrid),
+        showPlumbLines: !!(calibrationUI.diagnosticOverlay && calibrationUI.diagnosticOverlay.showPlumbLines),
+        showHorizon: !!(calibrationUI.diagnosticOverlay && calibrationUI.diagnosticOverlay.showHorizon)
+      },
+      showReferenceGrid: state.showReferenceGrid === true
     };
+
+    for (const pending of commits) {
+      recentRenderEvidence.unshift({
+        commandId: pending.commandId,
+        action: pending.action,
+        frameSeq: renderFrameSeq,
+        readbackAt: nowMs,
+        effectiveState: currentEffectiveState
+      });
+    }
+    while (recentRenderEvidence.length > 16) {
+      recentRenderEvidence.pop();
+    }
   }
 }
 
@@ -512,11 +516,13 @@ setInterval(() => {
       showPlumbLines: !!(calibrationUI.diagnosticOverlay && calibrationUI.diagnosticOverlay.showPlumbLines),
       showHorizon: !!(calibrationUI.diagnosticOverlay && calibrationUI.diagnosticOverlay.showHorizon)
     },
-    // Control Evidence Contract
+    // Control Evidence Contract (bounded collections)
     controlEvidence: {
       renderFrameSeq: renderFrameSeq,
-      lastAck: calibrationUI.lastCommandAck || null,
-      lastRenderEvidence: lastRenderEvidence || null
+      acks: calibrationUI.recentCommandAcks ? calibrationUI.recentCommandAcks.slice(0, 16) : [],
+      renderEvidence: recentRenderEvidence.slice(0, 16),
+      lastAck: (calibrationUI.recentCommandAcks && calibrationUI.recentCommandAcks.length > 0) ? calibrationUI.recentCommandAcks[0] : null,
+      lastRenderEvidence: recentRenderEvidence.length > 0 ? recentRenderEvidence[0] : null
     },
     videoPaused: !!video.paused,
     currentTime: video.currentTime || 0,
