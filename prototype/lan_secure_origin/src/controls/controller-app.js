@@ -108,17 +108,15 @@ export function renderVideoSelect() {
 
 export async function sendControl(payload) {
   try {
-    await fetch('/api/calibration/control', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    });
+    return await evidenceClient.dispatchTrackedCommand(payload);
   } catch (e) {
     console.error('Failed to send control command', e);
   }
 }
 
 import { initMediaRootController, initTimelineScrubber, isScrubbing, formatTime } from './media-root-controller.js';
+import { evidenceClient } from './control-evidence-client.js';
+import { initControlEvidenceUI } from './control-evidence-ui.js';
 
 export function onSelectMedia(relPath) {
   if (!relPath) return;
@@ -562,6 +560,7 @@ initEventSource();
 loadVideoList();
 initTimelineScrubber(sendControl);
 initMediaRootController();
+initControlEvidenceUI(evidenceClient);
 applyStageLocks('A');
 
 setInterval(async () => {

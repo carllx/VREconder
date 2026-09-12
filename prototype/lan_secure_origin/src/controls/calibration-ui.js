@@ -28,6 +28,10 @@ export class CalibrationUI {
     this.activeVideoProfile = null;
     this.activeViewerProfile = this.storage.activeViewerProfile;
 
+    // Control Evidence Contract tracking
+    this.lastCommandAck = null;
+    this.pendingRenderCommit = null;
+
     this.initDOM();
     this.initSSEBridge();
   }
@@ -63,6 +67,8 @@ export class CalibrationUI {
 
     if (!msg.action) return;
     const act = msg.action;
+    const phoneReceivedAt = Date.now();
+    const commandId = msg.commandId || null;
 
     if (act === 'set_stage') {
       this.switchStage(msg.stage);
@@ -220,6 +226,53 @@ export class CalibrationUI {
         logAction('Saved Video Mapping', this.activeVideoProfile);
       }
     }
+
+    // Control Evidence Contract: Record mutation ACK & arm renderer readback
+    if (commandId) {
+      const appliedAt = Date.now();
+      const appliedState = this.captureAppliedStateForAction(act, msg);
+      this.lastCommandAck = {
+        commandId,
+        action: act,
+        status: 'applied',
+        phoneReceivedAt,
+        appliedAt,
+        appliedState
+      };
+      this.pendingRenderCommit = {
+        commandId,
+        action: act,
+        appliedAt,
+        appliedState
+      };
+    }
+  }
+
+  captureAppliedStateForAction(act, msg) {
+    if (act === 'set_diagnostic_overlay') {
+      return {
+        key: msg.key,
+        value: msg.value,
+        diagnosticOverlay: {
+          showGrid: !!(this.diagnosticOverlay && this.diagnosticOverlay.showGrid),
+          showPlumbLines: !!(this.diagnosticOverlay && this.diagnosticOverlay.showPlumbLines),
+          showHorizon: !!(this.diagnosticOverlay && this.diagnosticOverlay.showHorizon)
+        }
+      };
+    }
+    if (act === 'set_diagnostic_eye') {
+      return { selectedEye: this.selectedEye };
+    }
+    if (act === 'set_reference_grid') {
+      return { showReferenceGrid: state.showReferenceGrid === true };
+    }
+    if (act === 'set_stage') {
+      return { stage: state.calibrationStage };
+    }
+    if (act === 'set_viewer_visual_mode') {
+      return { viewerVisualMode: state.viewerVisualMode };
+    }
+    return { action: act };
   }
 
   switchStage(stage) {

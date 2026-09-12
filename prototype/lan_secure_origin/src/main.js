@@ -353,6 +353,8 @@ if (btnVrExit) {
 let lastFpsTime = performance.now();
 let frameCounter = 0;
 let lastFrameTime = performance.now();
+let renderFrameSeq = 0;
+let lastRenderEvidence = null;
 
 function renderLoop(now) {
   requestAnimationFrame(renderLoop);
@@ -436,6 +438,31 @@ function renderLoop(now) {
       shouldUploadUI
     );
   }
+
+  // Control Evidence Contract: Sample renderer-effective readback on actual rendered frame
+  renderFrameSeq++;
+  if (calibrationUI.pendingRenderCommit) {
+    const pending = calibrationUI.pendingRenderCommit;
+    calibrationUI.pendingRenderCommit = null;
+    const nowMs = Date.now();
+    lastRenderEvidence = {
+      commandId: pending.commandId,
+      action: pending.action,
+      frameSeq: renderFrameSeq,
+      readbackAt: nowMs,
+      effectiveState: {
+        stage: state.calibrationStage,
+        selectedEye: calibrationUI.selectedEye || 0,
+        diagOverlay: {
+          showGrid: !!(calibrationUI.diagnosticOverlay && calibrationUI.diagnosticOverlay.showGrid),
+          showPlumbLines: !!(calibrationUI.diagnosticOverlay && calibrationUI.diagnosticOverlay.showPlumbLines),
+          showHorizon: !!(calibrationUI.diagnosticOverlay && calibrationUI.diagnosticOverlay.showHorizon)
+        },
+        showReferenceGrid: state.showReferenceGrid === true,
+        viewerVisualMode: state.viewerVisualMode || 'grid_only'
+      }
+    };
+  }
 }
 
 requestAnimationFrame(renderLoop);
@@ -484,6 +511,12 @@ setInterval(() => {
       showGrid: !!(calibrationUI.diagnosticOverlay && calibrationUI.diagnosticOverlay.showGrid),
       showPlumbLines: !!(calibrationUI.diagnosticOverlay && calibrationUI.diagnosticOverlay.showPlumbLines),
       showHorizon: !!(calibrationUI.diagnosticOverlay && calibrationUI.diagnosticOverlay.showHorizon)
+    },
+    // Control Evidence Contract
+    controlEvidence: {
+      renderFrameSeq: renderFrameSeq,
+      lastAck: calibrationUI.lastCommandAck || null,
+      lastRenderEvidence: lastRenderEvidence || null
     },
     videoPaused: !!video.paused,
     currentTime: video.currentTime || 0,

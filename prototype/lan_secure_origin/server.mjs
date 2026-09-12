@@ -160,16 +160,23 @@ function handleRequest(req, res, isHttps) {
     return;
   }
 
-  // Calibration Control POST
+  // Calibration Control POST (Control Evidence Contract)
   if (pathname === '/api/calibration/control' && req.method === 'POST') {
     let body = '';
     req.on('data', chunk => { body += chunk; });
     req.on('end', () => {
       try {
         const payload = JSON.parse(body);
+        const serverAcceptedAt = Date.now();
+        payload.serverAcceptedAt = serverAcceptedAt;
         broadcastCalibrationEvent(payload);
         res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ status: 'ok', broadcasted: true }));
+        res.end(JSON.stringify({
+          status: 'ok',
+          broadcasted: true,
+          commandId: payload.commandId || null,
+          serverAcceptedAt: serverAcceptedAt
+        }));
       } catch (err) {
         res.writeHead(400, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ error: err.message }));
