@@ -396,6 +396,26 @@ function renderLoop(now) {
   const isVR = state.inVR || calibrationUI.currentMode === 'vr';
   const effectiveViewerProfile = getEffectiveViewerProfile(calibrationUI.activeViewerProfile);
 
+  // Capture consumed render-path inputs immediately before the render call
+  const frameConsumedInputs = {
+    renderMode: isVR ? 'vr' : 'diagnostic',
+    sceneType: vrRenderer.sceneType,
+    // Inputs consumed in diagnostic path:
+    diagnosticConsumed: !isVR ? {
+      selectedEye: calibrationUI.selectedEye || 0,
+      diagOverlay: {
+        showGrid: !!(calibrationUI.diagnosticOverlay && calibrationUI.diagnosticOverlay.showGrid),
+        showPlumbLines: !!(calibrationUI.diagnosticOverlay && calibrationUI.diagnosticOverlay.showPlumbLines),
+        showHorizon: !!(calibrationUI.diagnosticOverlay && calibrationUI.diagnosticOverlay.showHorizon)
+      }
+    } : null,
+    // Inputs consumed in VR path:
+    vrConsumed: isVR ? {
+      showReferenceGrid: state.showReferenceGrid === true,
+      referenceGridActiveInShader: (vrRenderer.sceneType === 0 && vrRenderer.showReferenceGrid === true)
+    } : null
+  };
+
   if (!isVR) {
     // 1. Diagnostic Mode: Single Rectilinear View
     vrRenderer.renderDiagnosticView(
@@ -445,13 +465,12 @@ function renderLoop(now) {
     const commits = calibrationUI.pendingRenderCommits.splice(0);
     const nowMs = Date.now();
     const currentEffectiveState = {
-      selectedEye: calibrationUI.selectedEye || 0,
-      diagOverlay: {
-        showGrid: !!(calibrationUI.diagnosticOverlay && calibrationUI.diagnosticOverlay.showGrid),
-        showPlumbLines: !!(calibrationUI.diagnosticOverlay && calibrationUI.diagnosticOverlay.showPlumbLines),
-        showHorizon: !!(calibrationUI.diagnosticOverlay && calibrationUI.diagnosticOverlay.showHorizon)
-      },
-      showReferenceGrid: state.showReferenceGrid === true
+      renderMode: frameConsumedInputs.renderMode,
+      sceneType: frameConsumedInputs.sceneType,
+      selectedEye: frameConsumedInputs.diagnosticConsumed ? frameConsumedInputs.diagnosticConsumed.selectedEye : null,
+      diagOverlay: frameConsumedInputs.diagnosticConsumed ? frameConsumedInputs.diagnosticConsumed.diagOverlay : null,
+      showReferenceGrid: frameConsumedInputs.vrConsumed ? frameConsumedInputs.vrConsumed.showReferenceGrid : false,
+      referenceGridActiveInShader: frameConsumedInputs.vrConsumed ? frameConsumedInputs.vrConsumed.referenceGridActiveInShader : false
     };
 
     for (const pending of commits) {

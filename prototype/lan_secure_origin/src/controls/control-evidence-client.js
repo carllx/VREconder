@@ -36,6 +36,7 @@ export class ControlEvidenceClient {
 
   /**
    * Derives an action-specific expectation predicate for allowlisted commands.
+   * Enforces actual render-path consumption (e.g. diagnostic overlay requires renderMode === 'diagnostic').
    * Returns null for non-allowlisted / unsupported actions (which must fail closed).
    */
   deriveActionExpectation(payload) {
@@ -49,6 +50,7 @@ export class ControlEvidenceClient {
         return (telem, effectiveState) => {
           return Boolean(
             effectiveState &&
+            effectiveState.renderMode === 'diagnostic' &&
             effectiveState.diagOverlay &&
             effectiveState.diagOverlay[key] === val
           );
@@ -61,10 +63,14 @@ export class ControlEvidenceClient {
       const enabled = payload.enabled;
       if (typeof enabled === 'boolean') {
         return (telem, effectiveState) => {
-          return Boolean(
-            effectiveState &&
-            effectiveState.showReferenceGrid === enabled
-          );
+          if (!effectiveState || effectiveState.renderMode !== 'vr') return false;
+          if (effectiveState.showReferenceGrid !== enabled) return false;
+          // In VR shader, uShowReferenceGrid is active iff sceneType === 0 && showReferenceGrid === true
+          if (enabled === true) {
+            return effectiveState.referenceGridActiveInShader === true;
+          } else {
+            return effectiveState.referenceGridActiveInShader === false;
+          }
         };
       }
       return null;
@@ -76,6 +82,7 @@ export class ControlEvidenceClient {
         return (telem, effectiveState) => {
           return Boolean(
             effectiveState &&
+            effectiveState.renderMode === 'diagnostic' &&
             effectiveState.selectedEye === eye
           );
         };
@@ -99,8 +106,10 @@ export class ControlEvidenceClient {
    * Enforces:
    * 1. request.commandId === ack.commandId === renderEvidence.commandId
    * 2. request.action === ack.action === renderEvidence.action
-   * 3. Monotonic causal timing: issuedAt <= serverAcceptedAt <= phoneReceivedAt <= appliedAt <= readbackAt
-   * 4. Strict action-specific effective state match (fails closed if expectation is absent or unmet).
+   * 3. Independent domain-local monotonic timing:
+   *    - PC domain: issuedAt <= serverAcceptedAt
+   *    - iPhone domain: phoneReceivedAt <= appliedAt <= readbackAt
+   * 4. Strict action-specific effective state match including render-path consumption (fails closed).
    */
   evaluateTelemetryEvidence(record, telem, stateExpectationFn) {
     if (!telem) {
@@ -167,28 +176,25 @@ export class ControlEvidenceClient {
       };
     }
 
-    // Verify monotonic causal timing:
-    // issuedAt <= serverAcceptedAt <= phoneReceivedAt <= appliedAt <= readbackAt
+    // Verify independent domain-local causal timing:
+    // PC domain: issuedAt <= serverAcceptedAt
+    // iPhone domain: phoneReceivedAt <= appliedAt <= readbackAt
     const issuedAt = record.issuedAt || 0;
     const serverAcceptedAt = record.serverAcceptedAt || issuedAt;
-    const phoneReceivedAt = matchingAck.phoneReceivedAt || serverAcceptedAt;
+    const phoneReceivedAt = matchingAck.phoneReceivedAt || 0;
     const appliedAt = matchingAck.appliedAt || phoneReceivedAt;
     const readbackAt = matchingRender.readbackAt || 0;
 
-    const isMonotonic = (
-      issuedAt <= serverAcceptedAt &&
-      serverAcceptedAt <= (phoneReceivedAt + 50) && // allow 50ms clock skew tolerance across local network
-      phoneReceivedAt <= appliedAt &&
-      appliedAt <= readbackAt
-    );
+    const pcLocalMonotonic = (issuedAt <= serverAcceptedAt);
+    const phoneLocalMonotonic = (phoneReceivedAt <= appliedAt && appliedAt <= readbackAt);
 
-    if (!isMonotonic) {
+    if (!pcLocalMonotonic || !phoneLocalMonotonic) {
       return {
         iphoneAckReceived: true,
         iphoneAck: matchingAck,
         renderEvidence: matchingRender,
         verdict: 'APPLIED',
-        verdictReason: `Non-monotonic causal timing (issued:${issuedAt} server:${serverAcceptedAt} phone:${phoneReceivedAt} applied:${appliedAt} readback:${readbackAt})`
+        verdictReason: `Non-monotonic domain timing (PC: ${issuedAt} <= ${serverAcceptedAt} [${pcLocalMonotonic}], Phone: ${phoneReceivedAt} <= ${appliedAt} <= ${readbackAt} [${phoneLocalMonotonic}])`
       };
     }
 
@@ -214,7 +220,7 @@ export class ControlEvidenceClient {
         renderConfirmed: false,
         renderEvidence: matchingRender,
         verdict: 'APPLIED',
-        verdictReason: 'Render readback commandId matched, but effective rendered state does not match requested state'
+        verdictReason: 'Render readback commandId matched, but effective rendered state does not match requested state or render path'
       };
     }
 

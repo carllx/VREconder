@@ -37,10 +37,13 @@ export class CalibrationUI {
   }
 
   initDOM() {
-    this.stageStatusText = document.getElementById('stageStatusText');
+    if (typeof document !== 'undefined') {
+      this.stageStatusText = document.getElementById('stageStatusText');
+    }
   }
 
   initSSEBridge() {
+    if (typeof EventSource === 'undefined') return;
     try {
       const es = new EventSource('/api/calibration/events');
       es.onopen = () => { state.pcConnected = true; };
@@ -104,12 +107,16 @@ export class CalibrationUI {
       }).catch(err => {
         logAction('Remote media selection errored: ' + requestedPath, { outcome: 'errored', error: err.message });
       });
-    } else if (act === 'set_diagnostic_eye' && typeof msg.eye === 'number') {
-      this.selectedEye = msg.eye;
-      showFeedbackToast(`Eye: ${this.selectedEye === 0 ? 'Left' : 'Right'}`);
-    } else if (act === 'set_diagnostic_overlay' && msg.key && this.diagnosticOverlay) {
-      this.diagnosticOverlay[msg.key] = (msg.value === true);
-      showFeedbackToast(`Overlay ${msg.key}: ${msg.value ? 'ON' : 'OFF'}`);
+    } else if (act === 'set_diagnostic_eye') {
+      if (typeof msg.eye === 'number' && (msg.eye === 0 || msg.eye === 1)) {
+        this.selectedEye = msg.eye;
+        showFeedbackToast(`Eye: ${this.selectedEye === 0 ? 'Left' : 'Right'}`);
+      }
+    } else if (act === 'set_diagnostic_overlay') {
+      if (['showGrid', 'showPlumbLines', 'showHorizon'].includes(msg.key) && typeof msg.value === 'boolean' && this.diagnosticOverlay) {
+        this.diagnosticOverlay[msg.key] = msg.value;
+        showFeedbackToast(`Overlay ${msg.key}: ${msg.value ? 'ON' : 'OFF'}`);
+      }
     } else if (act === 'set_video_pose' && this.activeVideoProfile) {
       const p = this.activeVideoProfile.pose || (this.activeVideoProfile.pose = { yawDeg: 0, pitchDeg: 0, rollDeg: 0 });
       const poseObj = msg.pose || msg;
@@ -165,9 +172,11 @@ export class CalibrationUI {
         showFeedbackToast(`Viewer Profile: ${this.activeViewerProfile.name}`);
       }
     } else if (act === 'set_reference_grid') {
-      state.showReferenceGrid = (msg.enabled === true);
-      if (this.vrRenderer) this.vrRenderer.showReferenceGrid = state.showReferenceGrid;
-      showFeedbackToast(state.showReferenceGrid ? '▦ Reference Grid: ON' : '▦ Reference Grid: OFF');
+      if (typeof msg.enabled === 'boolean') {
+        state.showReferenceGrid = msg.enabled;
+        if (this.vrRenderer) this.vrRenderer.showReferenceGrid = state.showReferenceGrid;
+        showFeedbackToast(state.showReferenceGrid ? '▦ Reference Grid: ON' : '▦ Reference Grid: OFF');
+      }
     } else if (act === 'set_lens_correction') {
       if (this.activeViewerProfile) {
         this.activeViewerProfile.lensCorrectionEnabled = msg.enabled === true;
