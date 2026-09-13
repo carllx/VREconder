@@ -1,7 +1,4 @@
-// ==========================================
-// PC Calibration Controller Application
-// Single Source of Truth (SSOT) Control Surface
-// ==========================================
+// PC Calibration Controller Application (SSOT Control Surface)
 
 export let currentStage = 'A';
 export let currentVisualMode = 'grid_only';
@@ -13,6 +10,8 @@ export let latestSavedMyProfile = null;
 export let videoList = [];
 export let o4FittingActive = false;
 export let candidateDistortion = { k1: 0.0, k2: 0.0 };
+export let currentIphoneStatus = { state: 'offline' };
+export let pendingAck = null; // { type: 'stage'|'visual_mode'|'fitting', target, requestedAt }
 
 let isServerOnline = false;
 export function setServerConnectionBadge(online = true, text = '') {
@@ -155,74 +154,70 @@ export function resetPose() {
   onPoseChange();
 }
 
+function isPhoneActive() { return currentIphoneStatus && currentIphoneStatus.state === 'active'; }
+function notifyFailClosed(msg) {
+  const f = document.getElementById('optics-feedback') || document.getElementById('valDevStatus');
+  if (f) f.textContent = '⚠️ iPhone not active — ' + msg;
+}
+
 export function setStage(stage) {
+  if (!isPhoneActive()) { notifyFailClosed('cannot change stage while offline/stale'); return; }
+  pendingAck = { type: 'stage', target: stage, requestedAt: Date.now() };
   currentStage = stage;
-  if (stage !== 'B' && o4FittingActive) {
-    setO4FittingActive(false);
-  }
-  ['A', 'B', 'C'].forEach(s => {
-    document.getElementById('btnStage' + s)?.classList.toggle('active', s === stage);
-  });
+  if (stage !== 'B' && o4FittingActive) setO4FittingActive(false);
+  ['A', 'B', 'C'].forEach(s => document.getElementById('btnStage' + s)?.classList.toggle('active', s === stage));
   applyStageLocks(stage);
-  sendControl({ action: 'set_stage', stage: stage });
+  sendControl({ action: 'set_stage', stage });
 }
 
 export function setViewerVisualMode(mode) {
+  if (!isPhoneActive()) { notifyFailClosed('cannot change visual mode while offline/stale'); return; }
+  pendingAck = { type: 'visual_mode', target: mode, requestedAt: Date.now() };
   currentVisualMode = mode;
-  if (mode !== 'grid_only' && o4FittingActive) {
-    setO4FittingActive(false);
-  }
-  document.getElementById('btnVisualGridOnly')?.classList.toggle('active', mode === 'grid_only');
-  document.getElementById('btnVisualIldFusion')?.classList.toggle('active', mode === 'ild_fusion');
-  document.getElementById('btnVisualVerticalAlign')?.classList.toggle('active', mode === 'vertical_alignment');
-  document.getElementById('btnVisualVideoGrid')?.classList.toggle('active', mode === 'video_grid');
+  if (mode !== 'grid_only' && o4FittingActive) setO4FittingActive(false);
+  const vmMap = { grid_only: 'btnVisualGridOnly', ild_fusion: 'btnVisualIldFusion', vertical_alignment: 'btnVisualVerticalAlign', video_grid: 'btnVisualVideoGrid' };
+  Object.entries(vmMap).forEach(([m, id]) => document.getElementById(id)?.classList.toggle('active', m === mode));
   applyStageLocks(currentStage);
-  sendControl({ action: 'set_viewer_visual_mode', mode: mode });
+  sendControl({ action: 'set_viewer_visual_mode', mode });
 }
 
 export function setO4FittingActive(active) {
   o4FittingActive = (active === true);
-  const btn = document.getElementById('btnToggleO4Fitting');
-  const banner = document.getElementById('bannerO4FittingActive');
+  const btn = document.getElementById('btnToggleO4Fitting'), banner = document.getElementById('bannerO4FittingActive');
   if (btn) {
     btn.textContent = o4FittingActive ? '🔬 O4 Distortion Fitting: ACTIVE' : '⚪ O4 Distortion Fitting: OFF';
     btn.style.background = o4FittingActive ? '#7e22ce' : '#334155';
     btn.style.color = o4FittingActive ? '#f3e8ff' : '#cbd5e1';
     btn.style.borderColor = o4FittingActive ? '#a855f7' : '#475569';
   }
-  if (banner) {
-    banner.style.display = o4FittingActive ? 'block' : 'none';
-  }
+  if (banner) banner.style.display = o4FittingActive ? 'block' : 'none';
   applyStageLocks(currentStage);
   sendControl({ action: 'set_distortion_fitting_mode', enabled: o4FittingActive });
 }
 
 export function toggleO4FittingMode() {
-  if (currentStage !== 'B' || currentVisualMode !== 'grid_only') {
-    setO4FittingActive(false);
-    return;
+  const desired = !o4FittingActive;
+  if (desired) {
+    if (!isPhoneActive()) { notifyFailClosed('O4 fitting requires active iPhone'); return; }
+    if (pendingAck) { notifyFailClosed('waiting for command acknowledgement'); return; }
+    if (currentStage !== 'B' || currentVisualMode !== 'grid_only') {
+      notifyFailClosed('O4 fitting requires confirmed Stage B + Grid Only');
+      return;
+    }
   }
-  setO4FittingActive(!o4FittingActive);
+  pendingAck = { type: 'fitting', target: desired, requestedAt: Date.now() };
+  setO4FittingActive(desired);
 }
 
 export function applyStageLocks(stage) {
-  const isStageC = (stage === 'C'), isStageA = (stage === 'A');
-  const shouldLockCoeffs = isStageC || isStageA;
-  const lockNonDistortion = shouldLockCoeffs || o4FittingActive;
+  const isStageC = (stage === 'C'), lockNonDist = (isStageC || stage === 'A') || o4FittingActive;
   const setDis = (id, dis) => { const el = document.getElementById(id); if (el) el.disabled = dis; };
   const setDisp = (id, show) => { const el = document.getElementById(id); if (el) el.style.display = show ? 'block' : 'none'; };
-
-  setDis('selViewerPreset', shouldLockCoeffs || o4FittingActive);
-  setDis('rngK1', shouldLockCoeffs);
-  setDis('rngK2', shouldLockCoeffs);
-  ['rngFov', 'rngScreenToLens', 'rngInterLens', 'rngTrayToLens'].forEach(id => setDis(id, lockNonDistortion));
-  setDis('btnLensToggle', isStageC || o4FittingActive);
-  setDis('btnSaveViewer', isStageC || o4FittingActive);
-
-  setDisp('lockNotice', isStageC);
-  setDisp('stageCVerificationPanel', isStageC);
-  setDisp('stageBVisualRefPanel', stage === 'B');
-  setDisp('stageBEvidencePanel', stage === 'B');
+  ['selViewerPreset', 'btnLensToggle', 'btnSaveViewer'].forEach(id => setDis(id, isStageC || o4FittingActive));
+  ['rngK1', 'rngK2'].forEach(id => setDis(id, isStageC || stage === 'A'));
+  ['rngFov', 'rngScreenToLens', 'rngInterLens', 'rngTrayToLens'].forEach(id => setDis(id, lockNonDist));
+  setDisp('lockNotice', isStageC); setDisp('stageCVerificationPanel', isStageC);
+  setDisp('stageBVisualRefPanel', stage === 'B'); setDisp('stageBEvidencePanel', stage === 'B');
   setDisp('panelO4Fitting', stage === 'B' && currentVisualMode === 'grid_only');
 }
 
@@ -302,24 +297,11 @@ export function onOpticsChange() {
     return;
   }
 
-  const fov = parseFloat(document.getElementById('rngFov')?.value || 50);
-  const s2l = parseFloat(document.getElementById('rngScreenToLens')?.value || 39.3);
-  const ipd = parseFloat(document.getElementById('rngInterLens')?.value || 63.9);
-  const t2l = parseFloat(document.getElementById('rngTrayToLens')?.value || 35.0);
-
-  document.getElementById('valFov').textContent = fov.toFixed(1) + '°';
-  document.getElementById('valScreenToLens').textContent = s2l.toFixed(1);
-  document.getElementById('valInterLens').textContent = ipd.toFixed(1);
-  document.getElementById('valTrayToLens').textContent = t2l.toFixed(1);
-
-  sendControl({
-    action: 'set_viewer_params',
-    k1: k1, k2: k2,
-    maxFovDeg: fov,
-    screenToLensMm: s2l,
-    interLensMm: ipd,
-    trayToLensMm: t2l
-  });
+  const g = id => parseFloat(document.getElementById(id)?.value || 0);
+  const fov = g('rngFov') || 50, s2l = g('rngScreenToLens') || 39.3, ipd = g('rngInterLens') || 63.9, t2l = g('rngTrayToLens') || 35.0;
+  const sTxt = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+  sTxt('valFov', fov.toFixed(1) + '°'); sTxt('valScreenToLens', s2l.toFixed(1)); sTxt('valInterLens', ipd.toFixed(1)); sTxt('valTrayToLens', t2l.toFixed(1));
+  sendControl({ action: 'set_viewer_params', k1, k2, maxFovDeg: fov, screenToLensMm: s2l, interLensMm: ipd, trayToLensMm: t2l });
 }
 
 export function sendAction(act) { sendControl({ action: act }); }
@@ -332,8 +314,7 @@ export function updateTelemetryUI(data) {
   // 1. Critical Priority: Performance Diagnostics (Always executes first)
   if (data.perf) {
     try {
-      const { cadence: cad = {}, frameTimeMs: ft = {}, playback: pb = {}, display: disp = {}, webgl: wg = {} } = data.perf;
-      const q = pb.quality || {};
+      const { cadence: cad = {}, frameTimeMs: ft = {}, playback: pb = {}, display: disp = {}, webgl: wg = {} } = data.perf, q = pb.quality || {};
       setEl('valPerfCadence', `rAF: ${cad.rafPerSec || 0}/s | rVFC: ${cad.rvfcPerSec || 0}/s`);
       setEl('valUploadCadence', `VidUp: ${cad.videoUploadsPerSec || 0}/s | UIUp: ${cad.uiUploadsPerSec || 0}/s`);
       setEl('valFrameTimeAvg', `avg: ${ft.avg || 0}ms | p95: ${ft.p95 || 0}ms`);
@@ -424,19 +405,44 @@ export function updateTelemetryUI(data) {
       const chk = document.getElementById('chkReferenceGrid');
       if (chk) chk.checked = data.showReferenceGrid;
     }
-    if (data.viewerVisualMode && data.viewerVisualMode !== currentVisualMode) {
-      currentVisualMode = data.viewerVisualMode;
-      document.getElementById('btnVisualGridOnly')?.classList.toggle('active', currentVisualMode === 'grid_only');
-      document.getElementById('btnVisualIldFusion')?.classList.toggle('active', currentVisualMode === 'ild_fusion');
-      document.getElementById('btnVisualVerticalAlign')?.classList.toggle('active', currentVisualMode === 'vertical_alignment');
-      document.getElementById('btnVisualVideoGrid')?.classList.toggle('active', currentVisualMode === 'video_grid');
-    }
-    if (data.calibrationStage && data.calibrationStage !== currentStage) {
-      currentStage = data.calibrationStage;
-      ['A', 'B', 'C'].forEach(s => {
-        document.getElementById('btnStage' + s)?.classList.toggle('active', s === currentStage);
-      });
-      applyStageLocks(currentStage);
+    if (isPhoneActive()) {
+      if (pendingAck) {
+        if (Date.now() - pendingAck.requestedAt > 3000) pendingAck = null;
+        else if (pendingAck.type === 'stage' && data.calibrationStage === pendingAck.target) pendingAck = null;
+        else if (pendingAck.type === 'visual_mode' && data.viewerVisualMode === pendingAck.target) pendingAck = null;
+        else if (pendingAck.type === 'fitting' && data.opticsRuntime?.calibrationDistortionOverrideActive === pendingAck.target) pendingAck = null;
+      }
+      if (!pendingAck || pendingAck.type !== 'visual_mode') {
+        if (data.viewerVisualMode && data.viewerVisualMode !== currentVisualMode) {
+          currentVisualMode = data.viewerVisualMode;
+          if (currentVisualMode !== 'grid_only' && o4FittingActive) setO4FittingActive(false);
+          const vmMap = { grid_only: 'btnVisualGridOnly', ild_fusion: 'btnVisualIldFusion', vertical_alignment: 'btnVisualVerticalAlign', video_grid: 'btnVisualVideoGrid' };
+          Object.entries(vmMap).forEach(([m, id]) => document.getElementById(id)?.classList.toggle('active', m === currentVisualMode));
+        }
+      }
+      if (!pendingAck || pendingAck.type !== 'stage') {
+        if (data.calibrationStage && data.calibrationStage !== currentStage) {
+          currentStage = data.calibrationStage;
+          if (currentStage !== 'B' && o4FittingActive) setO4FittingActive(false);
+          ['A', 'B', 'C'].forEach(s => document.getElementById('btnStage' + s)?.classList.toggle('active', s === currentStage));
+          applyStageLocks(currentStage);
+        }
+      }
+      const remoteFittingActive = !!(data.opticsRuntime?.calibrationDistortionOverrideActive);
+      if (!pendingAck || pendingAck.type !== 'fitting') {
+        if (remoteFittingActive !== o4FittingActive) {
+          o4FittingActive = remoteFittingActive;
+          const b = document.getElementById('btnToggleO4Fitting'), ban = document.getElementById('bannerO4FittingActive');
+          if (b) {
+            b.textContent = o4FittingActive ? '🔬 O4 Distortion Fitting: ACTIVE' : '⚪ O4 Distortion Fitting: OFF';
+            b.style.background = o4FittingActive ? '#7e22ce' : '#334155';
+            b.style.color = o4FittingActive ? '#f3e8ff' : '#cbd5e1';
+            b.style.borderColor = o4FittingActive ? '#a855f7' : '#475569';
+          }
+          if (ban) ban.style.display = o4FittingActive ? 'block' : 'none';
+          applyStageLocks(currentStage);
+        }
+      }
     }
     if (data.videoProfile) {
       const vp = data.videoProfile;
@@ -447,17 +453,13 @@ export function updateTelemetryUI(data) {
         vstat.textContent = isConfirmed ? `✓ Confirmed Video Mapping (${vp.projection} / ${vp.stereoMode} / ${vp.eyeOrder})` : `⚠️ Unconfirmed Video Mapping (${vp.projection || 'unknown'})`;
         vstat.style.color = isConfirmed ? '#34d399' : '#f87171';
       }
-      const selProj = document.getElementById('selProjection'); if (selProj) selProj.value = vp.projection || 'unknown';
-      const selStereo = document.getElementById('selStereo'); if (selStereo) selStereo.value = vp.stereoMode || 'unknown';
-      const selEye = document.getElementById('selEyeOrder'); if (selEye) selEye.value = vp.eyeOrder || 'unknown';
+      const setSel = (id, val) => { const el = document.getElementById(id); if (el) el.value = val; };
+      setSel('selProjection', vp.projection || 'unknown'); setSel('selStereo', vp.stereoMode || 'unknown'); setSel('selEyeOrder', vp.eyeOrder || 'unknown');
       const selCov = document.getElementById('selCoverageFov');
       if (selCov) {
-        if (!vp.projection || vp.projection === 'unknown' || vp.projection === 'flat') {
-          selCov.value = 'unknown'; selCov.disabled = true;
-        } else {
-          selCov.disabled = false;
-          selCov.value = ((typeof vp.horizontalCoverageDeg === 'number' ? vp.horizontalCoverageDeg : 180) > 270) ? '360' : '180';
-        }
+        const isFlat = !vp.projection || vp.projection === 'unknown' || vp.projection === 'flat';
+        selCov.disabled = isFlat;
+        selCov.value = isFlat ? 'unknown' : (((typeof vp.horizontalCoverageDeg === 'number' ? vp.horizontalCoverageDeg : 180) > 270) ? '360' : '180');
       }
       if (vp.pose) {
         const y = vp.pose.yawDeg || 0, p = vp.pose.pitchDeg || 0, r = vp.pose.rollDeg || 0;
@@ -504,10 +506,7 @@ export function updateTelemetryUI(data) {
         setEl('txtLeftNormX', em.leftMarkerGlobalX ? em.leftMarkerGlobalX.toFixed(6) : '--');
         setEl('txtRightNormX', em.rightMarkerGlobalX ? em.rightMarkerGlobalX.toFixed(6) : '--');
         const badge = document.getElementById('badgeIldMatch');
-        if (badge) {
-          badge.className = em.markerSeparationMatchesILD ? 'badge badge-green' : 'badge badge-amber';
-          badge.textContent = em.markerSeparationMatchesILD ? 'ILD Match: Verified' : 'ILD Match: Deviation';
-        }
+        if (badge) { badge.className = em.markerSeparationMatchesILD ? 'badge badge-green' : 'badge badge-amber'; badge.textContent = em.markerSeparationMatchesILD ? 'ILD Match: Verified' : 'ILD Match: Deviation'; }
       }
       if (data.opticsRuntime) {
         const ort = data.opticsRuntime;
@@ -525,12 +524,10 @@ export function updateTelemetryUI(data) {
   try {
     const t = data.timings;
     if (t && t.selectedAt) {
-      setEl('valMetaAt', t.metadataAt ? (t.metadataAt - t.selectedAt).toFixed(1) + ' ms' : '--');
-      setEl('valCanplayAt', t.canplayAt ? (t.canplayAt - t.selectedAt).toFixed(1) + ' ms' : '--');
-      setEl('valDecodeAt', t.firstFrameDecodedAt ? (t.firstFrameDecodedAt - t.selectedAt).toFixed(1) + ' ms' : '--');
-      setEl('valUploadAt', t.firstTextureUploadAt ? (t.firstTextureUploadAt - t.selectedAt).toFixed(1) + ' ms' : '--');
-      setEl('valRenderAt', t.firstRenderAt ? (t.firstRenderAt - t.selectedAt).toFixed(1) + ' ms' : '--');
-      setEl('valTotalLat', t.firstRenderAt ? (t.firstRenderAt - t.selectedAt).toFixed(1) + ' ms' : (t.statusText || '--'));
+      const ms = at => at ? (at - t.selectedAt).toFixed(1) + ' ms' : '--';
+      setEl('valMetaAt', ms(t.metadataAt)); setEl('valCanplayAt', ms(t.canplayAt));
+      setEl('valDecodeAt', ms(t.firstFrameDecodedAt)); setEl('valUploadAt', ms(t.firstTextureUploadAt));
+      setEl('valRenderAt', ms(t.firstRenderAt)); setEl('valTotalLat', t.firstRenderAt ? ms(t.firstRenderAt) : (t.statusText || '--'));
     }
     if (data.controllerInput) {
       const ci = data.controllerInput;
@@ -581,6 +578,7 @@ setInterval(async () => {
       setServerConnectionBadge(true);
       const data = await res.json();
       if (data && data.iphoneStatus) {
+        currentIphoneStatus = data.iphoneStatus;
         setIphoneConnectionBadge(data.iphoneStatus);
       }
       if (data && data.latestTelemetry && data.latestTelemetry.type === 'telemetry_sync') {
