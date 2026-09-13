@@ -3,6 +3,7 @@
 // Based on Google Open Source: googlevr/wwgc (CardboardView.js & CardboardDevice.proto)
 // ==========================================
 import { activeScreenProfile } from './screen-profile.js';
+import { state } from './state.js';
 
 export const MIN_SCREEN_TO_LENS_DISTANCE = 0.020;
 export const MAX_SCREEN_TO_LENS_DISTANCE = 0.070;
@@ -42,6 +43,41 @@ export function getEffectiveViewerProfile(baseProfile, tempOffset = 0.0) {
     screenToLensClampReason: clampReason,
     lensCorrectionEnabled: effectiveLensOn,
     _lensCorrectionSuppressedReason: (!isCalibrated && requestedLensOn) ? 'unvalidated_viewer_profile' : null
+  };
+}
+
+export function isCalibrationDistortionOverrideActive(appState = state) {
+  if (!appState) return false;
+  return appState.calibrationStage === 'B' &&
+         appState.viewerVisualMode === 'grid_only' &&
+         appState.calibrationDistortionFittingActive === true;
+}
+
+export function getRenderViewerProfile(baseProfile, appState = state, tempOffset = 0.0) {
+  const effective = getEffectiveViewerProfile(baseProfile, tempOffset);
+  if (!effective) return effective;
+
+  const isOverrideActive = isCalibrationDistortionOverrideActive(appState);
+  if (!isOverrideActive) {
+    return effective;
+  }
+
+  const candK = (appState && appState.candidateDistortion) ? appState.candidateDistortion : { k1: 0.0, k2: 0.0 };
+  const k1 = typeof candK.k1 === 'number' ? candK.k1 : 0.0;
+  const k2 = typeof candK.k2 === 'number' ? candK.k2 : 0.0;
+
+  return {
+    ...effective,
+    // Preserve strict uncalibrated provenance & frozen geometry
+    isCalibrated: false,
+    // Visible candidate lens correction path for O4 grid-only fitting
+    lensCorrectionEnabled: true,
+    distortion: {
+      model: 'o4-candidate-fitting',
+      k1: k1,
+      k2: k2
+    },
+    _calibrationDistortionOverrideActive: true
   };
 }
 

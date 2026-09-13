@@ -23,6 +23,10 @@ export const state = {
   temporaryScreenToLensOffset: 0.0, // Session-only runtime viewing distance offset (Issue #15 / #17)
   menuVirtualDepth: 2.0, // Virtual Depth in meters for 3D UI convergence (1.5m / 2.0m / 3.0m)
 
+  // O4 Synthetic-Grid Candidate Distortion Fitting State (Calibration-only)
+  calibrationDistortionFittingActive: false,
+  candidateDistortion: { k1: 0.0, k2: 0.0 },
+
   // First-Frame Timing & Black-Screen Instrumentation
   firstFrameTimings: {
     appShellReadyAt: 0,

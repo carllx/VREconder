@@ -12,7 +12,7 @@ import { GazeEngine } from './controls/gaze-engine.js';
 import { renderStereoUI, isStereoUIVisible } from './controls/stereo-ui.js';
 import { telemetry, perfTelemetry, stallDetector } from './telemetry/telemetry.js';
 import { initAudioContext } from './controls/audio-haptics.js';
-import { profileStorage, computeMediaFingerprint, getEffectiveViewerProfile, deriveCardboardEyeGeometry } from './core/projection-profile.js';
+import { profileStorage, computeMediaFingerprint, getEffectiveViewerProfile, getRenderViewerProfile, isCalibrationDistortionOverrideActive, deriveCardboardEyeGeometry } from './core/projection-profile.js';
 import { activeScreenProfile } from './core/screen-profile.js';
 import { CalibrationUI } from './controls/calibration-ui.js';
 import { ControllerInputProbe, setRemoteLogFunction } from './controls/controller-input-probe.js';
@@ -399,6 +399,7 @@ function renderLoop(now) {
 
   const isVR = state.inVR || calibrationUI.currentMode === 'vr';
   const effectiveViewerProfile = getEffectiveViewerProfile(calibrationUI.activeViewerProfile);
+  const renderViewerProfile = getRenderViewerProfile(calibrationUI.activeViewerProfile, state);
 
   if (!isVR) {
     // 1. Diagnostic Mode: Single Rectilinear View
@@ -406,7 +407,7 @@ function renderLoop(now) {
       width,
       height,
       activeVideoProfile,
-      effectiveViewerProfile,
+      renderViewerProfile,
       calibrationUI.selectedEye,
       null, // Identity camera rotation for pure forward perspective
       calibrationUI.diagnosticFovDeg
@@ -417,7 +418,7 @@ function renderLoop(now) {
       width,
       height,
       activeVideoProfile,
-      effectiveViewerProfile,
+      renderViewerProfile,
       calibrationUI.selectedEye,
       video.paused,
       video.currentTime,
@@ -427,7 +428,7 @@ function renderLoop(now) {
     // 2. Stereo VR Mode: Dual Viewports with Optional Lens Pre-Distortion
     gazeEngine.update(now);
 
-    const uiRendered = renderStereoUI(uiCtx, gazeEngine, commandModel, video, now, width, height, effectiveViewerProfile);
+    const uiRendered = renderStereoUI(uiCtx, gazeEngine, commandModel, video, now, width, height, renderViewerProfile);
 
     // If performanceMode is 'strict-rvfc-dirty-ui', only upload UI texture if UI actually rendered/changed
     const shouldUploadUI = (state.performanceMode === 'strict-rvfc-dirty-ui') ? uiRendered : true;
@@ -436,7 +437,7 @@ function renderLoop(now) {
       width,
       height,
       activeVideoProfile,
-      effectiveViewerProfile,
+      renderViewerProfile,
       cameraMat3,
       uiCanvas,
       shouldUploadUI
@@ -479,6 +480,9 @@ setInterval(() => {
       lensCorrectionRequested: !!(calibrationUI.activeViewerProfile && calibrationUI.activeViewerProfile.lensCorrectionEnabled),
       lensCorrectionApplied: !!(getEffectiveViewerProfile(calibrationUI.activeViewerProfile).lensCorrectionEnabled),
       lensCorrectionSuppressedReason: getEffectiveViewerProfile(calibrationUI.activeViewerProfile)._lensCorrectionSuppressedReason || null,
+      calibrationDistortionOverrideActive: isCalibrationDistortionOverrideActive(state),
+      candidateK1: (state.candidateDistortion && typeof state.candidateDistortion.k1 === 'number') ? state.candidateDistortion.k1 : 0.0,
+      candidateK2: (state.candidateDistortion && typeof state.candidateDistortion.k2 === 'number') ? state.candidateDistortion.k2 : 0.0,
       requestedScreenToLensMm: (() => {
         const eff = getEffectiveViewerProfile(calibrationUI.activeViewerProfile);
         const reqD = eff ? eff.requestedScreenToLensDistance : null;

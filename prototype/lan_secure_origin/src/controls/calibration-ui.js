@@ -134,6 +134,14 @@ export class CalibrationUI {
       const labelMap = { ild_fusion: '🔴 ILD Fusion', vertical_alignment: '↕ Vertical Align', video_grid: 'Video + Grid', grid_only: 'Grid Only' };
       showFeedbackToast(`Stage B: ${labelMap[msg.mode] || msg.mode}`);
       logAction('Set Viewer Visual Mode: ' + msg.mode);
+    } else if (act === 'set_distortion_fitting_mode') {
+      state.calibrationDistortionFittingActive = (msg.enabled === true);
+      showFeedbackToast(state.calibrationDistortionFittingActive ? '🔬 O4 Fitting Mode: ACTIVE' : '⚪ O4 Fitting Mode: OFF');
+      logAction('Set Distortion Fitting Mode: ' + state.calibrationDistortionFittingActive);
+    } else if (act === 'set_candidate_distortion') {
+      if (typeof msg.k1 === 'number') state.candidateDistortion.k1 = msg.k1;
+      if (typeof msg.k2 === 'number') state.candidateDistortion.k2 = msg.k2;
+      logAction('Set Candidate Distortion', state.candidateDistortion);
     } else if (act === 'set_video_mapping' && msg.mapping && this.activeVideoProfile) {
       const m = msg.mapping;
       if (m.projection) this.activeVideoProfile.projection = m.projection;
