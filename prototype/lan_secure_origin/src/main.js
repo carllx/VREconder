@@ -12,7 +12,8 @@ import { GazeEngine } from './controls/gaze-engine.js';
 import { renderStereoUI, isStereoUIVisible } from './controls/stereo-ui.js';
 import { telemetry, perfTelemetry, stallDetector } from './telemetry/telemetry.js';
 import { initAudioContext } from './controls/audio-haptics.js';
-import { profileStorage, computeMediaFingerprint, getEffectiveViewerProfile } from './core/projection-profile.js';
+import { profileStorage, computeMediaFingerprint, getEffectiveViewerProfile, deriveCardboardEyeGeometry } from './core/projection-profile.js';
+import { activeScreenProfile } from './core/screen-profile.js';
 import { CalibrationUI } from './controls/calibration-ui.js';
 import { ControllerInputProbe, setRemoteLogFunction } from './controls/controller-input-probe.js';
 
