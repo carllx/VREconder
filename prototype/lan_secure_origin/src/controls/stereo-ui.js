@@ -105,8 +105,16 @@ export function isStereoUIDynamic(gazeEngine, now) {
   return false; // Static reticle alone is not dynamic
 }
 
+let lastIsolatedGateActive = false;
+
 export function renderStereoUI(uiCtx, gazeEngine, commandModel, videoElement, now, width, height, viewerProfile = null) {
   if (!uiCtx) return false;
+
+  const isIsolated = isIsolatedCalibrationGateActive();
+  if (isIsolated && !lastIsolatedGateActive) {
+    state.uiIsDirty = true;
+  }
+  lastIsolatedGateActive = isIsolated;
 
   const isDirtyUIMode = (state.performanceMode === 'strict-rvfc-dirty-ui');
   const visible = isStereoUIVisible(now);
@@ -420,4 +428,5 @@ export function renderStereoUI(uiCtx, gazeEngine, commandModel, videoElement, no
 
     uiCtx.restore();
   }
+  return true;
 }

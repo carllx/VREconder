@@ -87,6 +87,7 @@ export const state = {
 export function showFeedbackToast(msg) {
   state.toastText = msg;
   state.toastTime = performance.now();
+  state.uiIsDirty = true;
 }
 
 export function formatTime(seconds) {

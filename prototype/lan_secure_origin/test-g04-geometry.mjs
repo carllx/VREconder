@@ -13,8 +13,8 @@ import {
   MAX_SCREEN_TO_LENS_DISTANCE
 } from './src/core/projection-profile.js';
 import { activeScreenProfile } from './src/core/screen-profile.js';
-import { state } from './src/core/state.js';
-import { isStereoUIVisible, isStereoUIDynamic, isIsolatedCalibrationGateActive } from './src/controls/stereo-ui.js';
+import { state, showFeedbackToast } from './src/core/state.js';
+import { isStereoUIVisible, isStereoUIDynamic, isIsolatedCalibrationGateActive, renderStereoUI } from './src/controls/stereo-ui.js';
 
 console.log('=== RUNNING G04 INITIAL VIEWER GEOMETRY REGRESSION SUITE ===\n');
 
@@ -182,6 +182,73 @@ state.toastTime = now - 500;
 
 check('isIsolatedCalibrationGateActive is false for Stage C', isIsolatedCalibrationGateActive() === false);
 check('Stage C permits toast visibility in isStereoUIVisible', isStereoUIVisible(now) === true);
+
+// 4. Deterministic Stale UI Texture / Transition Reproduction & Clear Verification
+console.log('\n--- Suite 6b: Stale Overlay Transition & One-shot Clear ---');
+
+class Mock2DContext {
+  constructor() {
+    this.clearCount = 0;
+    this.drawCalls = [];
+  }
+  clearRect(x, y, w, h) { this.clearCount++; }
+  save() {}
+  restore() {}
+  beginPath() {}
+  rect() {}
+  clip() {}
+  arc() {}
+  fill() {}
+  stroke() {}
+  moveTo() {}
+  lineTo() {}
+  quadraticCurveTo() {}
+  closePath() {}
+  fillText(text, x, y) { this.drawCalls.push({ text, x, y }); }
+}
+
+const mockCtx = new Mock2DContext();
+const mockVideo = { paused: false, duration: 100, currentTime: 10 };
+const mockGazeEngine = { currentHoveredItem: null, dwellProgress: 0, activatedItemId: null, activationFlashTime: 0 };
+state.performanceMode = 'strict-rvfc-dirty-ui';
+state.calibrationStage = 'A';
+state.viewerVisualMode = 'grid_only';
+state.inVR = true;
+
+// Step 1: Normal mode with visible feedback toast
+showFeedbackToast('Stage A: Flat Diagnostic');
+const frame1Now = state.toastTime + 16;
+const frame1Rendered = renderStereoUI(mockCtx, mockGazeEngine, null, mockVideo, frame1Now, 2556, 1179, g04Preset);
+check('Step 1: Normal mode renders toast and uploads texture', frame1Rendered === true);
+check('Step 1: Toast text was drawn on canvas', mockCtx.drawCalls.some(d => d.text.includes('Stage A')));
+
+// Step 2: Transition to isolated gate (ild_fusion) with toast emitted at transition
+state.calibrationStage = 'B';
+state.viewerVisualMode = 'ild_fusion';
+showFeedbackToast('Stage B: 🔴 ILD Fusion');
+
+// Step 3: Frame 2 - UI must perform exactly one blank clear & texture upload
+mockCtx.drawCalls = [];
+const frame2Now = state.toastTime + 16;
+const frame2Rendered = renderStereoUI(mockCtx, mockGazeEngine, null, mockVideo, frame2Now, 2556, 1179, g04Preset);
+check('Step 3: Transition frame performs blank clear and returns true for texture upload', frame2Rendered === true);
+check('Step 3: Canvas contains zero toast or shape draw calls (clean blank canvas)', mockCtx.drawCalls.length === 0);
+
+// Step 4: Frame 3 - Subsequent isolated frame remains clean and skips upload (no redundant redraw)
+mockCtx.drawCalls = [];
+const frame3Now = frame2Now + 16;
+const frame3Rendered = renderStereoUI(mockCtx, mockGazeEngine, null, mockVideo, frame3Now, 2556, 1179, g04Preset);
+check('Step 4: Subsequent isolated frame returns false (hidden & clean, no redraw)', frame3Rendered === false);
+check('Step 4: Zero draw calls on subsequent frames', mockCtx.drawCalls.length === 0);
+
+// Step 5: Transition back to normal mode allows toast behavior
+state.calibrationStage = 'B';
+state.viewerVisualMode = 'grid_only';
+showFeedbackToast('Stage B: Grid Only');
+const frame4Now = state.toastTime + 16;
+const frame4Rendered = renderStereoUI(mockCtx, mockGazeEngine, null, mockVideo, frame4Now, 2556, 1179, g04Preset);
+check('Step 5: Normal non-isolated mode resumes toast rendering and upload', frame4Rendered === true);
+check('Step 5: Toast text rendered on canvas', mockCtx.drawCalls.some(d => d.text.includes('Grid Only')));
 
 console.log('\n============================================================');
 if (allPassed) {
