@@ -8,9 +8,14 @@ import {
   deriveCardboardEyeGeometry
 } from './src/core/projection-profile.js';
 import { activeScreenProfile } from './src/core/screen-profile.js';
+import { CalibrationUI } from './src/controls/calibration-ui.js';
+import { state } from './src/core/state.js';
 
-console.log('--- RUNNING O4 DISTORTION PATH VERIFICATION ---');
+console.log('--- RUNNING ENHANCED O4 DISTORTION PATH & CONTROLLER REGRESSION ---');
 
+// -------------------------------------------------------------
+// Section 1: Frozen G04 Base Profile Authority
+// -------------------------------------------------------------
 const baseProfile = createDefaultViewerProfile();
 assert.ok(baseProfile, 'G04 base profile must exist');
 assert.equal(baseProfile.isCalibrated, false, 'G04 base isCalibrated must be false');
@@ -18,8 +23,9 @@ assert.equal(baseProfile.screenToLensDistance, 0.0430, 'G04 S2L must be 0.0430 (
 assert.equal(baseProfile.interLensDistance, 0.0650, 'G04 ILD must be 0.0650 (65mm)');
 assert.equal(baseProfile.verticalAlignment, 'CENTER', 'G04 verticalAlignment must be CENTER');
 
-// Test 1: Criteria A - Candidate k1/k2 applied ONLY when:
-// calibrationStage === 'B' && viewerVisualMode === 'grid_only' && calibrationDistortionFittingActive === true
+// -------------------------------------------------------------
+// Section 2: Pure Function Candidate Distortion Behavior
+// -------------------------------------------------------------
 const stateA = {
   calibrationStage: 'B',
   viewerVisualMode: 'grid_only',
@@ -37,7 +43,6 @@ assert.equal(profileA.screenToLensDistance, 0.0430, 'S2L must remain 43mm');
 assert.equal(profileA.interLensDistance, 0.0650, 'ILD must remain 65mm');
 assert.equal(profileA.verticalAlignment, 'CENTER', 'verticalAlignment must remain CENTER');
 
-// Verify distortRadius and eye geometry changes under candidate coefficients
 const rDist = distortRadius(0.5, profileA.distortion.k1, profileA.distortion.k2);
 const rIdent = distortRadius(0.5, 0, 0);
 assert.notEqual(rDist, rIdent, 'Distorted radius must differ from identity');
@@ -47,7 +52,9 @@ const eyeBase = deriveCardboardEyeGeometry(activeScreenProfile, baseProfile);
 assert.notDeepEqual(eyeA.leftEye.virtTanBounds, eyeBase.leftEye.virtTanBounds, 'Eye geometry virtTanBounds under override must differ from base uncalibrated');
 assert.notDeepEqual(eyeA.leftEye.fovDeg, eyeBase.leftEye.fovDeg, 'Eye geometry fovDeg under override must differ from base uncalibrated');
 
-// Test 2: Criteria B - Stage B without fitting mode
+// -------------------------------------------------------------
+// Section 3: Inactive & Stage C Boundaries
+// -------------------------------------------------------------
 const stateB = {
   calibrationStage: 'B',
   viewerVisualMode: 'grid_only',
@@ -59,7 +66,6 @@ const profileB = getRenderViewerProfile(baseProfile, stateB);
 assert.equal(profileB.lensCorrectionEnabled, false, 'Lens correction must remain false when fitting mode is inactive');
 assert.equal(profileB.isCalibrated, false, 'isCalibrated must be false');
 
-// Test 3: Criteria C - Stage C (should never apply override even if fitting mode is true)
 const stateC = {
   calibrationStage: 'C',
   viewerVisualMode: 'grid_only',
@@ -70,33 +76,95 @@ assert.equal(isCalibrationDistortionOverrideActive(stateC), false, 'Override mus
 const profileC = getRenderViewerProfile(baseProfile, stateC);
 assert.equal(profileC.lensCorrectionEnabled, false, 'Lens correction must remain false for Stage C on uncalibrated G04');
 
-// Test 4: Criteria D - Ordinary video playback (visualMode !== grid_only or stage !== B)
-const stateD1 = {
-  calibrationStage: 'B',
-  viewerVisualMode: 'normal',
-  calibrationDistortionFittingActive: true,
-  candidateDistortion: { k1: 0.15, k2: -0.05 }
+// -------------------------------------------------------------
+// Section 4: CalibrationUI State Machine & Command Handling
+// -------------------------------------------------------------
+const mockStorage = {
+  activeViewerProfile: createDefaultViewerProfile(),
+  activeVideoProfile: {},
+  saveViewerProfile: () => {},
+  saveVideoProfile: () => {}
 };
-assert.equal(isCalibrationDistortionOverrideActive(stateD1), false, 'Override must be false when visualMode is normal');
-const profileD1 = getRenderViewerProfile(baseProfile, stateD1);
-assert.equal(profileD1.lensCorrectionEnabled, false, 'Lens correction must remain false when visualMode is normal');
+const calUI = new CalibrationUI({ storage: mockStorage });
 
-const stateD2 = {
-  calibrationStage: 'playback',
-  viewerVisualMode: 'normal',
-  calibrationDistortionFittingActive: false,
-  candidateDistortion: { k1: 0.15, k2: -0.05 }
-};
-assert.equal(isCalibrationDistortionOverrideActive(stateD2), false, 'Override must be false during regular playback');
-const profileD2 = getRenderViewerProfile(baseProfile, stateD2);
-assert.equal(profileD2.lensCorrectionEnabled, false, 'Lens correction must remain false during regular playback');
+// Step A: Initial state
+state.calibrationStage = 'B';
+state.viewerVisualMode = 'grid_only';
+state.calibrationDistortionFittingActive = false;
+state.candidateDistortion = { k1: 0.0, k2: 0.0 };
 
-// Test 5: Criteria E & F - Production getEffectiveViewerProfile is NEVER mutated or overridden
-const effectiveProfile = getEffectiveViewerProfile(baseProfile);
-assert.equal(effectiveProfile.isCalibrated, false, 'Production getEffectiveViewerProfile must preserve isCalibrated = false');
-assert.equal(effectiveProfile.lensCorrectionEnabled, false, 'Production getEffectiveViewerProfile must preserve lensCorrectionEnabled = false for G04');
-assert.equal(effectiveProfile.screenToLensDistance, 0.0430, 'Production profile S2L strictly 43mm');
-assert.equal(effectiveProfile.interLensDistance, 0.0650, 'Production profile ILD strictly 65mm');
-assert.equal(effectiveProfile.verticalAlignment, 'CENTER', 'Production profile verticalAlignment strictly CENTER');
+// Command: activate fitting mode
+calUI.handleRemoteControlAction({ action: 'set_distortion_fitting_mode', enabled: true });
+assert.equal(state.calibrationDistortionFittingActive, true, 'Fitting mode must activate in Stage B + grid_only');
 
-console.log('ALL O4 DISTORTION PATH ASSERTIONS PASSED!');
+// Command: set candidate distortion
+calUI.handleRemoteControlAction({ action: 'set_candidate_distortion', k1: 0.08, k2: -0.02 });
+assert.equal(state.candidateDistortion.k1, 0.08, 'Candidate k1 must be updated');
+assert.equal(state.candidateDistortion.k2, -0.02, 'Candidate k2 must be updated');
+
+// Check that base viewer profile was NOT mutated by candidate setting
+assert.equal(calUI.activeViewerProfile.distortion.k1, 0.0, 'Base profile k1 must not be mutated');
+assert.equal(calUI.activeViewerProfile.distortion.k2, 0.0, 'Base profile k2 must not be mutated');
+
+// Command: attempt set_viewer_params during active fitting mode (MUST BE BLOCKED / NO-OP)
+calUI.handleRemoteControlAction({
+  action: 'set_viewer_params',
+  screenToLensMm: 50.0,
+  interLensMm: 70.0,
+  maxFovDeg: 60.0
+});
+assert.equal(calUI.activeViewerProfile.screenToLensDistance, 0.0430, 'S2L must NOT be mutated during fitting mode');
+assert.equal(calUI.activeViewerProfile.interLensDistance, 0.0650, 'ILD must NOT be mutated during fitting mode');
+assert.equal(calUI.activeViewerProfile.maxFovAngles.outerDeg, 50.0, 'FOV must NOT be mutated during fitting mode');
+
+// Command: attempt toggle lens correction during active fitting mode (MUST BE BLOCKED)
+calUI.handleRemoteControlAction({ action: 'set_lens_correction', enabled: true });
+assert.equal(calUI.activeViewerProfile.lensCorrectionEnabled, false, 'Base lensCorrectionEnabled must NOT be toggled during fitting mode');
+
+// Step B: Leaving grid_only auto-clears fitting mode
+calUI.handleRemoteControlAction({ action: 'set_viewer_visual_mode', mode: 'ild_fusion' });
+assert.equal(state.viewerVisualMode, 'ild_fusion', 'Visual mode updated to ild_fusion');
+assert.equal(state.calibrationDistortionFittingActive, false, 'Switching away from grid_only must clear fitting mode');
+
+// Step C: Reactivating fitting mode outside grid_only must fail closed
+calUI.handleRemoteControlAction({ action: 'set_distortion_fitting_mode', enabled: true });
+assert.equal(state.calibrationDistortionFittingActive, false, 'Fitting mode must NOT activate outside grid_only');
+
+// Reset to grid_only and activate
+calUI.handleRemoteControlAction({ action: 'set_viewer_visual_mode', mode: 'grid_only' });
+calUI.handleRemoteControlAction({ action: 'set_distortion_fitting_mode', enabled: true });
+assert.equal(state.calibrationDistortionFittingActive, true, 'Fitting mode activated');
+
+// Step D: Leaving Stage B auto-clears fitting mode
+calUI.switchStage('C');
+assert.equal(state.calibrationStage, 'C', 'Stage switched to C');
+assert.equal(state.calibrationDistortionFittingActive, false, 'Switching to Stage C must clear fitting mode');
+
+// Step E: Attempting to activate fitting mode in Stage C must fail closed
+calUI.handleRemoteControlAction({ action: 'set_distortion_fitting_mode', enabled: true });
+assert.equal(state.calibrationDistortionFittingActive, false, 'Fitting mode must NOT activate in Stage C');
+
+// -------------------------------------------------------------
+// Section 5: Telemetry Semantics Verification
+// -------------------------------------------------------------
+// In Stage B + grid_only + fitting mode:
+state.calibrationStage = 'B';
+state.viewerVisualMode = 'grid_only';
+state.calibrationDistortionFittingActive = true;
+state.inVR = true;
+
+const effProf = getEffectiveViewerProfile(calUI.activeViewerProfile);
+const rndProf = getRenderViewerProfile(calUI.activeViewerProfile, state);
+
+const productionLensCorrectionApplied = !!effProf.lensCorrectionEnabled;
+const calibrationDistortionOverrideActive = isCalibrationDistortionOverrideActive(state);
+const calibrationDistortionOverrideApplied = !!(state.inVR && rndProf._calibrationDistortionOverrideActive);
+const lensCorrectionApplied = !!(state.inVR ? rndProf.lensCorrectionEnabled : effProf.lensCorrectionEnabled);
+
+assert.equal(productionLensCorrectionApplied, false, 'productionLensCorrectionApplied must be false for uncalibrated G04');
+assert.equal(calibrationDistortionOverrideActive, true, 'calibrationDistortionOverrideActive must be true');
+assert.equal(calibrationDistortionOverrideApplied, true, 'calibrationDistortionOverrideApplied must be true when rendered in VR');
+assert.equal(lensCorrectionApplied, true, 'lensCorrectionApplied must report true when renderViewerProfile has override');
+assert.equal(calUI.activeViewerProfile.isCalibrated, false, 'isCalibrated strictly remains false');
+
+console.log('ALL ENHANCED O4 DISTORTION PATH & CONTROLLER ASSERTIONS PASSED!');

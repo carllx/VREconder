@@ -11,6 +11,8 @@ export let diagEye = 0;
 export let diagOverlays = { showGrid: true, showPlumbLines: true, showHorizon: true };
 export let latestSavedMyProfile = null;
 export let videoList = [];
+export let o4FittingActive = false;
+export let candidateDistortion = { k1: 0.0, k2: 0.0 };
 
 let isServerOnline = false;
 export function setServerConnectionBadge(online = true, text = '') {
@@ -26,22 +28,17 @@ export function setIphoneConnectionBadge(status = {}) {
   const badge = document.getElementById('badgeIphoneConnection');
   const card = document.getElementById('cardPerfTelemetry');
   const freshness = document.getElementById('badgePerfFreshness');
-  const state = status.state || 'offline';
+  const st = status.state || 'offline';
   const ageSec = status.ageMs !== null ? (status.ageMs / 1000).toFixed(1) : null;
-
   if (badge) {
-    if (state === 'active') { badge.className = 'badge badge-green'; badge.textContent = '🟢 iPhone: Active'; }
-    else if (state === 'stale') { badge.className = 'badge badge-amber'; badge.textContent = `🟡 iPhone: Stale (${ageSec}s ago)`; }
-    else { badge.className = 'badge badge-slate'; badge.textContent = '⚪ iPhone: Offline'; }
+    badge.className = st === 'active' ? 'badge badge-green' : (st === 'stale' ? 'badge badge-amber' : 'badge badge-slate');
+    badge.textContent = st === 'active' ? '🟢 iPhone: Active' : (st === 'stale' ? `🟡 iPhone: Stale (${ageSec}s ago)` : '⚪ iPhone: Offline');
   }
-
   if (freshness) {
-    if (state === 'active') { freshness.textContent = '🟢 Live Telemetry Stream'; freshness.style.color = '#34d399'; }
-    else if (state === 'stale') { freshness.textContent = `🟡 Cached Data (Last seen ${ageSec}s ago)`; freshness.style.color = '#fbbf24'; }
-    else { freshness.textContent = '⚪ Disconnected / Offline'; freshness.style.color = '#94a3b8'; }
+    freshness.textContent = st === 'active' ? '🟢 Live Telemetry Stream' : (st === 'stale' ? `🟡 Cached Data (${ageSec}s ago)` : '⚪ Disconnected / Offline');
+    freshness.style.color = st === 'active' ? '#34d399' : (st === 'stale' ? '#fbbf24' : '#94a3b8');
   }
-
-  if (card) card.classList.toggle('card-dim', state === 'offline');
+  if (card) card.classList.toggle('card-dim', st === 'offline');
 }
 
 export function initEventSource() {
@@ -160,6 +157,9 @@ export function resetPose() {
 
 export function setStage(stage) {
   currentStage = stage;
+  if (stage !== 'B' && o4FittingActive) {
+    setO4FittingActive(false);
+  }
   ['A', 'B', 'C'].forEach(s => {
     document.getElementById('btnStage' + s)?.classList.toggle('active', s === stage);
   });
@@ -169,37 +169,61 @@ export function setStage(stage) {
 
 export function setViewerVisualMode(mode) {
   currentVisualMode = mode;
+  if (mode !== 'grid_only' && o4FittingActive) {
+    setO4FittingActive(false);
+  }
   document.getElementById('btnVisualGridOnly')?.classList.toggle('active', mode === 'grid_only');
   document.getElementById('btnVisualIldFusion')?.classList.toggle('active', mode === 'ild_fusion');
   document.getElementById('btnVisualVerticalAlign')?.classList.toggle('active', mode === 'vertical_alignment');
   document.getElementById('btnVisualVideoGrid')?.classList.toggle('active', mode === 'video_grid');
+  applyStageLocks(currentStage);
   sendControl({ action: 'set_viewer_visual_mode', mode: mode });
 }
 
+export function setO4FittingActive(active) {
+  o4FittingActive = (active === true);
+  const btn = document.getElementById('btnToggleO4Fitting');
+  const banner = document.getElementById('bannerO4FittingActive');
+  if (btn) {
+    btn.textContent = o4FittingActive ? '🔬 O4 Distortion Fitting: ACTIVE' : '⚪ O4 Distortion Fitting: OFF';
+    btn.style.background = o4FittingActive ? '#7e22ce' : '#334155';
+    btn.style.color = o4FittingActive ? '#f3e8ff' : '#cbd5e1';
+    btn.style.borderColor = o4FittingActive ? '#a855f7' : '#475569';
+  }
+  if (banner) {
+    banner.style.display = o4FittingActive ? 'block' : 'none';
+  }
+  applyStageLocks(currentStage);
+  sendControl({ action: 'set_distortion_fitting_mode', enabled: o4FittingActive });
+}
+
+export function toggleO4FittingMode() {
+  if (currentStage !== 'B' || currentVisualMode !== 'grid_only') {
+    setO4FittingActive(false);
+    return;
+  }
+  setO4FittingActive(!o4FittingActive);
+}
+
 export function applyStageLocks(stage) {
-  const isStageC = (stage === 'C');
-  const isStageA = (stage === 'A');
+  const isStageC = (stage === 'C'), isStageA = (stage === 'A');
   const shouldLockCoeffs = isStageC || isStageA;
+  const lockNonDistortion = shouldLockCoeffs || o4FittingActive;
+  const setDis = (id, dis) => { const el = document.getElementById(id); if (el) el.disabled = dis; };
+  const setDisp = (id, show) => { const el = document.getElementById(id); if (el) el.style.display = show ? 'block' : 'none'; };
 
-  const selPreset = document.getElementById('selViewerPreset');
-  if (selPreset) selPreset.disabled = shouldLockCoeffs;
+  setDis('selViewerPreset', shouldLockCoeffs || o4FittingActive);
+  setDis('rngK1', shouldLockCoeffs);
+  setDis('rngK2', shouldLockCoeffs);
+  ['rngFov', 'rngScreenToLens', 'rngInterLens', 'rngTrayToLens'].forEach(id => setDis(id, lockNonDistortion));
+  setDis('btnLensToggle', isStageC || o4FittingActive);
+  setDis('btnSaveViewer', isStageC || o4FittingActive);
 
-  ['rngK1', 'rngK2', 'rngFov', 'rngScreenToLens', 'rngInterLens', 'rngTrayToLens'].forEach(id => {
-    const el = document.getElementById(id);
-    if (el) el.disabled = shouldLockCoeffs;
-  });
-
-  const btnSaveViewer = document.getElementById('btnSaveViewer');
-  if (btnSaveViewer) btnSaveViewer.disabled = isStageC;
-
-  const lockNotice = document.getElementById('lockNotice');
-  if (lockNotice) lockNotice.style.display = isStageC ? 'block' : 'none';
-  const stageCPanel = document.getElementById('stageCVerificationPanel');
-  if (stageCPanel) stageCPanel.style.display = isStageC ? 'block' : 'none';
-  const stageBVisual = document.getElementById('stageBVisualRefPanel');
-  if (stageBVisual) stageBVisual.style.display = (stage === 'B') ? 'block' : 'none';
-  const stageBEvidence = document.getElementById('stageBEvidencePanel');
-  if (stageBEvidence) stageBEvidence.style.display = (stage === 'B') ? 'block' : 'none';
+  setDisp('lockNotice', isStageC);
+  setDisp('stageCVerificationPanel', isStageC);
+  setDisp('stageBVisualRefPanel', stage === 'B');
+  setDisp('stageBEvidencePanel', stage === 'B');
+  setDisp('panelO4Fitting', stage === 'B' && currentVisualMode === 'grid_only');
 }
 
 export function populateSlidersFromProfile(p) {
@@ -208,7 +232,7 @@ export function populateSlidersFromProfile(p) {
     const el = document.getElementById(rngId); if (el) el.value = val;
     const txt = document.getElementById(valId); if (txt) txt.textContent = fmt;
   };
-  if (p.distortion) {
+  if (!o4FittingActive && p.distortion) {
     if (typeof p.distortion.k1 === 'number') setSlider('rngK1', 'valK1', p.distortion.k1, p.distortion.k1.toFixed(3));
     if (typeof p.distortion.k2 === 'number') setSlider('rngK2', 'valK2', p.distortion.k2, p.distortion.k2.toFixed(3));
   }
@@ -252,6 +276,7 @@ export function toggleReferenceGrid(checked) {
 }
 
 export function toggleLensCorrection() {
+  if (o4FittingActive) return;
   lensEnabled = !lensEnabled;
   const btn = document.getElementById('btnLensToggle');
   if (btn) {
@@ -265,13 +290,23 @@ export function onOpticsChange() {
   if (currentStage !== 'B') return;
   const k1 = parseFloat(document.getElementById('rngK1')?.value || 0);
   const k2 = parseFloat(document.getElementById('rngK2')?.value || 0);
+  document.getElementById('valK1').textContent = k1.toFixed(3);
+  document.getElementById('valK2').textContent = k2.toFixed(3);
+
+  if (o4FittingActive && currentVisualMode === 'grid_only') {
+    candidateDistortion.k1 = k1;
+    candidateDistortion.k2 = k2;
+    const txtK1 = document.getElementById('txtO4CandK1'); if (txtK1) txtK1.textContent = k1.toFixed(3);
+    const txtK2 = document.getElementById('txtO4CandK2'); if (txtK2) txtK2.textContent = k2.toFixed(3);
+    sendControl({ action: 'set_candidate_distortion', k1, k2 });
+    return;
+  }
+
   const fov = parseFloat(document.getElementById('rngFov')?.value || 50);
   const s2l = parseFloat(document.getElementById('rngScreenToLens')?.value || 39.3);
   const ipd = parseFloat(document.getElementById('rngInterLens')?.value || 63.9);
   const t2l = parseFloat(document.getElementById('rngTrayToLens')?.value || 35.0);
 
-  document.getElementById('valK1').textContent = k1.toFixed(3);
-  document.getElementById('valK2').textContent = k2.toFixed(3);
   document.getElementById('valFov').textContent = fov.toFixed(1) + '°';
   document.getElementById('valScreenToLens').textContent = s2l.toFixed(1);
   document.getElementById('valInterLens').textContent = ipd.toFixed(1);
@@ -299,7 +334,6 @@ export function updateTelemetryUI(data) {
     try {
       const { cadence: cad = {}, frameTimeMs: ft = {}, playback: pb = {}, display: disp = {}, webgl: wg = {} } = data.perf;
       const q = pb.quality || {};
-
       setEl('valPerfCadence', `rAF: ${cad.rafPerSec || 0}/s | rVFC: ${cad.rvfcPerSec || 0}/s`);
       setEl('valUploadCadence', `VidUp: ${cad.videoUploadsPerSec || 0}/s | UIUp: ${cad.uiUploadsPerSec || 0}/s`);
       setEl('valFrameTimeAvg', `avg: ${ft.avg || 0}ms | p95: ${ft.p95 || 0}ms`);
@@ -408,14 +442,10 @@ export function updateTelemetryUI(data) {
       const vp = data.videoProfile;
       const vstat = document.getElementById('txtVideoMappingStatus');
       if (vstat) {
-        if ((vp.confidence === 'user-confirmed' || vp.confidence === 'user-calibrated') &&
-            vp.projection !== 'unknown' && vp.stereoMode !== 'unknown' && vp.eyeOrder !== 'unknown') {
-          vstat.textContent = `✓ Confirmed Video Mapping (${vp.projection} / ${vp.stereoMode} / ${vp.eyeOrder})`;
-          vstat.style.color = '#34d399';
-        } else {
-          vstat.textContent = `⚠️ Unconfirmed Video Mapping (${vp.projection || 'unknown'})`;
-          vstat.style.color = '#f87171';
-        }
+        const isConfirmed = (vp.confidence === 'user-confirmed' || vp.confidence === 'user-calibrated') &&
+            vp.projection !== 'unknown' && vp.stereoMode !== 'unknown' && vp.eyeOrder !== 'unknown';
+        vstat.textContent = isConfirmed ? `✓ Confirmed Video Mapping (${vp.projection} / ${vp.stereoMode} / ${vp.eyeOrder})` : `⚠️ Unconfirmed Video Mapping (${vp.projection || 'unknown'})`;
+        vstat.style.color = isConfirmed ? '#34d399' : '#f87171';
       }
       const selProj = document.getElementById('selProjection'); if (selProj) selProj.value = vp.projection || 'unknown';
       const selStereo = document.getElementById('selStereo'); if (selStereo) selStereo.value = vp.stereoMode || 'unknown';
@@ -426,20 +456,14 @@ export function updateTelemetryUI(data) {
           selCov.value = 'unknown'; selCov.disabled = true;
         } else {
           selCov.disabled = false;
-          const hCov = (typeof vp.horizontalCoverageDeg === 'number') ? vp.horizontalCoverageDeg : 180;
-          selCov.value = (hCov > 270) ? '360' : '180';
+          selCov.value = ((typeof vp.horizontalCoverageDeg === 'number' ? vp.horizontalCoverageDeg : 180) > 270) ? '360' : '180';
         }
       }
       if (vp.pose) {
-        const y = (typeof vp.pose.yawDeg === 'number') ? vp.pose.yawDeg : 0;
-        const p = (typeof vp.pose.pitchDeg === 'number') ? vp.pose.pitchDeg : 0;
-        const r = (typeof vp.pose.rollDeg === 'number') ? vp.pose.rollDeg : 0;
-        const rngY = document.getElementById('rngPoseYaw'); if (rngY) rngY.value = y;
-        const rngP = document.getElementById('rngPosePitch'); if (rngP) rngP.value = p;
-        const rngR = document.getElementById('rngPoseRoll'); if (rngR) rngR.value = r;
-        const valY = document.getElementById('valPoseYaw'); if (valY) valY.textContent = y.toFixed(1) + '°';
-        const valP = document.getElementById('valPosePitch'); if (valP) valP.textContent = p.toFixed(1) + '°';
-        const valR = document.getElementById('valPoseRoll'); if (valR) valR.textContent = r.toFixed(1) + '°';
+        const y = vp.pose.yawDeg || 0, p = vp.pose.pitchDeg || 0, r = vp.pose.rollDeg || 0;
+        const setPose = (id, val) => { const el = document.getElementById(id); if (el) el.value = val; };
+        setPose('rngPoseYaw', y); setPose('rngPosePitch', p); setPose('rngPoseRoll', r);
+        setEl('valPoseYaw', y.toFixed(1) + '°'); setEl('valPosePitch', p.toFixed(1) + '°'); setEl('valPoseRoll', r.toFixed(1) + '°');
       }
     }
     if (data.fps) setEl('valFps', data.fps + ' FPS');
@@ -485,6 +509,15 @@ export function updateTelemetryUI(data) {
           badge.textContent = em.markerSeparationMatchesILD ? 'ILD Match: Verified' : 'ILD Match: Deviation';
         }
       }
+      if (data.opticsRuntime) {
+        const ort = data.opticsRuntime;
+        if (typeof ort.candidateK1 === 'number') {
+          const txtK1 = document.getElementById('txtO4CandK1'); if (txtK1) txtK1.textContent = ort.candidateK1.toFixed(3);
+        }
+        if (typeof ort.candidateK2 === 'number') {
+          const txtK2 = document.getElementById('txtO4CandK2'); if (txtK2) txtK2.textContent = ort.candidateK2.toFixed(3);
+        }
+      }
     }
   } catch (e) {}
 
@@ -504,7 +537,7 @@ export function updateTelemetryUI(data) {
       const statEl = document.getElementById('valControllerStatus');
       const evtEl = document.getElementById('valControllerEvent');
       if (statEl) {
-        if (ci.gamepadConnected && ci.activeGamepads && ci.activeGamepads.length > 0) {
+        if (ci.activeGamepads && ci.activeGamepads.length > 0) {
           statEl.textContent = `🎮 Gamepad Active (${ci.activeGamepads[0].id || 'SHINECON'})`;
         } else if (ci.lastKeyDown) {
           statEl.textContent = `⌨️ Keyboard (${ci.lastKeyDown.key || ci.lastKeyDown.code})`;
@@ -526,7 +559,8 @@ export function onRenderScaleChange(scaleVal) { sendControl({ action: 'set_rende
 
 // Window Globals for inline HTML event handlers
 Object.assign(window, {
-  setStage, setViewerVisualMode, onPerformanceModeChange, onRenderScaleChange,
+  setStage, setViewerVisualMode, toggleO4FittingMode, setO4FittingActive,
+  onPerformanceModeChange, onRenderScaleChange,
   onSelectMedia, sendSeek, toggleDiagnosticEye, toggleDiagnosticOverlay,
   onPoseChange, resetPose, onVideoMappingChange,
   saveVideoMapping, toggleReferenceGrid, toggleLensCorrection,

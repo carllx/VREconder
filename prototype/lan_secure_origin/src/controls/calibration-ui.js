@@ -116,6 +116,9 @@ export class CalibrationUI {
       logAction('Set Video Pose from PC', p);
     } else if (act === 'set_viewer_visual_mode') {
       state.viewerVisualMode = msg.mode;
+      if (msg.mode !== 'grid_only') {
+        state.calibrationDistortionFittingActive = false;
+      }
       if (state.calibrationStage === 'B' && this.vrRenderer) {
         if (msg.mode === 'ild_fusion') {
           this.vrRenderer.sceneType = 2;
@@ -135,7 +138,13 @@ export class CalibrationUI {
       showFeedbackToast(`Stage B: ${labelMap[msg.mode] || msg.mode}`);
       logAction('Set Viewer Visual Mode: ' + msg.mode);
     } else if (act === 'set_distortion_fitting_mode') {
-      state.calibrationDistortionFittingActive = (msg.enabled === true);
+      const requestedActive = (msg.enabled === true);
+      // Valid only in Stage B + grid_only
+      if (requestedActive && (state.calibrationStage !== 'B' || state.viewerVisualMode !== 'grid_only')) {
+        state.calibrationDistortionFittingActive = false;
+      } else {
+        state.calibrationDistortionFittingActive = requestedActive;
+      }
       showFeedbackToast(state.calibrationDistortionFittingActive ? '🔬 O4 Fitting Mode: ACTIVE' : '⚪ O4 Fitting Mode: OFF');
       logAction('Set Distortion Fitting Mode: ' + state.calibrationDistortionFittingActive);
     } else if (act === 'set_candidate_distortion') {
@@ -159,7 +168,7 @@ export class CalibrationUI {
       showFeedbackToast(`Mapping: ${this.activeVideoProfile.projection} (${this.activeVideoProfile.stereoMode})`);
       logAction('Set Video Mapping from PC', m);
     } else if (act === 'set_viewer_preset' && msg.presetId) {
-      if (state.calibrationStage === 'C') return;
+      if (state.calibrationStage === 'C' || state.calibrationDistortionFittingActive) return;
       const presetId = msg.presetId;
       if (presetId !== 'g04:provisional_geometry') {
         showFeedbackToast(`⚠️ Rejected viewer preset '${presetId}': G04 only`);
@@ -179,13 +188,14 @@ export class CalibrationUI {
       if (this.vrRenderer) this.vrRenderer.showReferenceGrid = state.showReferenceGrid;
       showFeedbackToast(state.showReferenceGrid ? '▦ Reference Grid: ON' : '▦ Reference Grid: OFF');
     } else if (act === 'set_lens_correction') {
+      if (state.calibrationDistortionFittingActive) return;
       if (this.activeViewerProfile) {
         this.activeViewerProfile.lensCorrectionEnabled = msg.enabled === true;
         if (this.onProfileChanged) this.onProfileChanged(this.activeVideoProfile, this.activeViewerProfile);
         showFeedbackToast(`Lens: ${this.activeViewerProfile.lensCorrectionEnabled ? 'ON' : 'OFF'}`);
       }
     } else if (act === 'set_viewer_params') {
-      if (state.calibrationStage === 'C') return;
+      if (state.calibrationStage === 'C' || state.calibrationDistortionFittingActive) return;
       if (!this.activeViewerProfile) return;
       if (!this.activeViewerProfile.distortion) this.activeViewerProfile.distortion = {};
       if (typeof msg.k1 === 'number') this.activeViewerProfile.distortion.k1 = msg.k1;
@@ -237,6 +247,9 @@ export class CalibrationUI {
 
   switchStage(stage) {
     state.calibrationStage = stage;
+    if (stage !== 'B') {
+      state.calibrationDistortionFittingActive = false;
+    }
     if (this.stageStatusText) {
       this.stageStatusText.textContent = `Stage ${stage}: ${stage === 'A' ? 'Flat Diagnostic (Unobstructed)' : (stage === 'B' ? 'Viewer Optics Tuning' : 'Video Verification')} | Controlled via PC`;
     }

@@ -249,6 +249,26 @@
         </div>
       </div>
 
+      <!-- O4 Distortion Fitting Control & Human-Gate Readiness UI (Issue #20) -->
+      <div id="panelO4Fitting" style="display:none; margin-top:6px;">
+        <div class="btn-row" style="margin-top:0;">
+          <button class="action-btn" id="btnToggleO4Fitting" onclick="toggleO4FittingMode()" style="flex:1; padding:8px 12px; font-weight:bold; font-size:0.8rem; background:#334155; color:#cbd5e1; border:1px solid #475569;">
+            ⚪ O4 Distortion Fitting: OFF
+          </button>
+        </div>
+        <div id="bannerO4FittingActive" style="display:none; margin-top:6px; padding:8px 12px; background:rgba(168,85,247,0.15); border:1px solid #a855f7; border-radius:8px;">
+          <div style="display:flex; justify-content:space-between; align-items:center;">
+            <span style="font-size:0.8rem; font-weight:bold; color:#c084fc;">🔬 O4 FITTING ACTIVE</span>
+            <span class="badge" style="background:#7e22ce; color:#f3e8ff; font-size:0.68rem;">Grid-Only Calibration</span>
+          </div>
+          <div style="font-size:0.73rem; color:#e2e8f0; margin-top:4px; line-height:1.4;">
+            Candidate k1: <b id="txtO4CandK1" style="color:#38bdf8;">0.000</b> | Candidate k2: <b id="txtO4CandK2" style="color:#38bdf8;">0.000</b><br>
+            Viewer geometry: <b style="color:#34d399;">LOCKED (S2L 43mm, ILD 65mm, CENTER)</b><br>
+            Profile calibrated: <b style="color:#f87171;">NO (isCalibrated=false)</b>
+          </div>
+        </div>
+      </div>
+
       <div id="lockNotice" style="display:none; margin-top:6px; font-size:0.72rem; color:#38bdf8; background:rgba(2,132,199,0.15); padding:4px 8px; border-radius:4px; border:1px solid rgba(56,189,248,0.3);">
         🔒 Stage C Lock: Physical geometry & distortion coefficients are strictly locked. Test Video A / Video B under identical Viewer Profile.
       </div>

@@ -477,10 +477,19 @@ setInterval(() => {
     savedMyViewerProfile: (calibrationUI.storage && calibrationUI.storage.savedMyViewerProfile) || null,
     viewerProfile: calibrationUI.activeViewerProfile,
     opticsRuntime: {
-      lensCorrectionRequested: !!(calibrationUI.activeViewerProfile && calibrationUI.activeViewerProfile.lensCorrectionEnabled),
-      lensCorrectionApplied: !!(getEffectiveViewerProfile(calibrationUI.activeViewerProfile).lensCorrectionEnabled),
-      lensCorrectionSuppressedReason: getEffectiveViewerProfile(calibrationUI.activeViewerProfile)._lensCorrectionSuppressedReason || null,
+      productionLensCorrectionApplied: !!(getEffectiveViewerProfile(calibrationUI.activeViewerProfile).lensCorrectionEnabled),
       calibrationDistortionOverrideActive: isCalibrationDistortionOverrideActive(state),
+      calibrationDistortionOverrideApplied: !!(
+        (state.inVR || calibrationUI.currentMode === 'vr') &&
+        getRenderViewerProfile(calibrationUI.activeViewerProfile, state)._calibrationDistortionOverrideActive
+      ),
+      lensCorrectionRequested: !!(calibrationUI.activeViewerProfile && calibrationUI.activeViewerProfile.lensCorrectionEnabled),
+      lensCorrectionApplied: !!(
+        (state.inVR || calibrationUI.currentMode === 'vr')
+          ? getRenderViewerProfile(calibrationUI.activeViewerProfile, state).lensCorrectionEnabled
+          : getEffectiveViewerProfile(calibrationUI.activeViewerProfile).lensCorrectionEnabled
+      ),
+      lensCorrectionSuppressedReason: getEffectiveViewerProfile(calibrationUI.activeViewerProfile)._lensCorrectionSuppressedReason || null,
       candidateK1: (state.candidateDistortion && typeof state.candidateDistortion.k1 === 'number') ? state.candidateDistortion.k1 : 0.0,
       candidateK2: (state.candidateDistortion && typeof state.candidateDistortion.k2 === 'number') ? state.candidateDistortion.k2 : 0.0,
       requestedScreenToLensMm: (() => {
