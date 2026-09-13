@@ -97,6 +97,15 @@ check('Left Physical Pixel X ~ 644.14 px', Math.abs(leftPixelX - 644.1417) < 0.0
 check('Right Physical Pixel X ~ 1911.86 px', Math.abs(rightPixelX - 1911.8583) < 0.05, rightPixelX.toFixed(2) + ' px');
 check('Physical Pixel Y == 589.50 px', Math.abs(pixelY - 589.5) < 0.05, pixelY.toFixed(2) + ' px');
 
+// Cardboard Semantics: Physical screen separation of red markers must equal entered ILD (70mm)
+const markerSepPx = rightPixelX - leftPixelX;
+const markerSepMm = markerSepPx * s.metersPerPixel * 1000;
+const enteredILDmm = g04Preset.interLensDistance * 1000;
+
+check('Marker Separation in Px matches (1267.72 px)', Math.abs(markerSepPx - 1267.7166) < 0.05, markerSepPx.toFixed(2) + ' px');
+check('Marker Separation in Mm matches entered ILD (70.00 mm)', Math.abs(markerSepMm - enteredILDmm) < 0.05, markerSepMm.toFixed(2) + ' mm vs ' + enteredILDmm.toFixed(2) + ' mm');
+check('markerSeparationMm == enteredILDmm holds strictly', Math.abs(markerSepMm - 70.0) < 0.001);
+
 // ----------------------------------------------------------------------------
 // Suite 4: Physical Tangent Scale & Uncalibrated FOV Bounds
 // ----------------------------------------------------------------------------

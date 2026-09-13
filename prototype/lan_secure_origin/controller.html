@@ -210,21 +210,25 @@
         </select>
       </div>
 
-      <!-- Stage B Visual Reference Sub-modes -->
+      <!-- Stage B Visual Reference Sub-modes (Cardboard-style isolated tests) -->
       <div id="stageBVisualRefPanel" style="margin-top:8px;">
-        <div style="font-size:0.74rem; font-weight:700; color:var(--muted); text-transform:uppercase;">Stage B Visual Reference:</div>
-        <div class="stage-grid" style="grid-template-columns: 1fr 1fr 1fr; margin-top:4px;">
+        <div style="font-size:0.74rem; font-weight:700; color:var(--muted); text-transform:uppercase;">Stage B Visual Reference (Isolated Tests):</div>
+        <div class="stage-grid" style="grid-template-columns: 1fr 1fr 1fr 1fr; margin-top:4px;">
           <button class="stage-btn active" id="btnVisualGridOnly" onclick="setViewerVisualMode('grid_only')">
             ▦ Grid Only<br>
-            <span style="font-size:0.68rem; font-weight:normal; opacity:0.85;">Synthetic Lines</span>
+            <span style="font-size:0.65rem; font-weight:normal; opacity:0.85;">Distortion Lines</span>
           </button>
-          <button class="stage-btn" id="btnVisualTargetFixture" onclick="setViewerVisualMode('target_fixture')">
-            🎯 G04 Target<br>
-            <span style="font-size:0.68rem; font-weight:normal; opacity:0.85;">Concentric + Center</span>
+          <button class="stage-btn" id="btnVisualIldFusion" onclick="setViewerVisualMode('ild_fusion')">
+            🔴 ILD Fusion<br>
+            <span style="font-size:0.65rem; font-weight:normal; opacity:0.85;">Red Markers Only</span>
+          </button>
+          <button class="stage-btn" id="btnVisualVerticalAlign" onclick="setViewerVisualMode('vertical_alignment')">
+            ↕ Vertical Align<br>
+            <span style="font-size:0.65rem; font-weight:normal; opacity:0.85;">Horizon & Rails</span>
           </button>
           <button class="stage-btn" id="btnVisualVideoGrid" onclick="setViewerVisualMode('video_grid')">
             🎬 Video + Grid<br>
-            <span style="font-size:0.68rem; font-weight:normal; opacity:0.85;">Video + Grid</span>
+            <span style="font-size:0.65rem; font-weight:normal; opacity:0.85;">Video + Grid</span>
           </button>
         </div>
       </div>
@@ -235,16 +239,16 @@
         <button class="action-btn btn-exit" onclick="sendAction('exit_vr')">⚙ Exit VR</button>
       </div>
 
-      <div id="lockNotice" style="display:none; margin-top:6px; font-size:0.72rem; color:#38bdf8; background:rgba(2,132,199,0.15); padding:4px 8px; border-radius:4px; border:1px solid rgba(56,189,248,0.3);">
-        🔒 Stage C Lock: Physical geometry & distortion coefficients are strictly locked. Test Video A / Video B under identical Viewer Profile.
-      </div>
-
-      <div id="stageCVerificationPanel" style="display:none; margin-top:6px; padding:8px 12px; background:rgba(30,58,138,0.25); border:1px solid #1e40af; border-radius:8px;">
-        <div style="font-size:0.74rem; font-weight:700; color:#60a5fa; text-transform:uppercase;">Stage C Verification Tools</div>
-        <label style="display:flex; align-items:center; gap:8px; font-size:0.8rem; font-weight:600; color:#38bdf8; cursor:pointer; margin-top:4px;">
-          <input type="checkbox" id="chkReferenceGrid" onchange="toggleReferenceGrid(this.checked)" style="accent-color:#38bdf8; width:16px; height:16px; cursor:pointer;">
-          <span>Show Reference Grid (Verification Overlay in Stereo Engine)</span>
-        </label>
+      <!-- Stage B Evidence Panel (Cardboard ILD & Vertical Alignment Readout) -->
+      <div id="stageBEvidencePanel" style="margin-top:6px; padding:8px 12px; background:rgba(30,41,59,0.5); border:1px solid #334155; border-radius:8px;">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <div style="font-size:0.74rem; font-weight:700; color:#38bdf8; text-transform:uppercase;">Cardboard Evidence &amp; Alignment Metrics:</div>
+          <span id="badgeIldMatch" class="badge badge-green" style="font-size:0.68rem;">ILD Match: Verified</span>
+        </div>
+        <div style="font-size:0.72rem; color:#cbd5e1; margin-top:4px; line-height:1.4;">
+          Separation: <b id="txtMarkerSepPx">1267.72 px</b> (<b id="txtMarkerSepMm">70.00 mm</b>) | Entered ILD: <span id="txtEnteredIld">70.00 mm</span><br>
+          Norm Centers: Left <span id="txtLeftNormX">0.252012</span> | Right <span id="txtRightNormX">0.747988</span>
+        </div>
       </div>
 
       <div class="control-grid" id="opticsControlsGrid" style="margin-top:8px;">

@@ -115,8 +115,11 @@ export class CalibrationUI {
     } else if (act === 'set_viewer_visual_mode') {
       state.viewerVisualMode = msg.mode;
       if (state.calibrationStage === 'B' && this.vrRenderer) {
-        if (msg.mode === 'target_fixture') {
+        if (msg.mode === 'ild_fusion') {
           this.vrRenderer.sceneType = 2;
+          this.vrRenderer.showReferenceGrid = false;
+        } else if (msg.mode === 'vertical_alignment') {
+          this.vrRenderer.sceneType = 3;
           this.vrRenderer.showReferenceGrid = false;
         } else if (msg.mode === 'video_grid') {
           this.vrRenderer.sceneType = 0;
@@ -126,7 +129,8 @@ export class CalibrationUI {
           this.vrRenderer.showReferenceGrid = false;
         }
       }
-      showFeedbackToast(`Stage B Ref: ${msg.mode === 'target_fixture' ? 'G04 Target' : (msg.mode === 'video_grid' ? 'Video + Grid' : 'Grid Only')}`);
+      const labelMap = { ild_fusion: '🔴 ILD Fusion', vertical_alignment: '↕ Vertical Align', video_grid: 'Video + Grid', grid_only: 'Grid Only' };
+      showFeedbackToast(`Stage B: ${labelMap[msg.mode] || msg.mode}`);
       logAction('Set Viewer Visual Mode: ' + msg.mode);
     } else if (act === 'set_video_mapping' && msg.mapping && this.activeVideoProfile) {
       const m = msg.mapping;
@@ -246,8 +250,11 @@ export class CalibrationUI {
     } else if (stage === 'B') {
       const mode = state.viewerVisualMode;
       if (this.vrRenderer) {
-        if (mode === 'target_fixture') {
+        if (mode === 'ild_fusion') {
           this.vrRenderer.sceneType = 2;
+          this.vrRenderer.showReferenceGrid = false;
+        } else if (mode === 'vertical_alignment') {
+          this.vrRenderer.sceneType = 3;
           this.vrRenderer.showReferenceGrid = false;
         } else if (mode === 'video_grid') {
           this.vrRenderer.sceneType = 0;
@@ -259,7 +266,8 @@ export class CalibrationUI {
       }
       this.currentMode = 'vr';
       if (this.onEnterVR) this.onEnterVR();
-      showFeedbackToast(`Stage B: Viewer Optics (${mode === 'target_fixture' ? 'G04 Target' : (mode === 'video_grid' ? 'Video + Grid' : 'Grid Only')})`);
+      const labelMap = { ild_fusion: '🔴 ILD Fusion', vertical_alignment: '↕ Vertical Align', video_grid: 'Video + Grid', grid_only: 'Grid Only' };
+      showFeedbackToast(`Stage B: Viewer Optics (${labelMap[mode] || mode})`);
     } else if (stage === 'C') {
       if (this.vrRenderer) {
         this.vrRenderer.sceneType = 0;

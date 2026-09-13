@@ -91,29 +91,36 @@ export const fsIdealSceneSource = `
       return;
     }
 
-    // 3. High-Contrast Geometry Target (G04 Human Gate Fixture: concentric rings + optical axis crosshair on black)
+    // 3. Cardboard ILD / Fusion-Only Target (Single pure red lens-center marker per eye on pure black)
+    // Primary Authority: Google Cardboard Manufacturer calibration semantics (answer/6324808)
+    // Pure black background, zero rings, zero eye tag, zero video, zero distortion grid.
     if (uSceneType == 2) {
       float r = length(vec2(tanX, tanY));
-      // Fine crosshairs along optical axis tanX = 0, tanY = 0
-      float isCenterCross = (abs(tanX) < 0.0035 || abs(tanY) < 0.0035) ? 1.0 : 0.0;
-      // High-contrast concentric alignment rings at radii 0.05, 0.10, 0.15, 0.20, 0.25, 0.30
-      float ringFract = abs(fract(r * 20.0) - 0.5);
-      float isRing = (step(0.44, ringFract) * step(r, 0.32));
-      // Outer calibration ring at tan = 0.35
-      float isOuterRing = (abs(r - 0.35) < 0.004) ? 1.0 : 0.0;
-      // Distinct monocular ID indicators
-      // Left Eye: Cyan ring accent & "+L" indicator marker; Right Eye: Amber ring accent & "+R" indicator marker
-      vec3 accentCol = (uEye == 0) ? vec3(0.0, 0.9, 1.0) : vec3(1.0, 0.7, 0.1);
-      // Small eye ID marker bar (tanX in [-0.08, -0.06] for Left, [0.06, 0.08] for Right, |tanY| < 0.015)
-      float isEyeTag = ((uEye == 0 && tanX >= -0.08 && tanX <= -0.06 && abs(tanY) < 0.015) ||
-                        (uEye == 1 && tanX >= 0.06 && tanX <= 0.08 && abs(tanY) < 0.015)) ? 1.0 : 0.0;
-
+      // Sharp solid red lens-center marker circle (radius tan = 0.015) + fine cross center
+      float isMarker = (r <= 0.015) ? 1.0 : 0.0;
+      float isCross = ((abs(tanX) < 0.002 && abs(tanY) <= 0.028) || (abs(tanY) < 0.002 && abs(tanX) <= 0.028)) ? 1.0 : 0.0;
       vec3 col = vec3(0.0); // Pure deep black background
-      col = mix(col, vec3(0.75, 0.75, 0.75), isRing);
-      col = mix(col, vec3(1.0, 1.0, 1.0), isOuterRing);
-      col = mix(col, accentCol, isEyeTag);
-      col = mix(col, vec3(1.0, 0.2, 0.2), isCenterCross);
+      col = mix(col, vec3(1.0, 0.08, 0.08), max(isMarker, isCross)); // High-contrast Red (#ff1414)
+      gl_FragColor = vec4(col, 1.0);
+      return;
+    }
 
+    // 4. Cardboard Vertical-Alignment-Only Target (Red lens-center marker + visible-FOV vertical center reference)
+    // Evaluates whether lens center marker is centered, above, or below visible-FOV center.
+    if (uSceneType == 3) {
+      float r = length(vec2(tanX, tanY));
+      // Sharp red lens-center marker
+      float isMarker = (r <= 0.015) ? 1.0 : 0.0;
+      float isCross = ((abs(tanX) < 0.002 && abs(tanY) <= 0.028) || (abs(tanY) < 0.002 && abs(tanX) <= 0.028)) ? 1.0 : 0.0;
+      // High-visibility horizontal horizon reference line across full visible FOV at tanY = 0
+      float isHorizon = (abs(tanY) < 0.0018) ? 1.0 : 0.0;
+      // Symmetric top and bottom FOV limit guide bars at tanY = ±0.30 and ±0.35
+      float isTopGuide = (abs(tanY - 0.35) < 0.0025 && abs(tanX) < 0.25) ? 1.0 : 0.0;
+      float isBotGuide = (abs(tanY + 0.35) < 0.0025 && abs(tanX) < 0.25) ? 1.0 : 0.0;
+      vec3 col = vec3(0.0);
+      col = mix(col, vec3(0.35, 0.45, 0.60), max(isTopGuide, isBotGuide)); // Muted Cyan/Slate guide rails
+      col = mix(col, vec3(0.85, 0.85, 0.85), isHorizon);                  // White horizontal baseline
+      col = mix(col, vec3(1.0, 0.08, 0.08), max(isMarker, isCross));      // Sharp Red marker at lens center
       gl_FragColor = vec4(col, 1.0);
       return;
     }

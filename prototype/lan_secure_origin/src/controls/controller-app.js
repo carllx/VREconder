@@ -170,7 +170,8 @@ export function setStage(stage) {
 export function setViewerVisualMode(mode) {
   currentVisualMode = mode;
   document.getElementById('btnVisualGridOnly')?.classList.toggle('active', mode === 'grid_only');
-  document.getElementById('btnVisualTargetFixture')?.classList.toggle('active', mode === 'target_fixture');
+  document.getElementById('btnVisualIldFusion')?.classList.toggle('active', mode === 'ild_fusion');
+  document.getElementById('btnVisualVerticalAlign')?.classList.toggle('active', mode === 'vertical_alignment');
   document.getElementById('btnVisualVideoGrid')?.classList.toggle('active', mode === 'video_grid');
   sendControl({ action: 'set_viewer_visual_mode', mode: mode });
 }
@@ -201,33 +202,18 @@ export function applyStageLocks(stage) {
 
 export function populateSlidersFromProfile(p) {
   if (!p) return;
-  if (p.distortion && typeof p.distortion.k1 === 'number') {
-    const el = document.getElementById('rngK1'); if (el) el.value = p.distortion.k1;
-    const val = document.getElementById('valK1'); if (val) val.textContent = p.distortion.k1.toFixed(3);
+  const setSlider = (rngId, valId, val, fmt) => {
+    const el = document.getElementById(rngId); if (el) el.value = val;
+    const txt = document.getElementById(valId); if (txt) txt.textContent = fmt;
+  };
+  if (p.distortion) {
+    if (typeof p.distortion.k1 === 'number') setSlider('rngK1', 'valK1', p.distortion.k1, p.distortion.k1.toFixed(3));
+    if (typeof p.distortion.k2 === 'number') setSlider('rngK2', 'valK2', p.distortion.k2, p.distortion.k2.toFixed(3));
   }
-  if (p.distortion && typeof p.distortion.k2 === 'number') {
-    const el = document.getElementById('rngK2'); if (el) el.value = p.distortion.k2;
-    const val = document.getElementById('valK2'); if (val) val.textContent = p.distortion.k2.toFixed(3);
-  }
-  if (p.screenToLensDistance) {
-    const mm = p.screenToLensDistance * 1000;
-    const el = document.getElementById('rngScreenToLens'); if (el) el.value = mm;
-    const val = document.getElementById('valScreenToLens'); if (val) val.textContent = mm.toFixed(1);
-  }
-  if (p.interLensDistance) {
-    const mm = p.interLensDistance * 1000;
-    const el = document.getElementById('rngInterLens'); if (el) el.value = mm;
-    const val = document.getElementById('valInterLens'); if (val) val.textContent = mm.toFixed(1);
-  }
-  if (p.trayToLensDistance) {
-    const mm = p.trayToLensDistance * 1000;
-    const el = document.getElementById('rngTrayToLens'); if (el) el.value = mm;
-    const val = document.getElementById('valTrayToLens'); if (val) val.textContent = mm.toFixed(1);
-  }
-  if (p.maxFovAngles && p.maxFovAngles.outerDeg) {
-    const el = document.getElementById('rngFov'); if (el) el.value = p.maxFovAngles.outerDeg;
-    const val = document.getElementById('valFov'); if (val) val.textContent = p.maxFovAngles.outerDeg.toFixed(1) + '°';
-  }
+  if (p.screenToLensDistance) setSlider('rngScreenToLens', 'valScreenToLens', p.screenToLensDistance * 1000, (p.screenToLensDistance * 1000).toFixed(1));
+  if (p.interLensDistance) setSlider('rngInterLens', 'valInterLens', p.interLensDistance * 1000, (p.interLensDistance * 1000).toFixed(1));
+  if (p.trayToLensDistance) setSlider('rngTrayToLens', 'valTrayToLens', p.trayToLensDistance * 1000, (p.trayToLensDistance * 1000).toFixed(1));
+  if (p.maxFovAngles && p.maxFovAngles.outerDeg) setSlider('rngFov', 'valFov', p.maxFovAngles.outerDeg, p.maxFovAngles.outerDeg.toFixed(1) + '°');
 }
 
 export function onViewerPresetSelect(presetId) {
@@ -424,7 +410,8 @@ export function updateTelemetryUI(data) {
     if (data.viewerVisualMode && data.viewerVisualMode !== currentVisualMode) {
       currentVisualMode = data.viewerVisualMode;
       document.getElementById('btnVisualGridOnly')?.classList.toggle('active', currentVisualMode === 'grid_only');
-      document.getElementById('btnVisualTargetFixture')?.classList.toggle('active', currentVisualMode === 'target_fixture');
+      document.getElementById('btnVisualIldFusion')?.classList.toggle('active', currentVisualMode === 'ild_fusion');
+      document.getElementById('btnVisualVerticalAlign')?.classList.toggle('active', currentVisualMode === 'vertical_alignment');
       document.getElementById('btnVisualVideoGrid')?.classList.toggle('active', currentVisualMode === 'video_grid');
     }
     if (data.calibrationStage && data.calibrationStage !== currentStage) {
@@ -510,6 +497,19 @@ export function updateTelemetryUI(data) {
         } else {
           statEl.textContent = '⚠️ UNCALIBRATED BASELINE (Draft edits not validated)';
           statEl.style.color = '#f87171';
+        }
+      }
+      if (data.opticsRuntime && data.opticsRuntime.evidenceMarkers) {
+        const em = data.opticsRuntime.evidenceMarkers;
+        setEl('txtMarkerSepPx', em.markerSeparationPx ? `${em.markerSeparationPx.toFixed(2)} px` : '--');
+        setEl('txtMarkerSepMm', em.markerSeparationMm ? `${em.markerSeparationMm.toFixed(2)} mm` : '--');
+        setEl('txtEnteredIld', em.enteredILDmm ? `${em.enteredILDmm.toFixed(2)} mm` : '--');
+        setEl('txtLeftNormX', em.leftMarkerGlobalX ? em.leftMarkerGlobalX.toFixed(6) : '--');
+        setEl('txtRightNormX', em.rightMarkerGlobalX ? em.rightMarkerGlobalX.toFixed(6) : '--');
+        const badge = document.getElementById('badgeIldMatch');
+        if (badge) {
+          badge.className = em.markerSeparationMatchesILD ? 'badge badge-green' : 'badge badge-amber';
+          badge.textContent = em.markerSeparationMatchesILD ? 'ILD Match: Verified' : 'ILD Match: Deviation';
         }
       }
     }

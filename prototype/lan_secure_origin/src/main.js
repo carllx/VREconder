@@ -304,7 +304,8 @@ function enterVRMode() {
   }
   if (state.calibrationStage === 'B') {
     if (vrRenderer) {
-      if (state.viewerVisualMode === 'target_fixture') vrRenderer.sceneType = 2;
+      if (state.viewerVisualMode === 'ild_fusion') vrRenderer.sceneType = 2;
+      else if (state.viewerVisualMode === 'vertical_alignment') vrRenderer.sceneType = 3;
       else if (state.viewerVisualMode === 'video_grid') vrRenderer.sceneType = 0;
       else vrRenderer.sceneType = 1;
     }
@@ -484,7 +485,28 @@ setInterval(() => {
       })(),
       effectiveScreenToLensMm: Number((getEffectiveViewerProfile(calibrationUI.activeViewerProfile).screenToLensDistance * 1000).toFixed(1)),
       isScreenToLensClamped: !!(getEffectiveViewerProfile(calibrationUI.activeViewerProfile).isScreenToLensClamped),
-      screenToLensClampReason: getEffectiveViewerProfile(calibrationUI.activeViewerProfile).screenToLensClampReason || null
+      screenToLensClampReason: getEffectiveViewerProfile(calibrationUI.activeViewerProfile).screenToLensClampReason || null,
+      evidenceMarkers: (() => {
+        const prof = calibrationUI.activeViewerProfile || {};
+        const geom = deriveCardboardEyeGeometry(activeScreenProfile, prof);
+        const lNormX = geom.leftEye.lensCenterNorm[0];
+        const rNormX = geom.rightEye.lensCenterNorm[0];
+        const leftGlobalX = lNormX * 0.5;
+        const rightGlobalX = 0.5 + rNormX * 0.5;
+        const leftPx = leftGlobalX * activeScreenProfile.widthPx;
+        const rightPx = rightGlobalX * activeScreenProfile.widthPx;
+        const sepPx = rightPx - leftPx;
+        const sepMm = sepPx * activeScreenProfile.metersPerPixel * 1000;
+        const enteredILDmm = (prof.interLensDistance || 0.064) * 1000;
+        return {
+          leftMarkerGlobalX: Number(leftGlobalX.toFixed(7)),
+          rightMarkerGlobalX: Number(rightGlobalX.toFixed(7)),
+          markerSeparationPx: Number(sepPx.toFixed(2)),
+          markerSeparationMm: Number(sepMm.toFixed(2)),
+          enteredILDmm: Number(enteredILDmm.toFixed(2)),
+          markerSeparationMatchesILD: Math.abs(sepMm - enteredILDmm) < 0.05
+        };
+      })()
     },
     videoProfile: activeVideoProfile,
     timings: state.firstFrameTimings,
