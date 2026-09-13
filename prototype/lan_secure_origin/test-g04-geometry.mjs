@@ -2,7 +2,7 @@
 // G04 Initial Viewer Geometry Derivation & Evidence Contract Regression Suite
 // Issue #20 Optics Work Unit: O2 Physical Measurement -> O3 Derived Initial Viewer Geometry
 // Device: iPhone 15 Pro (2556 x 1179 px, 460 PPI)
-// Target Headset: G04 passive headset (Provisional Assembly State: S2L=43mm, ILD=70mm, Center)
+// Target Headset: G04 passive headset (Provisional Assembly: S2L=43mm, ILD=65mm test candidate, Center; physical assembly reported ~67mm uncalibrated)
 // ============================================================================
 import assert from 'node:assert';
 import {
@@ -36,7 +36,7 @@ const g04Preset = createDefaultViewerProfile('g04:provisional_geometry');
 check('g04Preset exists', !!g04Preset);
 check('viewerProfileId is exact', g04Preset.viewerProfileId === 'g04:provisional_geometry', g04Preset.viewerProfileId);
 check('screenToLensDistance is 43mm', g04Preset.screenToLensDistance === 0.043, (g04Preset.screenToLensDistance * 1000) + 'mm');
-check('interLensDistance is 70mm', g04Preset.interLensDistance === 0.070, (g04Preset.interLensDistance * 1000) + 'mm');
+check('interLensDistance is 65mm (software test candidate)', g04Preset.interLensDistance === 0.065, (g04Preset.interLensDistance * 1000) + 'mm');
 check('verticalAlignment is CENTER', g04Preset.verticalAlignment === 'CENTER', g04Preset.verticalAlignment);
 check('isCalibrated is false (provisional uncalibrated)', g04Preset.isCalibrated === false);
 check('lensCorrectionEnabled is false (uncalibrated fail-closed)', g04Preset.lensCorrectionEnabled === false);
@@ -76,35 +76,35 @@ const eyeGeom = deriveCardboardEyeGeometry(s, g04Preset);
 const leftNorm = eyeGeom.leftEye.lensCenterNorm;
 const rightNorm = eyeGeom.rightEye.lensCenterNorm;
 
-check('Left viewport lensCenterNormX ~ 0.504023', Math.abs(leftNorm[0] - 0.504023265) < 1e-6, leftNorm[0].toFixed(7));
+check('Left viewport lensCenterNormX ~ 0.539450', Math.abs(leftNorm[0] - 0.539450174) < 1e-6, leftNorm[0].toFixed(7));
 check('Left viewport lensCenterNormY == 0.500000', Math.abs(leftNorm[1] - 0.5) < 1e-6, leftNorm[1].toFixed(7));
-check('Right viewport lensCenterNormX ~ 0.495977', Math.abs(rightNorm[0] - 0.495976735) < 1e-6, rightNorm[0].toFixed(7));
+check('Right viewport lensCenterNormX ~ 0.460550', Math.abs(rightNorm[0] - 0.460549826) < 1e-6, rightNorm[0].toFixed(7));
 check('Right viewport lensCenterNormY == 0.500000', Math.abs(rightNorm[1] - 0.5) < 1e-6, rightNorm[1].toFixed(7));
 
 const leftGlobalNormX = leftNorm[0] * 0.5;
 const rightGlobalNormX = 0.5 + rightNorm[0] * 0.5;
 const globalNormY = leftNorm[1];
 
-check('Left Global Normalized X ~ 0.252012 (25.2012%)', Math.abs(leftGlobalNormX - 0.252011632) < 1e-6, leftGlobalNormX.toFixed(7));
-check('Right Global Normalized X ~ 0.747988 (74.7988%)', Math.abs(rightGlobalNormX - 0.747988368) < 1e-6, rightGlobalNormX.toFixed(7));
+check('Left Global Normalized X ~ 0.269725 (26.9725%)', Math.abs(leftGlobalNormX - 0.269725087) < 1e-6, leftGlobalNormX.toFixed(7));
+check('Right Global Normalized X ~ 0.730275 (73.0275%)', Math.abs(rightGlobalNormX - 0.730274913) < 1e-6, rightGlobalNormX.toFixed(7));
 check('Global Normalized Y == 0.500000 (50.0000%)', Math.abs(globalNormY - 0.5) < 1e-6, globalNormY.toFixed(7));
 
 const leftPixelX = leftGlobalNormX * s.widthPx;
 const rightPixelX = rightGlobalNormX * s.widthPx;
 const pixelY = globalNormY * s.heightPx;
 
-check('Left Physical Pixel X ~ 644.14 px', Math.abs(leftPixelX - 644.1417) < 0.05, leftPixelX.toFixed(2) + ' px');
-check('Right Physical Pixel X ~ 1911.86 px', Math.abs(rightPixelX - 1911.8583) < 0.05, rightPixelX.toFixed(2) + ' px');
+check('Left Physical Pixel X ~ 689.42 px', Math.abs(leftPixelX - 689.4173) < 0.05, leftPixelX.toFixed(2) + ' px');
+check('Right Physical Pixel X ~ 1866.58 px', Math.abs(rightPixelX - 1866.5827) < 0.05, rightPixelX.toFixed(2) + ' px');
 check('Physical Pixel Y == 589.50 px', Math.abs(pixelY - 589.5) < 0.05, pixelY.toFixed(2) + ' px');
 
-// Cardboard Semantics: Physical screen separation of red markers must equal entered ILD (70mm)
+// Cardboard Semantics: Physical screen separation of red markers must equal entered ILD (65mm)
 const markerSepPx = rightPixelX - leftPixelX;
 const markerSepMm = markerSepPx * s.metersPerPixel * 1000;
 const enteredILDmm = g04Preset.interLensDistance * 1000;
 
-check('Marker Separation in Px matches (1267.72 px)', Math.abs(markerSepPx - 1267.7166) < 0.05, markerSepPx.toFixed(2) + ' px');
-check('Marker Separation in Mm matches entered ILD (70.00 mm)', Math.abs(markerSepMm - enteredILDmm) < 0.05, markerSepMm.toFixed(2) + ' mm vs ' + enteredILDmm.toFixed(2) + ' mm');
-check('markerSeparationMm == enteredILDmm holds strictly', Math.abs(markerSepMm - 70.0) < 0.001);
+check('Marker Separation in Px matches (1177.17 px)', Math.abs(markerSepPx - 1177.1654) < 0.05, markerSepPx.toFixed(2) + ' px');
+check('Marker Separation in Mm matches entered ILD (65.00 mm)', Math.abs(markerSepMm - enteredILDmm) < 0.05, markerSepMm.toFixed(2) + ' mm vs ' + enteredILDmm.toFixed(2) + ' mm');
+check('markerSeparationMm == enteredILDmm holds strictly (65.00 mm)', Math.abs(markerSepMm - 65.0) < 0.001);
 
 // ----------------------------------------------------------------------------
 // Suite 4: Physical Tangent Scale & Uncalibrated FOV Bounds
