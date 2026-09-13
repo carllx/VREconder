@@ -317,14 +317,13 @@ export class ProfileStorage {
       const hStr = localStorage.getItem('vreconder_viewer_profile');
       if (hStr) {
         const parsed = JSON.parse(hStr);
-        if (parsed && parsed.viewerProfileId === 'viewer:my_profile') {
-          // Stored legacy my_profile must not override default G04
-          this.activeViewerProfile = createDefaultViewerProfile('g04:provisional_geometry');
-        } else if (parsed) {
+        if (parsed && parsed.viewerProfileId === 'g04:provisional_geometry') {
+          // Valid stored G04 profile is admitted
           this.activeViewerProfile = parsed;
-          if (this.activeViewerProfile && this.activeViewerProfile.confidence === 'working-user-tuned') {
-            this.activeViewerProfile.isCalibrated = false;
-          }
+        } else {
+          // Non-G04 stored Viewer data (cardboard, my_profile, arbitrary custom)
+          // must NOT override G04. Active profile remains authoritative G04 default.
+          this.activeViewerProfile = createDefaultViewerProfile('g04:provisional_geometry');
         }
       }
     } catch (e) {

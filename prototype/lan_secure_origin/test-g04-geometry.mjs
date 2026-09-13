@@ -16,6 +16,7 @@ import {
 import { activeScreenProfile } from './src/core/screen-profile.js';
 import { state, showFeedbackToast } from './src/core/state.js';
 import { isStereoUIVisible, isStereoUIDynamic, isIsolatedCalibrationGateActive, renderStereoUI } from './src/controls/stereo-ui.js';
+import { CalibrationUI } from './src/controls/calibration-ui.js';
 
 console.log('=== RUNNING G04 INITIAL VIEWER GEOMETRY REGRESSION SUITE ===\n');
 
@@ -313,6 +314,50 @@ check('Legacy savedMyViewerProfile preserved without deletion',
   hydratedStorage.savedMyViewerProfile && hydratedStorage.savedMyViewerProfile.viewerProfileId === 'viewer:my_profile'
 );
 
+// 5b. LocalStorage Authority Tests (Cardboard, Arbitrary Stale, Valid G04)
+// A. Stale Cardboard localStorage profile does NOT override G04
+mockLocalStorage.vreconder_viewer_profile = JSON.stringify({
+  viewerProfileId: 'cardboard:reference_50deg',
+  name: 'Cardboard Reference in LocalStorage'
+});
+const cardboardLocalStorage = new ProfileStorage();
+check('Stale Cardboard in localStorage does not override G04',
+  cardboardLocalStorage.activeViewerProfile && cardboardLocalStorage.activeViewerProfile.viewerProfileId === 'g04:provisional_geometry',
+  cardboardLocalStorage.activeViewerProfile ? cardboardLocalStorage.activeViewerProfile.viewerProfileId : 'none'
+);
+
+// B. Stale arbitrary custom localStorage profile does NOT override G04
+mockLocalStorage.vreconder_viewer_profile = JSON.stringify({
+  viewerProfileId: 'custom:headset_99',
+  name: 'Custom Headset 99 in LocalStorage'
+});
+const customLocalStorage = new ProfileStorage();
+check('Stale arbitrary custom in localStorage does not override G04',
+  customLocalStorage.activeViewerProfile && customLocalStorage.activeViewerProfile.viewerProfileId === 'g04:provisional_geometry',
+  customLocalStorage.activeViewerProfile ? customLocalStorage.activeViewerProfile.viewerProfileId : 'none'
+);
+
+// C. Valid stored G04 profile IS admitted from localStorage
+mockLocalStorage.vreconder_viewer_profile = JSON.stringify({
+  viewerProfileId: 'g04:provisional_geometry',
+  name: 'Stored Valid G04',
+  screenToLensDistance: 0.043,
+  interLensDistance: 0.065,
+  isCalibrated: false
+});
+const validG04LocalStorage = new ProfileStorage();
+check('Valid stored G04 profile is admitted from localStorage',
+  validG04LocalStorage.activeViewerProfile && validG04LocalStorage.activeViewerProfile.viewerProfileId === 'g04:provisional_geometry' &&
+  validG04LocalStorage.activeViewerProfile.name === 'Stored Valid G04',
+  validG04LocalStorage.activeViewerProfile ? validG04LocalStorage.activeViewerProfile.name : 'none'
+);
+
+// Reset localStorage to clean state for subsequent tests
+mockLocalStorage.vreconder_viewer_profile = JSON.stringify({
+  viewerProfileId: 'g04:provisional_geometry',
+  name: 'G04 Provisional Geometry'
+});
+
 // 6. Real Server Legacy Hydration & Stale Identity Protection Test (Deterministic Mocked Fetch)
 const originalFetch = globalThis.fetch;
 try {
@@ -405,6 +450,64 @@ try {
 } finally {
   globalThis.fetch = originalFetch;
 }
+
+// ----------------------------------------------------------------------------
+// Suite 8: Runtime Control Authority (set_viewer_preset accepts ONLY G04)
+// ----------------------------------------------------------------------------
+console.log('\n--- Suite 8: Runtime Control Authority (set_viewer_preset accepts ONLY G04) ---');
+
+const runtimeStorage = new ProfileStorage();
+let notifiedProfile = null;
+const calUI = new CalibrationUI({
+  storage: runtimeStorage,
+  mediaController: null,
+  diagnosticOverlay: {},
+  vrRenderer: null,
+  commandModel: null,
+  onProfileChanged: (vid, view) => { notifiedProfile = view; }
+});
+
+// A. G04 preset command admitted
+notifiedProfile = null;
+calUI.handleRemoteControlAction({ action: 'set_viewer_preset', presetId: 'g04:provisional_geometry' });
+check('G04 preset command admitted',
+  calUI.activeViewerProfile && calUI.activeViewerProfile.viewerProfileId === 'g04:provisional_geometry',
+  calUI.activeViewerProfile ? calUI.activeViewerProfile.viewerProfileId : 'none'
+);
+check('onProfileChanged notified on admitted G04 preset', notifiedProfile !== null && notifiedProfile.viewerProfileId === 'g04:provisional_geometry');
+
+// B. Cardboard preset command rejected
+notifiedProfile = null;
+calUI.handleRemoteControlAction({ action: 'set_viewer_preset', presetId: 'cardboard:reference_50deg' });
+check('Cardboard preset command rejected (active remains G04)',
+  calUI.activeViewerProfile && calUI.activeViewerProfile.viewerProfileId === 'g04:provisional_geometry',
+  calUI.activeViewerProfile ? calUI.activeViewerProfile.viewerProfileId : 'none'
+);
+check('onProfileChanged NOT notified on rejected Cardboard preset', notifiedProfile === null);
+
+// C. My Viewer preset command rejected
+notifiedProfile = null;
+calUI.handleRemoteControlAction({ action: 'set_viewer_preset', presetId: 'viewer:my_profile' });
+check('My Viewer preset command rejected (active remains G04)',
+  calUI.activeViewerProfile && calUI.activeViewerProfile.viewerProfileId === 'g04:provisional_geometry',
+  calUI.activeViewerProfile ? calUI.activeViewerProfile.viewerProfileId : 'none'
+);
+check('onProfileChanged NOT notified on rejected My Viewer preset', notifiedProfile === null);
+
+// D. Unknown preset rejected
+notifiedProfile = null;
+calUI.handleRemoteControlAction({ action: 'set_viewer_preset', presetId: 'unknown_headset_xyz' });
+check('Unknown preset command rejected (active remains G04)',
+  calUI.activeViewerProfile && calUI.activeViewerProfile.viewerProfileId === 'g04:provisional_geometry',
+  calUI.activeViewerProfile ? calUI.activeViewerProfile.viewerProfileId : 'none'
+);
+check('onProfileChanged NOT notified on rejected unknown preset', notifiedProfile === null);
+
+// E. activeViewerProfile remains G04 after all rejected commands
+check('activeViewerProfile strictly remains G04 after all rejected commands',
+  calUI.activeViewerProfile && calUI.activeViewerProfile.viewerProfileId === 'g04:provisional_geometry' &&
+  runtimeStorage.activeViewerProfile.viewerProfileId === 'g04:provisional_geometry'
+);
 
 check('G04 candidate remains uncalibrated (isCalibrated = false)',
   hydratedStorage.activeViewerProfile.isCalibrated === false

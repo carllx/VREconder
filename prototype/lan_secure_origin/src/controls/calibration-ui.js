@@ -33,7 +33,9 @@ export class CalibrationUI {
   }
 
   initDOM() {
-    this.stageStatusText = document.getElementById('stageStatusText');
+    if (typeof document !== 'undefined') {
+      this.stageStatusText = document.getElementById('stageStatusText');
+    }
   }
 
   initSSEBridge() {
@@ -151,19 +153,18 @@ export class CalibrationUI {
     } else if (act === 'set_viewer_preset' && msg.presetId) {
       if (state.calibrationStage === 'C') return;
       const presetId = msg.presetId;
-      if (presetId === 'viewer:my_profile') {
-        showFeedbackToast('⚠️ My Viewer Profile retired in G04 baseline');
+      if (presetId !== 'g04:provisional_geometry') {
+        showFeedbackToast(`⚠️ Rejected viewer preset '${presetId}': G04 only`);
+        logAction('Rejected set_viewer_preset: single-viewer G04 baseline accepts only g04:provisional_geometry', { presetId });
         return;
       }
       const currentLensState = this.activeViewerProfile ? this.activeViewerProfile.lensCorrectionEnabled : false;
-      const targetProfile = createDefaultViewerProfile(presetId);
+      const targetProfile = createDefaultViewerProfile('g04:provisional_geometry');
       if (targetProfile) {
         this.activeViewerProfile = targetProfile;
         this.activeViewerProfile.lensCorrectionEnabled = currentLensState;
         if (this.onProfileChanged) this.onProfileChanged(this.activeVideoProfile, this.activeViewerProfile);
         showFeedbackToast(`Viewer Profile: ${this.activeViewerProfile.name}`);
-      } else {
-        showFeedbackToast(`⚠️ Unknown Viewer Preset: ${presetId}`);
       }
     } else if (act === 'set_reference_grid') {
       state.showReferenceGrid = (msg.enabled === true);
