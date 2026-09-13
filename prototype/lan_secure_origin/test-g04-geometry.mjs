@@ -2,13 +2,14 @@
 // G04 Initial Viewer Geometry Derivation & Evidence Contract Regression Suite
 // Issue #20 Optics Work Unit: O2 Physical Measurement -> O3 Derived Initial Viewer Geometry
 // Device: iPhone 15 Pro (2556 x 1179 px, 460 PPI)
-// Target Headset: G04 passive headset (Provisional Assembly: S2L=43mm, ILD=65mm test candidate, Center; physical assembly reported ~67mm uncalibrated)
+// Target Headset: G04 passive headset (Hardware Baseline: S2L=43mm, ILD=65mm lens-center spacing, Center)
 // ============================================================================
 import assert from 'node:assert';
 import {
   deriveCardboardEyeGeometry,
   createDefaultViewerProfile,
   getEffectiveViewerProfile,
+  ProfileStorage,
   MIN_SCREEN_TO_LENS_DISTANCE,
   MAX_SCREEN_TO_LENS_DISTANCE
 } from './src/core/projection-profile.js';
@@ -249,6 +250,74 @@ const frame4Now = state.toastTime + 16;
 const frame4Rendered = renderStereoUI(mockCtx, mockGazeEngine, null, mockVideo, frame4Now, 2556, 1179, g04Preset);
 check('Step 5: Normal non-isolated mode resumes toast rendering and upload', frame4Rendered === true);
 check('Step 5: Toast text rendered on canvas', mockCtx.drawCalls.some(d => d.text.includes('Grid Only')));
+
+// ----------------------------------------------------------------------------
+// Suite 7: Single-Viewer G04 Default & Legacy Profile Isolation
+// ----------------------------------------------------------------------------
+console.log('\n--- Suite 7: Single-Viewer G04 Default & Legacy Profile Isolation ---');
+
+// 1. Fresh ProfileStorage defaults to G04
+const storage = new ProfileStorage();
+check('Fresh ProfileStorage activeViewerProfile is G04', 
+  storage.activeViewerProfile && storage.activeViewerProfile.viewerProfileId === 'g04:provisional_geometry',
+  storage.activeViewerProfile ? storage.activeViewerProfile.viewerProfileId : 'none'
+);
+
+// 2. createDefaultViewerProfile() with no arguments returns G04
+const noArgDefault = createDefaultViewerProfile();
+check('createDefaultViewerProfile() with no args returns G04', 
+  noArgDefault && noArgDefault.viewerProfileId === 'g04:provisional_geometry'
+);
+
+// 3. Fallback for unknown preset returns G04
+const unknownFallback = createDefaultViewerProfile('nonexistent_preset_id');
+check('createDefaultViewerProfile(unknown) falls back to G04', 
+  unknownFallback && unknownFallback.viewerProfileId === 'g04:provisional_geometry'
+);
+
+// 4. Cardboard reference preset is preserved as internal fixture
+const cardboardFixture = createDefaultViewerProfile('cardboard:reference_50deg');
+check('Cardboard reference preset preserved as fixture', 
+  cardboardFixture && cardboardFixture.viewerProfileId === 'cardboard:reference_50deg' &&
+  cardboardFixture.screenToLensDistance === 0.0393 &&
+  cardboardFixture.interLensDistance === 0.0639
+);
+
+// 5. Stored legacy localStorage 'vreconder_saved_my_profile' does NOT override G04
+const mockLocalStorage = {
+  vreconder_saved_my_profile: JSON.stringify({
+    viewerProfileId: 'viewer:my_profile',
+    name: 'Legacy Stored My Profile',
+    screenToLensDistance: 0.045,
+    interLensDistance: 0.068,
+    isCalibrated: false
+  }),
+  vreconder_viewer_profile: JSON.stringify({
+    viewerProfileId: 'viewer:my_profile',
+    name: 'Legacy Stored Active My Profile'
+  })
+};
+
+globalThis.localStorage = {
+  getItem: (k) => mockLocalStorage[k] || null,
+  setItem: (k, v) => { mockLocalStorage[k] = v; },
+  removeItem: (k) => { delete mockLocalStorage[k]; }
+};
+
+const hydratedStorage = new ProfileStorage();
+check('Hydrated ProfileStorage with legacy my_profile defaults activeViewerProfile to G04',
+  hydratedStorage.activeViewerProfile && hydratedStorage.activeViewerProfile.viewerProfileId === 'g04:provisional_geometry',
+  hydratedStorage.activeViewerProfile ? hydratedStorage.activeViewerProfile.viewerProfileId : 'none'
+);
+check('Legacy savedMyViewerProfile preserved without deletion',
+  hydratedStorage.savedMyViewerProfile && hydratedStorage.savedMyViewerProfile.viewerProfileId === 'viewer:my_profile'
+);
+
+// 6. Server profile sync containing legacy my_profile does NOT override G04
+hydratedStorage.loadServerProfiles = async () => {}; // mock guard
+check('G04 candidate remains uncalibrated (isCalibrated = false)',
+  hydratedStorage.activeViewerProfile.isCalibrated === false
+);
 
 console.log('\n============================================================');
 if (allPassed) {

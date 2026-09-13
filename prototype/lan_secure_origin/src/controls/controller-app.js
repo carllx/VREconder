@@ -220,12 +220,6 @@ export function populateSlidersFromProfile(p) {
 
 export function onViewerPresetSelect(presetId) {
   if (currentStage !== 'B') return;
-  if (presetId === 'viewer:my_profile') {
-    if (!latestSavedMyProfile) {
-      alert('⚠️ My Viewer Profile has not been saved yet.\nPlease tune sliders and click Save My Viewer Profile.');
-      return;
-    }
-  }
   sendControl({ action: 'set_viewer_preset', presetId: presetId });
 }
 

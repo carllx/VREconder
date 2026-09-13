@@ -198,15 +198,13 @@
           <div style="font-size:0.8rem; font-weight:700; color:var(--muted); text-transform:uppercase;">3. Viewer Optics Calibration (Stage B/C)</div>
           <div id="txtProfileStatus" style="font-size:0.72rem; color:#f87171; font-weight:bold;">⚠️ Unknown / Uncalibrated Profile</div>
         </div>
-        <button class="action-btn btn-save" id="btnSaveViewer" onclick="saveMyViewerProfile()">💾 Save My Viewer Profile</button>
       </div>
 
       <div class="control-row" style="margin-top:8px;">
         <div style="font-size:0.75rem; font-weight:700; color:var(--muted); text-transform:uppercase;">Active Viewer Profile (Stage B Only):</div>
         <select id="selViewerPreset" onchange="onViewerPresetSelect(this.value)" style="width:100%; margin-top:4px; padding:6px 10px; background:#1e293b; color:#fff; border:1px solid #334155; border-radius:6px; font-size:0.8rem; font-weight:600;">
-          <option value="cardboard:reference_50deg">Cardboard-inspired Reference (50° Guidance) [Reference / Not Ground Truth]</option>
-          <option value="g04:provisional_geometry">G04 Provisional Geometry (Uncalibrated v0.1 — S2L=43mm, ILD=65mm test candidate, Center)</option>
-          <option value="viewer:my_profile">My Viewer Profile (Saved Working Profile)</option>
+          <option value="g04:provisional_geometry" selected>G04 Provisional Geometry (Uncalibrated v0.1 — S2L=43mm, ILD=65mm, Center)</option>
+          <option value="cardboard:reference_50deg">Cardboard-inspired Reference (50° Guidance) [Internal Reference / Fixture]</option>
         </select>
       </div>
 

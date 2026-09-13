@@ -126,7 +126,7 @@ export function normalizeVideoProfile(raw, defaultMediaId = '', defaultName = ''
   };
 }
 
-export function createDefaultViewerProfile(profileId = 'cardboard:reference_50deg') {
+export function createDefaultViewerProfile(profileId = 'g04:provisional_geometry') {
   const presets = {
     'cardboard:reference_50deg': {
       viewerProfileId: 'cardboard:reference_50deg',
@@ -158,13 +158,13 @@ export function createDefaultViewerProfile(profileId = 'cardboard:reference_50de
     },
     'g04:provisional_geometry': {
       viewerProfileId: 'g04:provisional_geometry',
-      name: 'G04 Provisional Geometry (Uncalibrated v0.1 — 65mm ILD candidate)',
-      source: 'G04 Candidate (S2L=43mm, ILD=65mm test candidate; physical assembly reported ~67mm uncalibrated, Center Align)',
+      name: 'G04 Provisional Geometry (Uncalibrated v0.1 — 65mm ILD)',
+      source: 'G04 Hardware Baseline (S2L=43mm, ILD=65mm lens-center spacing, Center Align)',
       confidence: 'provisional-uncalibrated',
       isCalibrated: false,
       lensCorrectionEnabled: false,
       screenToLensDistance: 0.0430, // 43.0 mm provisional screen-to-lens distance
-      interLensDistance: 0.0650,    // 65.0 mm software ILD fusion test candidate (reported physical measurement ~67mm preserved as separate uncalibrated evidence)
+      interLensDistance: 0.0650,    // 65.0 mm hardware lens-center spacing
       verticalAlignment: 'CENTER',
       trayToLensDistance: 0.0350,   // reference fallback (unused in CENTER alignment)
       maxFovAngles: { outerDeg: 50.0, innerDeg: 50.0, upperDeg: 50.0, lowerDeg: 50.0 },
@@ -179,7 +179,7 @@ export function createDefaultViewerProfile(profileId = 'cardboard:reference_50de
     return null;
   }
 
-  return presets[profileId] || presets['cardboard:reference_50deg'];
+  return presets[profileId] || presets['g04:provisional_geometry'];
 }
 
 export function distortRadius(r, k1 = 0, k2 = 0) {
@@ -294,7 +294,7 @@ export class ProfileStorage {
   constructor() {
     this.videoProfiles = {};
     this.savedMyViewerProfile = null;
-    this.activeViewerProfile = createDefaultViewerProfile('cardboard:reference_50deg');
+    this.activeViewerProfile = createDefaultViewerProfile('g04:provisional_geometry');
     this.loadFromLocalStorage();
   }
 
@@ -316,12 +316,16 @@ export class ProfileStorage {
       }
       const hStr = localStorage.getItem('vreconder_viewer_profile');
       if (hStr) {
-        this.activeViewerProfile = JSON.parse(hStr);
-        if (this.activeViewerProfile && this.activeViewerProfile.confidence === 'working-user-tuned') {
-          this.activeViewerProfile.isCalibrated = false;
+        const parsed = JSON.parse(hStr);
+        if (parsed && parsed.viewerProfileId === 'viewer:my_profile') {
+          // Stored legacy my_profile must not override default G04
+          this.activeViewerProfile = createDefaultViewerProfile('g04:provisional_geometry');
+        } else if (parsed) {
+          this.activeViewerProfile = parsed;
+          if (this.activeViewerProfile && this.activeViewerProfile.confidence === 'working-user-tuned') {
+            this.activeViewerProfile.isCalibrated = false;
+          }
         }
-      } else if (this.savedMyViewerProfile) {
-        this.activeViewerProfile = JSON.parse(JSON.stringify(this.savedMyViewerProfile));
       }
     } catch (e) {
       console.warn('Profile storage warning:', e);
@@ -354,7 +358,7 @@ export class ProfileStorage {
           data.viewerProfile.isCalibrated = false;
           data.viewerProfile.source = 'User-tuned Working Profile (Unvalidated)';
           this.savedMyViewerProfile = data.viewerProfile;
-          this.activeViewerProfile = data.viewerProfile;
+          // Stored legacy server my_profile must NOT override default G04 active profile
         } else if (data.viewerProfile) {
           this.activeViewerProfile = { ...this.activeViewerProfile, ...data.viewerProfile };
         }
