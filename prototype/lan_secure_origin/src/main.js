@@ -15,6 +15,7 @@ import { initAudioContext } from './controls/audio-haptics.js';
 import { profileStorage, computeMediaFingerprint, getEffectiveViewerProfile } from './core/projection-profile.js';
 import { CalibrationUI } from './controls/calibration-ui.js';
 import { ControllerInputProbe, setRemoteLogFunction } from './controls/controller-input-probe.js';
+import { captureRenderSurfaceSnapshot, drawRenderSurfaceEdgeFixture } from './telemetry/render-surface-diagnostics.js';
 
 // Global error handlers & Remote Diagnostics
 export function remoteLog(level, message, data = null) {
@@ -417,6 +418,9 @@ function renderLoop(now) {
       video.currentTime,
       video.duration || 0
     );
+
+    // Minimal Visual Edge Fixture: screen perimeter edges, center vertical seam, and left/right eye centers
+    drawRenderSurfaceEdgeFixture(uiCtx, width, height, effectiveViewerProfile);
   } else {
     // 2. Stereo VR Mode: Dual Viewports with Optional Lens Pre-Distortion
     gazeEngine.update(now);
@@ -495,6 +499,7 @@ setInterval(() => {
     currentTime: video.currentTime || 0,
     duration: video.duration || 0,
     stall: stallDetector.getSummary(),
+    renderSurface: captureRenderSurfaceSnapshot(glCanvas, uiCanvas, state.renderScale || 1.0),
     mediaList: (state.videoList || []).map(v => ({ relPath: v.relPath, name: v.name, sizeGB: v.sizeGB })),
     controllerInput: controllerProbe.getTelemetryData()
   };

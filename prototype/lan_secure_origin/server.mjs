@@ -286,6 +286,15 @@ function handleRequest(req, res, isHttps) {
               fs.appendFileSync(perfLog, line, 'utf8');
             }
           }
+          if (payload.renderSurface) {
+            const surfLog = path.join(__dirname, 'render_surface_gate.log');
+            const entry = {
+              serverTimestamp: payload.serverTimestamp,
+              clientIp: payload.clientIp,
+              renderSurface: payload.renderSurface
+            };
+            fs.appendFileSync(surfLog, JSON.stringify(entry) + '\n', 'utf8');
+          }
         }
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ status: 'ok', received: true }));

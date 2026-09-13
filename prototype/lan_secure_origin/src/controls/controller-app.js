@@ -208,33 +208,16 @@ export function applyStageLocks(stage) {
 
 export function populateSlidersFromProfile(p) {
   if (!p) return;
-  if (p.distortion && typeof p.distortion.k1 === 'number') {
-    const el = document.getElementById('rngK1'); if (el) el.value = p.distortion.k1;
-    const val = document.getElementById('valK1'); if (val) val.textContent = p.distortion.k1.toFixed(3);
-  }
-  if (p.distortion && typeof p.distortion.k2 === 'number') {
-    const el = document.getElementById('rngK2'); if (el) el.value = p.distortion.k2;
-    const val = document.getElementById('valK2'); if (val) val.textContent = p.distortion.k2.toFixed(3);
-  }
-  if (p.screenToLensDistance) {
-    const mm = p.screenToLensDistance * 1000;
-    const el = document.getElementById('rngScreenToLens'); if (el) el.value = mm;
-    const val = document.getElementById('valScreenToLens'); if (val) val.textContent = mm.toFixed(1);
-  }
-  if (p.interLensDistance) {
-    const mm = p.interLensDistance * 1000;
-    const el = document.getElementById('rngInterLens'); if (el) el.value = mm;
-    const val = document.getElementById('valInterLens'); if (val) val.textContent = mm.toFixed(1);
-  }
-  if (p.trayToLensDistance) {
-    const mm = p.trayToLensDistance * 1000;
-    const el = document.getElementById('rngTrayToLens'); if (el) el.value = mm;
-    const val = document.getElementById('valTrayToLens'); if (val) val.textContent = mm.toFixed(1);
-  }
-  if (p.maxFovAngles && p.maxFovAngles.outerDeg) {
-    const el = document.getElementById('rngFov'); if (el) el.value = p.maxFovAngles.outerDeg;
-    const val = document.getElementById('valFov'); if (val) val.textContent = p.maxFovAngles.outerDeg.toFixed(1) + '°';
-  }
+  const setSlider = (rngId, valId, v, unit = '', digits = 1) => {
+    const el = document.getElementById(rngId); if (el) el.value = v;
+    const val = document.getElementById(valId); if (val) val.textContent = v.toFixed(digits) + unit;
+  };
+  if (p.distortion && typeof p.distortion.k1 === 'number') setSlider('rngK1', 'valK1', p.distortion.k1, '', 3);
+  if (p.distortion && typeof p.distortion.k2 === 'number') setSlider('rngK2', 'valK2', p.distortion.k2, '', 3);
+  if (p.screenToLensDistance) setSlider('rngScreenToLens', 'valScreenToLens', p.screenToLensDistance * 1000);
+  if (p.interLensDistance) setSlider('rngInterLens', 'valInterLens', p.interLensDistance * 1000);
+  if (p.trayToLensDistance) setSlider('rngTrayToLens', 'valTrayToLens', p.trayToLensDistance * 1000);
+  if (p.maxFovAngles && p.maxFovAngles.outerDeg) setSlider('rngFov', 'valFov', p.maxFovAngles.outerDeg, '°');
 }
 
 export function onViewerPresetSelect(presetId) {
@@ -352,6 +335,29 @@ export function updateTelemetryUI(data) {
       setEl('valBufferAhead', `${pb.bufferAheadSec}s`);
     } catch (e) {
       console.warn('Error updating perf telemetry UI:', e);
+    }
+  }
+
+  // 1b. Safari Real-Device Render Surface Diagnostics (Gate)
+  if (data.renderSurface) {
+    try {
+      const rs = data.renderSurface;
+      const scr = rs.screen || {};
+      const win = rs.window || {};
+      const doc = rs.documentElement || {};
+      const vv = rs.visualViewport || {};
+      const ins = rs.safeAreaInsets || {};
+      const gl = rs.glCanvas || {};
+      const ui = rs.uiCanvas || {};
+
+      setEl('valSurfaceScreen', `scr:${scr.width}x${scr.height} (avail:${scr.availWidth}x${scr.availHeight})`);
+      setEl('valSurfaceWindow', `win:${win.innerWidth}x${win.innerHeight} (dpr:${win.devicePixelRatio}) | doc:${doc.clientWidth}x${doc.clientHeight}`);
+      setEl('valSurfaceVV', vv.width ? `vv:${vv.width}x${vv.height} @(${vv.offsetLeft},${vv.offsetTop}) scale:${vv.scale}` : 'visualVP: N/A');
+      setEl('valSurfaceInsets', `insets: T:${ins.top} R:${ins.right} B:${ins.bottom} L:${ins.left} | ${rs.orientation || '--'}`);
+      setEl('valSurfaceGl', `GL css:${gl.cssWidth}x${gl.cssHeight} buf:${gl.drawingBufferWidth}x${gl.drawingBufferHeight}`);
+      setEl('valSurfaceUi', `UI css:${ui.cssWidth}x${ui.cssHeight} buf:${ui.drawingBufferWidth}x${ui.drawingBufferHeight}`);
+    } catch (e) {
+      console.warn('Error updating render surface diagnostics UI:', e);
     }
   }
 
