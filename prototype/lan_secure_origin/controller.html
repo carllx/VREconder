@@ -205,6 +205,7 @@
         <div style="font-size:0.75rem; font-weight:700; color:var(--muted); text-transform:uppercase;">Active Viewer Profile (Stage B Only):</div>
         <select id="selViewerPreset" onchange="onViewerPresetSelect(this.value)" style="width:100%; margin-top:4px; padding:6px 10px; background:#1e293b; color:#fff; border:1px solid #334155; border-radius:6px; font-size:0.8rem; font-weight:600;">
           <option value="cardboard:reference_50deg">Cardboard-inspired Reference (50° Guidance) [Reference / Not Ground Truth]</option>
+          <option value="g04:provisional_geometry">G04 Provisional Geometry (Uncalibrated v0.1 — S2L=43mm, ILD=70mm, Center)</option>
           <option value="viewer:my_profile">My Viewer Profile (Saved Working Profile)</option>
         </select>
       </div>
@@ -212,14 +213,18 @@
       <!-- Stage B Visual Reference Sub-modes -->
       <div id="stageBVisualRefPanel" style="margin-top:8px;">
         <div style="font-size:0.74rem; font-weight:700; color:var(--muted); text-transform:uppercase;">Stage B Visual Reference:</div>
-        <div class="stage-grid" style="grid-template-columns: 1fr 1fr; margin-top:4px;">
+        <div class="stage-grid" style="grid-template-columns: 1fr 1fr 1fr; margin-top:4px;">
           <button class="stage-btn active" id="btnVisualGridOnly" onclick="setViewerVisualMode('grid_only')">
             ▦ Grid Only<br>
-            <span style="font-size:0.68rem; font-weight:normal; opacity:0.85;">Pure Synthetic Lines & 90° Corners</span>
+            <span style="font-size:0.68rem; font-weight:normal; opacity:0.85;">Synthetic Lines</span>
+          </button>
+          <button class="stage-btn" id="btnVisualTargetFixture" onclick="setViewerVisualMode('target_fixture')">
+            🎯 G04 Target<br>
+            <span style="font-size:0.68rem; font-weight:normal; opacity:0.85;">Concentric + Center</span>
           </button>
           <button class="stage-btn" id="btnVisualVideoGrid" onclick="setViewerVisualMode('video_grid')">
             🎬 Video + Grid<br>
-            <span style="font-size:0.68rem; font-weight:normal; opacity:0.85;">Real VR Video + Stereo Reference Grid</span>
+            <span style="font-size:0.68rem; font-weight:normal; opacity:0.85;">Video + Grid</span>
           </button>
         </div>
       </div>

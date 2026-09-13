@@ -155,6 +155,20 @@ export function createDefaultViewerProfile(profileId = 'cardboard:reference_50de
       trayToLensDistance: 0.0350,
       maxFovAngles: { outerDeg: 50.0, innerDeg: 50.0, upperDeg: 50.0, lowerDeg: 50.0 },
       distortion: { model: 'uncalibrated', k1: 0.0, k2: 0.0 }
+    },
+    'g04:provisional_geometry': {
+      viewerProfileId: 'g04:provisional_geometry',
+      name: 'G04 Provisional Geometry (Uncalibrated v0.1)',
+      source: 'G04 Provisional Assembly Measurement (S2L=43mm, ILD=70mm, Center Align)',
+      confidence: 'provisional-uncalibrated',
+      isCalibrated: false,
+      lensCorrectionEnabled: false,
+      screenToLensDistance: 0.0430, // 43.0 mm provisional screen-to-lens distance
+      interLensDistance: 0.0700,    // 70.0 mm provisional inter-lens distance
+      verticalAlignment: 'CENTER',
+      trayToLensDistance: 0.0350,   // reference fallback (unused in CENTER alignment)
+      maxFovAngles: { outerDeg: 50.0, innerDeg: 50.0, upperDeg: 50.0, lowerDeg: 50.0 },
+      distortion: { model: 'uncalibrated', k1: 0.0, k2: 0.0 }
     }
   };
 

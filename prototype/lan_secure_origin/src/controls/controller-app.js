@@ -13,7 +13,6 @@ export let latestSavedMyProfile = null;
 export let videoList = [];
 
 let isServerOnline = false;
-
 export function setServerConnectionBadge(online = true, text = '') {
   isServerOnline = online;
   const badge = document.getElementById('badgeServerConnection');
@@ -126,13 +125,8 @@ export function onSelectMedia(relPath) {
   sendControl({ action: 'select_media', relPath: relPath });
 }
 
-export function sendSeek(sec) {
-  sendControl({ action: 'seek', seconds: sec });
-}
-
-export function sendSeekTo(sec) {
-  sendControl({ action: 'seek_to', seconds: Math.max(0, sec) });
-}
+export function sendSeek(sec) { sendControl({ action: 'seek', seconds: sec }); }
+export function sendSeekTo(sec) { sendControl({ action: 'seek_to', seconds: Math.max(0, sec) }); }
 
 export function toggleDiagnosticEye() {
   diagEye = (diagEye === 0) ? 1 : 0;
@@ -160,9 +154,7 @@ export function onPoseChange() {
 }
 
 export function resetPose() {
-  document.getElementById('rngPoseYaw').value = 0;
-  document.getElementById('rngPosePitch').value = 0;
-  document.getElementById('rngPoseRoll').value = 0;
+  ['rngPoseYaw', 'rngPosePitch', 'rngPoseRoll'].forEach(id => { const el = document.getElementById(id); if (el) el.value = 0; });
   onPoseChange();
 }
 
@@ -178,6 +170,7 @@ export function setStage(stage) {
 export function setViewerVisualMode(mode) {
   currentVisualMode = mode;
   document.getElementById('btnVisualGridOnly')?.classList.toggle('active', mode === 'grid_only');
+  document.getElementById('btnVisualTargetFixture')?.classList.toggle('active', mode === 'target_fixture');
   document.getElementById('btnVisualVideoGrid')?.classList.toggle('active', mode === 'video_grid');
   sendControl({ action: 'set_viewer_visual_mode', mode: mode });
 }
@@ -431,6 +424,7 @@ export function updateTelemetryUI(data) {
     if (data.viewerVisualMode && data.viewerVisualMode !== currentVisualMode) {
       currentVisualMode = data.viewerVisualMode;
       document.getElementById('btnVisualGridOnly')?.classList.toggle('active', currentVisualMode === 'grid_only');
+      document.getElementById('btnVisualTargetFixture')?.classList.toggle('active', currentVisualMode === 'target_fixture');
       document.getElementById('btnVisualVideoGrid')?.classList.toggle('active', currentVisualMode === 'video_grid');
     }
     if (data.calibrationStage && data.calibrationStage !== currentStage) {
@@ -493,7 +487,13 @@ export function updateTelemetryUI(data) {
       }
       const selPreset = document.getElementById('selViewerPreset');
       if (selPreset) {
-        selPreset.value = (vp.viewerProfileId === 'viewer:my_profile' || vp.confidence === 'working-user-tuned') ? 'viewer:my_profile' : 'cardboard:reference_50deg';
+        if (vp.viewerProfileId === 'viewer:my_profile' || vp.confidence === 'working-user-tuned') {
+          selPreset.value = 'viewer:my_profile';
+        } else if (vp.viewerProfileId === 'g04:provisional_geometry') {
+          selPreset.value = 'g04:provisional_geometry';
+        } else {
+          selPreset.value = 'cardboard:reference_50deg';
+        }
       }
       populateSlidersFromProfile(vp);
       const statEl = document.getElementById('txtProfileStatus');
@@ -501,6 +501,9 @@ export function updateTelemetryUI(data) {
         if (vp.confidence === 'working-user-tuned' || vp.viewerProfileId === 'viewer:my_profile') {
           statEl.textContent = '⚙️ ' + (vp.name || 'My Viewer Profile') + ' [Unvalidated / User-tuned — Not Ground Truth]';
           statEl.style.color = '#38bdf8';
+        } else if (vp.viewerProfileId === 'g04:provisional_geometry') {
+          statEl.textContent = '🔬 ' + (vp.name || 'G04 Provisional Geometry') + ' [Provisional Assembly — Not Ground Truth]';
+          statEl.style.color = '#a855f7';
         } else if (vp.confidence === 'historical-reference' || vp.viewerProfileId === 'cardboard:reference_50deg') {
           statEl.textContent = '✓ ' + (vp.name || 'Cardboard Reference') + ' [Reference Optics — Not Ground Truth]';
           statEl.style.color = '#34d399';

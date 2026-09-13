@@ -115,11 +115,18 @@ export class CalibrationUI {
     } else if (act === 'set_viewer_visual_mode') {
       state.viewerVisualMode = msg.mode;
       if (state.calibrationStage === 'B' && this.vrRenderer) {
-        const isVideoGrid = (msg.mode === 'video_grid');
-        this.vrRenderer.sceneType = isVideoGrid ? 0 : 1;
-        this.vrRenderer.showReferenceGrid = isVideoGrid;
+        if (msg.mode === 'target_fixture') {
+          this.vrRenderer.sceneType = 2;
+          this.vrRenderer.showReferenceGrid = false;
+        } else if (msg.mode === 'video_grid') {
+          this.vrRenderer.sceneType = 0;
+          this.vrRenderer.showReferenceGrid = true;
+        } else {
+          this.vrRenderer.sceneType = 1;
+          this.vrRenderer.showReferenceGrid = false;
+        }
       }
-      showFeedbackToast(`Stage B Ref: ${msg.mode === 'video_grid' ? 'Video + Grid' : 'Grid Only'}`);
+      showFeedbackToast(`Stage B Ref: ${msg.mode === 'target_fixture' ? 'G04 Target' : (msg.mode === 'video_grid' ? 'Video + Grid' : 'Grid Only')}`);
       logAction('Set Viewer Visual Mode: ' + msg.mode);
     } else if (act === 'set_video_mapping' && msg.mapping && this.activeVideoProfile) {
       const m = msg.mapping;
@@ -237,14 +244,22 @@ export class CalibrationUI {
       this.currentMode = 'diagnostic';
       showFeedbackToast('Stage A: Flat Diagnostic (Unobstructed)');
     } else if (stage === 'B') {
-      const isVideoGrid = (state.viewerVisualMode === 'video_grid');
+      const mode = state.viewerVisualMode;
       if (this.vrRenderer) {
-        this.vrRenderer.sceneType = isVideoGrid ? 0 : 1;
-        this.vrRenderer.showReferenceGrid = isVideoGrid;
+        if (mode === 'target_fixture') {
+          this.vrRenderer.sceneType = 2;
+          this.vrRenderer.showReferenceGrid = false;
+        } else if (mode === 'video_grid') {
+          this.vrRenderer.sceneType = 0;
+          this.vrRenderer.showReferenceGrid = true;
+        } else {
+          this.vrRenderer.sceneType = 1;
+          this.vrRenderer.showReferenceGrid = false;
+        }
       }
       this.currentMode = 'vr';
       if (this.onEnterVR) this.onEnterVR();
-      showFeedbackToast(`Stage B: Viewer Optics (${isVideoGrid ? 'Video + Grid' : 'Grid Only'})`);
+      showFeedbackToast(`Stage B: Viewer Optics (${mode === 'target_fixture' ? 'G04 Target' : (mode === 'video_grid' ? 'Video + Grid' : 'Grid Only')})`);
     } else if (stage === 'C') {
       if (this.vrRenderer) {
         this.vrRenderer.sceneType = 0;

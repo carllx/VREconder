@@ -91,6 +91,33 @@ export const fsIdealSceneSource = `
       return;
     }
 
+    // 3. High-Contrast Geometry Target (G04 Human Gate Fixture: concentric rings + optical axis crosshair on black)
+    if (uSceneType == 2) {
+      float r = length(vec2(tanX, tanY));
+      // Fine crosshairs along optical axis tanX = 0, tanY = 0
+      float isCenterCross = (abs(tanX) < 0.0035 || abs(tanY) < 0.0035) ? 1.0 : 0.0;
+      // High-contrast concentric alignment rings at radii 0.05, 0.10, 0.15, 0.20, 0.25, 0.30
+      float ringFract = abs(fract(r * 20.0) - 0.5);
+      float isRing = (step(0.44, ringFract) * step(r, 0.32));
+      // Outer calibration ring at tan = 0.35
+      float isOuterRing = (abs(r - 0.35) < 0.004) ? 1.0 : 0.0;
+      // Distinct monocular ID indicators
+      // Left Eye: Cyan ring accent & "+L" indicator marker; Right Eye: Amber ring accent & "+R" indicator marker
+      vec3 accentCol = (uEye == 0) ? vec3(0.0, 0.9, 1.0) : vec3(1.0, 0.7, 0.1);
+      // Small eye ID marker bar (tanX in [-0.08, -0.06] for Left, [0.06, 0.08] for Right, |tanY| < 0.015)
+      float isEyeTag = ((uEye == 0 && tanX >= -0.08 && tanX <= -0.06 && abs(tanY) < 0.015) ||
+                        (uEye == 1 && tanX >= 0.06 && tanX <= 0.08 && abs(tanY) < 0.015)) ? 1.0 : 0.0;
+
+      vec3 col = vec3(0.0); // Pure deep black background
+      col = mix(col, vec3(0.75, 0.75, 0.75), isRing);
+      col = mix(col, vec3(1.0, 1.0, 1.0), isOuterRing);
+      col = mix(col, accentCol, isEyeTag);
+      col = mix(col, vec3(1.0, 0.2, 0.2), isCenterCross);
+
+      gl_FragColor = vec4(col, 1.0);
+      return;
+    }
+
     // Combine Head Tracking and Video Pose Rotation
     vec3 dWorld = uPoseRot * (uCamRot * rayCam);
 

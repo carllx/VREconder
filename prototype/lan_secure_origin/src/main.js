@@ -298,12 +298,16 @@ function enterVRMode() {
     return;
   }
 
-  // If entering VR from Stage A, promote to Stage B (Synthetic Grid stereo VR)
+  // If entering VR from Stage A, promote to Stage B (Stereo VR)
   if (state.calibrationStage === 'A') {
     state.calibrationStage = 'B';
-    if (vrRenderer) vrRenderer.sceneType = 1;
-  } else if (state.calibrationStage === 'B') {
-    if (vrRenderer) vrRenderer.sceneType = 1;
+  }
+  if (state.calibrationStage === 'B') {
+    if (vrRenderer) {
+      if (state.viewerVisualMode === 'target_fixture') vrRenderer.sceneType = 2;
+      else if (state.viewerVisualMode === 'video_grid') vrRenderer.sceneType = 0;
+      else vrRenderer.sceneType = 1;
+    }
   } else if (state.calibrationStage === 'C') {
     if (vrRenderer) vrRenderer.sceneType = 0;
   }
