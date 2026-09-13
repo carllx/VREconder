@@ -473,7 +473,11 @@ setInterval(() => {
       lensCorrectionRequested: !!(calibrationUI.activeViewerProfile && calibrationUI.activeViewerProfile.lensCorrectionEnabled),
       lensCorrectionApplied: !!(getEffectiveViewerProfile(calibrationUI.activeViewerProfile).lensCorrectionEnabled),
       lensCorrectionSuppressedReason: getEffectiveViewerProfile(calibrationUI.activeViewerProfile)._lensCorrectionSuppressedReason || null,
-      requestedScreenToLensMm: Number(((getEffectiveViewerProfile(calibrationUI.activeViewerProfile).requestedScreenToLensDistance || 0.0393) * 1000).toFixed(1)),
+      requestedScreenToLensMm: (() => {
+        const eff = getEffectiveViewerProfile(calibrationUI.activeViewerProfile);
+        const reqD = eff ? eff.requestedScreenToLensDistance : null;
+        return Number.isFinite(reqD) ? Number((reqD * 1000).toFixed(1)) : 39.3;
+      })(),
       effectiveScreenToLensMm: Number((getEffectiveViewerProfile(calibrationUI.activeViewerProfile).screenToLensDistance * 1000).toFixed(1)),
       isScreenToLensClamped: !!(getEffectiveViewerProfile(calibrationUI.activeViewerProfile).isScreenToLensClamped),
       screenToLensClampReason: getEffectiveViewerProfile(calibrationUI.activeViewerProfile).screenToLensClampReason || null
