@@ -179,7 +179,7 @@ export function createDefaultViewerProfile(profileId = 'g04:provisional_geometry
     return null;
   }
 
-  return presets[profileId] || presets['g04:provisional_geometry'];
+  return presets[profileId] || null;
 }
 
 export function distortRadius(r, k1 = 0, k2 = 0) {
@@ -359,7 +359,7 @@ export class ProfileStorage {
           data.viewerProfile.source = 'User-tuned Working Profile (Unvalidated)';
           this.savedMyViewerProfile = data.viewerProfile;
           // Stored legacy server my_profile must NOT override default G04 active profile
-        } else if (data.viewerProfile) {
+        } else if (data.viewerProfile && data.viewerProfile.viewerProfileId === 'g04:provisional_geometry') {
           this.activeViewerProfile = { ...this.activeViewerProfile, ...data.viewerProfile };
         }
         this.saveToLocalStorage();

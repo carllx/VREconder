@@ -151,23 +151,19 @@ export class CalibrationUI {
     } else if (act === 'set_viewer_preset' && msg.presetId) {
       if (state.calibrationStage === 'C') return;
       const presetId = msg.presetId;
-      const currentLensState = this.activeViewerProfile ? this.activeViewerProfile.lensCorrectionEnabled : false;
-      let targetProfile = null;
       if (presetId === 'viewer:my_profile') {
-        if (this.storage && this.storage.savedMyViewerProfile) {
-          targetProfile = JSON.parse(JSON.stringify(this.storage.savedMyViewerProfile));
-        } else {
-          showFeedbackToast('⚠️ My Viewer Profile: Not saved yet');
-          return;
-        }
-      } else {
-        targetProfile = createDefaultViewerProfile(presetId);
+        showFeedbackToast('⚠️ My Viewer Profile retired in G04 baseline');
+        return;
       }
+      const currentLensState = this.activeViewerProfile ? this.activeViewerProfile.lensCorrectionEnabled : false;
+      const targetProfile = createDefaultViewerProfile(presetId);
       if (targetProfile) {
         this.activeViewerProfile = targetProfile;
         this.activeViewerProfile.lensCorrectionEnabled = currentLensState;
         if (this.onProfileChanged) this.onProfileChanged(this.activeVideoProfile, this.activeViewerProfile);
         showFeedbackToast(`Viewer Profile: ${this.activeViewerProfile.name}`);
+      } else {
+        showFeedbackToast(`⚠️ Unknown Viewer Preset: ${presetId}`);
       }
     } else if (act === 'set_reference_grid') {
       state.showReferenceGrid = (msg.enabled === true);
@@ -217,11 +213,8 @@ export class CalibrationUI {
     } else if (act === 'previous' && this.commandModel) {
       this.commandModel.previous();
     } else if (act === 'save_viewer_profile') {
-      if (this.activeViewerProfile) {
-        this.storage.saveViewerProfile(this.activeViewerProfile);
-        showFeedbackToast('💾 My Viewer Profile (working) Saved');
-        logAction('Saved My Viewer Profile', this.activeViewerProfile);
-      }
+      showFeedbackToast('⚠️ Custom viewer profiles retired in G04 baseline');
+      logAction('Rejected save_viewer_profile: single-viewer G04 baseline is active');
     } else if (act === 'save_video_profile' && this.activeVideoProfile) {
       if (this.activeVideoProfile.projection === 'unknown' || this.activeVideoProfile.stereoMode === 'unknown' || this.activeVideoProfile.eyeOrder === 'unknown') {
         showFeedbackToast('⚠️ Select mapping before saving!');

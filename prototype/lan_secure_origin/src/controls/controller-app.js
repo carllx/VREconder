@@ -218,11 +218,6 @@ export function populateSlidersFromProfile(p) {
   if (p.maxFovAngles && p.maxFovAngles.outerDeg) setSlider('rngFov', 'valFov', p.maxFovAngles.outerDeg, p.maxFovAngles.outerDeg.toFixed(1) + '°');
 }
 
-export function onViewerPresetSelect(presetId) {
-  if (currentStage !== 'B') return;
-  sendControl({ action: 'set_viewer_preset', presetId: presetId });
-}
-
 export function onVideoMappingChange() {
   const proj = document.getElementById('selProjection').value;
   const stereo = document.getElementById('selStereo').value;
@@ -250,10 +245,6 @@ export function saveVideoMapping() {
     return;
   }
   sendControl({ action: 'save_video_profile' });
-}
-
-export function saveMyViewerProfile() {
-  sendControl({ action: 'save_viewer_profile' });
 }
 
 export function toggleReferenceGrid(checked) {
@@ -394,10 +385,6 @@ export function updateTelemetryUI(data) {
     }
     if (typeof data.savedMyViewerProfileExists === 'boolean') {
       latestSavedMyProfile = data.savedMyViewerProfile || null;
-      const opt = document.querySelector('#selViewerPreset option[value="viewer:my_profile"]');
-      if (opt) {
-        opt.textContent = data.savedMyViewerProfileExists ? 'My Viewer Profile (Saved Working Profile)' : 'My Viewer Profile (Not saved yet)';
-      }
     }
     if (typeof data.showReferenceGrid === 'boolean') {
       const chk = document.getElementById('chkReferenceGrid');
@@ -467,16 +454,6 @@ export function updateTelemetryUI(data) {
       if (btn) {
         btn.textContent = lensEnabled ? '🛡️ LENS CORRECTION: ON' : '⚪ LENS CORRECTION: OFF';
         btn.className = 'action-btn ' + (lensEnabled ? 'btn-lens-on' : 'btn-lens-off');
-      }
-      const selPreset = document.getElementById('selViewerPreset');
-      if (selPreset) {
-        if (vp.viewerProfileId === 'viewer:my_profile' || vp.confidence === 'working-user-tuned') {
-          selPreset.value = 'viewer:my_profile';
-        } else if (vp.viewerProfileId === 'g04:provisional_geometry') {
-          selPreset.value = 'g04:provisional_geometry';
-        } else {
-          selPreset.value = 'cardboard:reference_50deg';
-        }
       }
       populateSlidersFromProfile(vp);
       const statEl = document.getElementById('txtProfileStatus');
@@ -551,8 +528,8 @@ export function onRenderScaleChange(scaleVal) { sendControl({ action: 'set_rende
 Object.assign(window, {
   setStage, setViewerVisualMode, onPerformanceModeChange, onRenderScaleChange,
   onSelectMedia, sendSeek, toggleDiagnosticEye, toggleDiagnosticOverlay,
-  onPoseChange, resetPose, onViewerPresetSelect, onVideoMappingChange,
-  saveVideoMapping, saveMyViewerProfile, toggleReferenceGrid, toggleLensCorrection,
+  onPoseChange, resetPose, onVideoMappingChange,
+  saveVideoMapping, toggleReferenceGrid, toggleLensCorrection,
   onOpticsChange, sendAction, sendSeekTo
 });
 

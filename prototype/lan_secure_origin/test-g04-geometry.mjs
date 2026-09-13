@@ -269,10 +269,10 @@ check('createDefaultViewerProfile() with no args returns G04',
   noArgDefault && noArgDefault.viewerProfileId === 'g04:provisional_geometry'
 );
 
-// 3. Fallback for unknown preset returns G04
+// 3. Fallback for unknown preset fails closed (returns null)
 const unknownFallback = createDefaultViewerProfile('nonexistent_preset_id');
-check('createDefaultViewerProfile(unknown) falls back to G04', 
-  unknownFallback && unknownFallback.viewerProfileId === 'g04:provisional_geometry'
+check('createDefaultViewerProfile(unknown) fails closed (returns null)', 
+  unknownFallback === null
 );
 
 // 4. Cardboard reference preset is preserved as internal fixture
@@ -313,8 +313,99 @@ check('Legacy savedMyViewerProfile preserved without deletion',
   hydratedStorage.savedMyViewerProfile && hydratedStorage.savedMyViewerProfile.viewerProfileId === 'viewer:my_profile'
 );
 
-// 6. Server profile sync containing legacy my_profile does NOT override G04
-hydratedStorage.loadServerProfiles = async () => {}; // mock guard
+// 6. Real Server Legacy Hydration & Stale Identity Protection Test (Deterministic Mocked Fetch)
+const originalFetch = globalThis.fetch;
+try {
+  // Test 6a: Server payload with legacy viewer:my_profile
+  globalThis.fetch = async (url) => {
+    if (url.includes('/api/profiles')) {
+      return {
+        ok: true,
+        json: async () => ({
+          videoProfiles: {},
+          viewerProfile: {
+            viewerProfileId: 'viewer:my_profile',
+            name: 'Server Legacy My Profile',
+            confidence: 'working-user-tuned',
+            screenToLensDistance: 0.048,
+            interLensDistance: 0.070,
+            isCalibrated: true
+          }
+        })
+      };
+    }
+    return { ok: false };
+  };
+
+  const serverHydratedStorage = new ProfileStorage();
+  await serverHydratedStorage.loadServerProfiles();
+
+  check('Real loadServerProfiles() with legacy my_profile does NOT override active G04 profile',
+    serverHydratedStorage.activeViewerProfile && serverHydratedStorage.activeViewerProfile.viewerProfileId === 'g04:provisional_geometry',
+    serverHydratedStorage.activeViewerProfile ? serverHydratedStorage.activeViewerProfile.viewerProfileId : 'none'
+  );
+  check('Real loadServerProfiles() preserves legacy profile in savedMyViewerProfile',
+    serverHydratedStorage.savedMyViewerProfile && serverHydratedStorage.savedMyViewerProfile.viewerProfileId === 'viewer:my_profile'
+  );
+
+  // Test 6b: Server payload with arbitrary non-G04 identity (e.g., stale custom viewer)
+  globalThis.fetch = async (url) => {
+    if (url.includes('/api/profiles')) {
+      return {
+        ok: true,
+        json: async () => ({
+          videoProfiles: {},
+          viewerProfile: {
+            viewerProfileId: 'stale:custom_profile',
+            name: 'Stale Custom Viewer Profile',
+            screenToLensDistance: 0.050,
+            interLensDistance: 0.072,
+            isCalibrated: true
+          }
+        })
+      };
+    }
+    return { ok: false };
+  };
+
+  const nonG04Storage = new ProfileStorage();
+  await nonG04Storage.loadServerProfiles();
+
+  check('Real loadServerProfiles() with stale non-G04 identity does NOT override active G04 profile',
+    nonG04Storage.activeViewerProfile && nonG04Storage.activeViewerProfile.viewerProfileId === 'g04:provisional_geometry',
+    nonG04Storage.activeViewerProfile ? nonG04Storage.activeViewerProfile.viewerProfileId : 'none'
+  );
+
+  // Test 6c: Valid G04 updates from server ARE admitted
+  globalThis.fetch = async (url) => {
+    if (url.includes('/api/profiles')) {
+      return {
+        ok: true,
+        json: async () => ({
+          videoProfiles: {},
+          viewerProfile: {
+            viewerProfileId: 'g04:provisional_geometry',
+            name: 'G04 Hardware Validated',
+            screenToLensDistance: 0.043,
+            interLensDistance: 0.065,
+            isCalibrated: false
+          }
+        })
+      };
+    }
+    return { ok: false };
+  };
+
+  const g04SyncStorage = new ProfileStorage();
+  await g04SyncStorage.loadServerProfiles();
+  check('Real loadServerProfiles() with G04 updates preserves G04 identity',
+    g04SyncStorage.activeViewerProfile && g04SyncStorage.activeViewerProfile.viewerProfileId === 'g04:provisional_geometry',
+    g04SyncStorage.activeViewerProfile ? g04SyncStorage.activeViewerProfile.name : 'none'
+  );
+} finally {
+  globalThis.fetch = originalFetch;
+}
+
 check('G04 candidate remains uncalibrated (isCalibrated = false)',
   hydratedStorage.activeViewerProfile.isCalibrated === false
 );

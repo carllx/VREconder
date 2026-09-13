@@ -201,11 +201,11 @@
       </div>
 
       <div class="control-row" style="margin-top:8px;">
-        <div style="font-size:0.75rem; font-weight:700; color:var(--muted); text-transform:uppercase;">Active Viewer Profile (Stage B Only):</div>
-        <select id="selViewerPreset" onchange="onViewerPresetSelect(this.value)" style="width:100%; margin-top:4px; padding:6px 10px; background:#1e293b; color:#fff; border:1px solid #334155; border-radius:6px; font-size:0.8rem; font-weight:600;">
-          <option value="g04:provisional_geometry" selected>G04 Provisional Geometry (Uncalibrated v0.1 — S2L=43mm, ILD=65mm, Center)</option>
-          <option value="cardboard:reference_50deg">Cardboard-inspired Reference (50° Guidance) [Internal Reference / Fixture]</option>
-        </select>
+        <div style="font-size:0.75rem; font-weight:700; color:var(--muted); text-transform:uppercase;">Active Viewer Profile:</div>
+        <div id="dispViewerProfile" style="margin-top:4px; padding:6px 10px; background:#1e293b; color:#fff; border:1px solid #334155; border-radius:6px; font-size:0.8rem; font-weight:600; display:flex; align-items:center; gap:8px;">
+          <span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:#a855f7;"></span>
+          <span>G04 (Provisional Geometry — S2L=43mm, ILD=65mm, Center)</span>
+        </div>
       </div>
 
       <!-- Stage B Visual Reference Sub-modes (Cardboard-style isolated tests) -->
