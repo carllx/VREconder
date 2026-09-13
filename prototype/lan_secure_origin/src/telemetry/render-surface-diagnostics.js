@@ -122,6 +122,23 @@ export function captureRenderSurfaceSnapshot(glCanvas, uiCanvas, renderScale = 1
     renderScale: Number(renderScale || 1.0),
     orientation: screenOrientation,
     safeAreaInsets: insets,
+    documentScroll: {
+      documentElementScrollWidth: docEl.scrollWidth || 0,
+      documentElementScrollHeight: docEl.scrollHeight || 0,
+      bodyScrollWidth: isBrowser && document.body ? document.body.scrollWidth : 0,
+      bodyScrollHeight: isBrowser && document.body ? document.body.scrollHeight : 0
+    },
+    viewportMeta: isBrowser && document.querySelector ? (document.querySelector('meta[name="viewport"]')?.getAttribute('content') || 'none') : 'none',
+    displayMode: {
+      navigatorStandalone: isBrowser ? Boolean(navigator.standalone) : false,
+      mediaStandalone: isBrowser && typeof window.matchMedia === 'function' ? window.matchMedia('(display-mode: standalone)').matches : false
+    },
+    navigatorInfo: isBrowser ? {
+      userAgent: navigator.userAgent || '',
+      platform: navigator.platform || '',
+      maxTouchPoints: navigator.maxTouchPoints || 0
+    } : null,
+    widestElements: isBrowser ? findWidestElements(5) : [],
     activeScreenProfile: {
       deviceModel: activeScreenProfile.deviceModel,
       authoritativeWidthPx: activeScreenProfile.widthPx,
@@ -129,6 +146,40 @@ export function captureRenderSurfaceSnapshot(glCanvas, uiCanvas, renderScale = 1
       ppi: activeScreenProfile.ppi
     }
   };
+}
+
+function findWidestElements(topCount = 5) {
+  if (typeof document === 'undefined' || !document.querySelectorAll) return [];
+  try {
+    const all = Array.from(document.querySelectorAll('*'));
+    const measurements = [];
+    for (const el of all) {
+      if (!el.getBoundingClientRect) continue;
+      const rect = el.getBoundingClientRect();
+      const style = window.getComputedStyle ? window.getComputedStyle(el) : null;
+      // Identify selector / tag
+      let identifier = el.tagName ? el.tagName.toLowerCase() : 'unknown';
+      if (el.id) identifier += '#' + el.id;
+      else if (el.className && typeof el.className === 'string') {
+        const cls = el.className.trim().split(/\s+/).slice(0, 2).join('.');
+        if (cls) identifier += '.' + cls;
+      }
+      measurements.push({
+        element: identifier,
+        width: Number(rect.width.toFixed(1)),
+        height: Number(rect.height.toFixed(1)),
+        left: Number(rect.left.toFixed(1)),
+        right: Number(rect.right.toFixed(1)),
+        computedWidth: style ? style.width : '',
+        minWidth: style ? style.minWidth : '',
+        overflowX: style ? style.overflowX : ''
+      });
+    }
+    measurements.sort((a, b) => b.width - a.width);
+    return measurements.slice(0, topCount);
+  } catch (err) {
+    return [{ error: String(err && err.message ? err.message : err) }];
+  }
 }
 
 export function drawRenderSurfaceEdgeFixture(uiCtx, width, height, viewerProfile = null) {

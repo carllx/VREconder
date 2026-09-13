@@ -44,6 +44,10 @@ assert.strictEqual(snap.glCanvas.drawingBufferWidth, 2556);
 assert.strictEqual(snap.glCanvas.drawingBufferHeight, 1179);
 assert.strictEqual(snap.uiCanvas.drawingBufferWidth, 2556);
 assert.strictEqual(snap.uiCanvas.drawingBufferHeight, 1179);
+assert.ok(snap.documentScroll, 'Must have documentScroll object');
+assert.ok(snap.viewportMeta, 'Must have viewportMeta');
+assert.ok(snap.displayMode, 'Must have displayMode object');
+assert.ok(Array.isArray(snap.widestElements), 'widestElements must be an array');
 
 console.log('  ✓ Schema verified successfully:');
 console.log('    GL drawing-buffer:', snap.glCanvas.drawingBufferWidth, 'x', snap.glCanvas.drawingBufferHeight);
