@@ -251,6 +251,18 @@
         </div>
       </div>
 
+      <div id="lockNotice" style="display:none; margin-top:6px; font-size:0.72rem; color:#38bdf8; background:rgba(2,132,199,0.15); padding:4px 8px; border-radius:4px; border:1px solid rgba(56,189,248,0.3);">
+        🔒 Stage C Lock: Physical geometry & distortion coefficients are strictly locked. Test Video A / Video B under identical Viewer Profile.
+      </div>
+
+      <div id="stageCVerificationPanel" style="display:none; margin-top:6px; padding:8px 12px; background:rgba(30,58,138,0.25); border:1px solid #1e40af; border-radius:8px;">
+        <div style="font-size:0.74rem; font-weight:700; color:#60a5fa; text-transform:uppercase;">Stage C Verification Tools</div>
+        <label style="display:flex; align-items:center; gap:8px; font-size:0.8rem; font-weight:600; color:#38bdf8; cursor:pointer; margin-top:4px;">
+          <input type="checkbox" id="chkReferenceGrid" onchange="toggleReferenceGrid(this.checked)" style="accent-color:#38bdf8; width:16px; height:16px; cursor:pointer;">
+          <span>Show Reference Grid (Verification Overlay in Stereo Engine)</span>
+        </label>
+      </div>
+
       <div class="control-grid" id="opticsControlsGrid" style="margin-top:8px;">
         <div>
           <div class="slider-row">

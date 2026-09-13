@@ -198,6 +198,8 @@ export function applyStageLocks(stage) {
   if (stageCPanel) stageCPanel.style.display = isStageC ? 'block' : 'none';
   const stageBVisual = document.getElementById('stageBVisualRefPanel');
   if (stageBVisual) stageBVisual.style.display = (stage === 'B') ? 'block' : 'none';
+  const stageBEvidence = document.getElementById('stageBEvidencePanel');
+  if (stageBEvidence) stageBEvidence.style.display = (stage === 'B') ? 'block' : 'none';
 }
 
 export function populateSlidersFromProfile(p) {
