@@ -13,6 +13,8 @@ import {
   MAX_SCREEN_TO_LENS_DISTANCE
 } from './src/core/projection-profile.js';
 import { activeScreenProfile } from './src/core/screen-profile.js';
+import { state } from './src/core/state.js';
+import { isStereoUIVisible, isStereoUIDynamic, isIsolatedCalibrationGateActive } from './src/controls/stereo-ui.js';
 
 console.log('=== RUNNING G04 INITIAL VIEWER GEOMETRY REGRESSION SUITE ===\n');
 
@@ -131,6 +133,55 @@ check('Left virtTanBounds equals physTanBounds (uncalibrated 1:1)',
 console.log('\n--- Suite 5: Optical Axis Ray Direction Contract ---');
 const lCenterOffset = [leftNorm[0] - leftNorm[0], leftNorm[1] - leftNorm[1]];
 check('Optical center evaluates to zero offset', lCenterOffset[0] === 0 && lCenterOffset[1] === 0);
+
+// ----------------------------------------------------------------------------
+// Suite 6: Isolated Human Gate Visual Contamination & Toast Suppression
+// ----------------------------------------------------------------------------
+console.log('\n--- Suite 6: Isolated Human Gate Toast Suppression ---');
+
+const now = 10000;
+state.inVR = true;
+state.recenterCountdown.active = false;
+state.activePattern = 'none';
+state.patternA_open = false;
+state.patternB_open = false;
+state.patternC_open = false;
+
+// 1. In Stage B ild_fusion: feedback toast must be strictly suppressed
+state.calibrationStage = 'B';
+state.viewerVisualMode = 'ild_fusion';
+state.toastText = '🔴 ILD Fusion';
+state.toastTime = now - 500; // active toast (500ms ago)
+
+check('isIsolatedCalibrationGateActive is true for ild_fusion', isIsolatedCalibrationGateActive() === true);
+check('ild_fusion strictly suppresses toast in isStereoUIVisible', isStereoUIVisible(now) === false);
+check('ild_fusion strictly suppresses toast in isStereoUIDynamic', isStereoUIDynamic(null, now) === false);
+
+// 2. In Stage B vertical_alignment: feedback toast must be strictly suppressed
+state.viewerVisualMode = 'vertical_alignment';
+state.toastText = '↕ Vertical Align';
+state.toastTime = now - 500;
+
+check('isIsolatedCalibrationGateActive is true for vertical_alignment', isIsolatedCalibrationGateActive() === true);
+check('vertical_alignment strictly suppresses toast in isStereoUIVisible', isStereoUIVisible(now) === false);
+check('vertical_alignment strictly suppresses toast in isStereoUIDynamic', isStereoUIDynamic(null, now) === false);
+
+// 3. Normal non-isolated modes: feedback toasts must remain visible
+state.viewerVisualMode = 'grid_only';
+state.toastText = 'Stage B: Grid Only';
+state.toastTime = now - 500;
+
+check('isIsolatedCalibrationGateActive is false for grid_only', isIsolatedCalibrationGateActive() === false);
+check('grid_only permits toast visibility in isStereoUIVisible', isStereoUIVisible(now) === true);
+check('grid_only permits dynamic UI for active toast', isStereoUIDynamic(null, now) === true);
+
+state.calibrationStage = 'C';
+state.firstFrameTimings.ready = true;
+state.toastText = 'Stage C: Video Verification';
+state.toastTime = now - 500;
+
+check('isIsolatedCalibrationGateActive is false for Stage C', isIsolatedCalibrationGateActive() === false);
+check('Stage C permits toast visibility in isStereoUIVisible', isStereoUIVisible(now) === true);
 
 console.log('\n============================================================');
 if (allPassed) {

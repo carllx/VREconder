@@ -64,11 +64,16 @@ export function roundRect(ctx, x, y, width, height, radius, fill, stroke) {
   if (stroke) ctx.stroke();
 }
 
+export function isIsolatedCalibrationGateActive() {
+  return state.calibrationStage === 'B' &&
+    (state.viewerVisualMode === 'ild_fusion' || state.viewerVisualMode === 'vertical_alignment');
+}
+
 export function isStereoUIVisible(now) {
   if (!state.inVR) return false;
   if (state.recenterCountdown.active) return true;
   if (state.calibrationStage === 'C' && !state.firstFrameTimings.ready) return true;
-  if (state.toastText && (now - state.toastTime < 2000)) return true;
+  if (!isIsolatedCalibrationGateActive() && state.toastText && (now - state.toastTime < 2000)) return true;
 
   const isMenuOpen = (state.activePattern === 'A' && state.patternA_open) ||
                      (state.activePattern === 'B' && state.patternB_open) ||
@@ -85,7 +90,7 @@ export function isStereoUIVisible(now) {
 
 export function isStereoUIDynamic(gazeEngine, now) {
   if (state.recenterCountdown.active) return true;
-  if (state.toastText && (now - state.toastTime < 2000)) return true;
+  if (!isIsolatedCalibrationGateActive() && state.toastText && (now - state.toastTime < 2000)) return true;
   if (state.calibrationStage === 'C' && !state.firstFrameTimings.ready) return true;
 
   const isMenuOpen = (state.activePattern === 'A' && state.patternA_open) ||
@@ -214,8 +219,8 @@ export function renderStereoUI(uiCtx, gazeEngine, commandModel, videoElement, no
       uiCtx.fillText('⏳ ' + (state.firstFrameTimings.statusText || 'Loading Frame...'), eyeCenterX, eyeCenterY);
     }
 
-    // Always show feedback toast (Farther / Closer / Recenter / Menu)
-    if (state.toastText && (now - state.toastTime < 2000)) {
+    // Always show feedback toast (Farther / Closer / Recenter / Menu), except in isolated calibration gates
+    if (!isIsolatedCalibrationGateActive() && state.toastText && (now - state.toastTime < 2000)) {
       const alpha = Math.min(1.0, 1.0 - (now - state.toastTime - 1200) / 800);
       if (alpha > 0) {
         uiCtx.fillStyle = 'rgba(15, 23, 42, ' + (0.88 * alpha) + ')';
