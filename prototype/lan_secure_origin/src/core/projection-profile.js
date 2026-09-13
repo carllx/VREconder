@@ -4,12 +4,30 @@
 // ==========================================
 import { activeScreenProfile } from './screen-profile.js';
 
+export const MIN_SCREEN_TO_LENS_DISTANCE = 0.020;
+export const MAX_SCREEN_TO_LENS_DISTANCE = 0.070;
+
 export function getEffectiveViewerProfile(baseProfile, tempOffset = 0.0) {
   if (!baseProfile) return baseProfile;
   const baseD = (typeof baseProfile.screenToLensDistance === 'number') ? baseProfile.screenToLensDistance : 0.0393;
   const offset = (typeof tempOffset === 'number') ? tempOffset : (state.temporaryScreenToLensOffset || 0.0);
-  // Exact requested Screen-to-Lens without hidden narrow saturation
-  const effectiveD = Math.max(0.020, Math.min(0.070, baseD + offset));
+  const requestedD = baseD + offset;
+
+  // Explicit, observable safety bounds contract:
+  // Requested values are preserved for evidence; clamped values are explicitly flagged.
+  let effectiveD = requestedD;
+  let isClamped = false;
+  let clampReason = null;
+
+  if (requestedD < MIN_SCREEN_TO_LENS_DISTANCE) {
+    effectiveD = MIN_SCREEN_TO_LENS_DISTANCE;
+    isClamped = true;
+    clampReason = 'below_minimum_supported_distance';
+  } else if (requestedD > MAX_SCREEN_TO_LENS_DISTANCE) {
+    effectiveD = MAX_SCREEN_TO_LENS_DISTANCE;
+    isClamped = true;
+    clampReason = 'above_maximum_supported_distance';
+  }
 
   // Fail-honest Viewer/Lens policy: unvalidated profiles (isCalibrated !== true) default to Lens Correction OFF during playback
   const isCalibrated = baseProfile.isCalibrated === true;
@@ -18,7 +36,10 @@ export function getEffectiveViewerProfile(baseProfile, tempOffset = 0.0) {
 
   return {
     ...baseProfile,
+    requestedScreenToLensDistance: requestedD,
     screenToLensDistance: effectiveD,
+    isScreenToLensClamped: isClamped,
+    screenToLensClampReason: clampReason,
     lensCorrectionEnabled: effectiveLensOn,
     _lensCorrectionSuppressedReason: (!isCalibrated && requestedLensOn) ? 'unvalidated_viewer_profile' : null
   };

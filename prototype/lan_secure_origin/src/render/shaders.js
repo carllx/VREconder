@@ -41,6 +41,9 @@ export const fsIdealSceneSource = `
 
     // 2. Synthetic Calibration Scene (Straight Grid, 90° Corners & Directional Orientation Markers)
     // Pure WebGL1 Standard Arithmetic (Zero fwidth dependency)
+    // Scope Boundary Notice:
+    // This synthetic test pattern validates static optical distortion geometry and corner tangents
+    // in screen/frustum space. It does not certify dynamic head tracking, world-lock, or angular drift.
     if (uSceneType == 1) {
       vec2 gridPos = vec2(tanX, tanY) * 6.0;
       vec2 gridFract = abs(fract(gridPos) - 0.5);
@@ -148,6 +151,12 @@ export const fsIdealSceneSource = `
 
 // Pass 2: Google Cardboard Screen-Space Barrel Distortion Pass
 // Maps Screen Coordinates -> Optical Offset -> Radial Warp -> Per-Eye FBO Region
+// Mathematical Parity Contract:
+// 1. When uLensCorrection == 1 (Pre-Warp ON), physTan is warped by radial polynomial r' = r * (1 + k1*r^2 + k2*r^4).
+// 2. When uLensCorrection == 0 (Lens OFF / Undistorted Baseline), physTan is passed unwarped (factor = 1.0).
+// 3. Under all FOV clipping configurations (unclipped, symmetric, asymmetric), the visual optical axis at
+//    vUv = uLensCenterNorm always evaluates to virtTan = (0, 0), mapping exactly to ray direction (0, 0, -1)
+//    without any optical axis shift or center departure.
 export const fsDistortionPassSource = `
   precision highp float;
   varying vec2 vUv;
@@ -161,28 +170,26 @@ export const fsDistortionPassSource = `
   uniform vec2 uPhysicalTanScale; // Scale from [0, 1] viewport to physical tangents
 
   void main() {
-    float uEye = vUv.x;
-    float vEye = vUv.y;
+    // 1. Physical Tangent Offset from Optical Lens Center
+    vec2 offsetNorm = vUv - uLensCenterNorm;
+    vec2 physTan = offsetNorm * uPhysicalTanScale;
 
+    // 2. Radial Distortion: Pre-warp when ON, linear 1:1 when OFF
+    float factor = 1.0;
     if (uLensCorrection == 1) {
-      // 1. Physical Tangent Offset from Optical Lens Center
-      vec2 offsetNorm = vUv - uLensCenterNorm;
-      vec2 physTan = offsetNorm * uPhysicalTanScale;
-
-      // 2. Cardboard Radial Barrel Distortion Polynomial: r' = r * (1 + k1*r^2 + k2*r^4)
       float rSq = dot(physTan, physTan);
-      float factor = 1.0 + uDistortionK.x * rSq + uDistortionK.y * rSq * rSq;
-      vec2 virtTan = physTan * factor;
+      factor = 1.0 + uDistortionK.x * rSq + uDistortionK.y * rSq * rSq;
+    }
+    vec2 virtTan = physTan * factor;
 
-      // 3. Map Distorted Virtual Tangent to Ideal Single Eye Texture UV [0, 1]
-      uEye = (virtTan.x - (-uVirtTanBounds.x)) / (uVirtTanBounds.y + uVirtTanBounds.x);
-      vEye = (virtTan.y - (-uVirtTanBounds.z)) / (uVirtTanBounds.w + uVirtTanBounds.z);
+    // 3. Map Virtual Tangent to Ideal Single Eye Texture UV [0, 1]
+    float uEye = (virtTan.x - (-uVirtTanBounds.x)) / (uVirtTanBounds.y + uVirtTanBounds.x);
+    float vEye = (virtTan.y - (-uVirtTanBounds.z)) / (uVirtTanBounds.w + uVirtTanBounds.z);
 
-      // Vignette boundary
-      if (uEye < 0.0 || uEye > 1.0 || vEye < 0.0 || vEye > 1.0) {
-        gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0);
-        return;
-      }
+    // Vignette boundary: clipped / out-of-bounds screen regions render black
+    if (uEye < 0.0 || uEye > 1.0 || vEye < 0.0 || vEye > 1.0) {
+      gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0);
+      return;
     }
 
     // 4. Remap [0, 1] Eye UV into the specific Eye's Half of the FBO Texture (WWGC Formula: a.x * 0.5 + (left ? 0.0 : 0.5))
