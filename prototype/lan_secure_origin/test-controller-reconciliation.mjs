@@ -119,4 +119,58 @@ ctrl.updateTelemetryUI({
 assert.equal(domElements['valFps'].textContent, '59.9 FPS', 'TEST G PASS: Diagnostic telemetry like fps updates even when offline');
 assert.equal(ctrl.currentVisualMode, 'vertical_alignment', 'Visual mode remains unchanged by offline telemetry');
 
-console.log('ALL 7 CONTROLLER RECONCILIATION TESTS PASSED!');
+// Test H: O4 Panel Derivation & Reconciliation Invariants
+// Case 1: active phone, Stage B, grid_only, fitting=false => panelO4Fitting visible
+ctrl.currentIphoneStatus.state = 'active';
+ctrl.setStage('B');
+ctrl.updateTelemetryUI({
+  type: 'telemetry_sync',
+  calibrationStage: 'B',
+  viewerVisualMode: 'grid_only',
+  opticsRuntime: { calibrationDistortionOverrideActive: false }
+});
+assert.equal(domElements['panelO4Fitting'].style.display, 'block', 'TEST H1 PASS: Stage B + grid_only + fitting=false => panelO4Fitting visible');
+
+// Case 2: active reconciliation vertical_alignment -> grid_only => final panel visible
+ctrl.updateTelemetryUI({
+  type: 'telemetry_sync',
+  calibrationStage: 'B',
+  viewerVisualMode: 'vertical_alignment',
+  opticsRuntime: { calibrationDistortionOverrideActive: false }
+});
+assert.equal(domElements['panelO4Fitting'].style.display, 'none', 'Intermediate: vertical_alignment hides panel');
+ctrl.updateTelemetryUI({
+  type: 'telemetry_sync',
+  calibrationStage: 'B',
+  viewerVisualMode: 'grid_only',
+  opticsRuntime: { calibrationDistortionOverrideActive: false }
+});
+assert.equal(domElements['panelO4Fitting'].style.display, 'block', 'TEST H2 PASS: reconciliation vertical_alignment -> grid_only leaves panel visible');
+
+// Case 3: active reconciliation grid_only -> vertical_alignment => final panel hidden
+ctrl.updateTelemetryUI({
+  type: 'telemetry_sync',
+  calibrationStage: 'B',
+  viewerVisualMode: 'vertical_alignment',
+  opticsRuntime: { calibrationDistortionOverrideActive: false }
+});
+assert.equal(domElements['panelO4Fitting'].style.display, 'none', 'TEST H3 PASS: reconciliation grid_only -> vertical_alignment leaves panel hidden');
+
+// Case 4: stage != B => panel hidden
+ctrl.updateTelemetryUI({
+  type: 'telemetry_sync',
+  calibrationStage: 'A',
+  viewerVisualMode: 'grid_only',
+  opticsRuntime: { calibrationDistortionOverrideActive: false }
+});
+assert.equal(domElements['panelO4Fitting'].style.display, 'none', 'TEST H4 PASS: stage != B (Stage A) leaves panel hidden');
+
+ctrl.updateTelemetryUI({
+  type: 'telemetry_sync',
+  calibrationStage: 'C',
+  viewerVisualMode: 'grid_only',
+  opticsRuntime: { calibrationDistortionOverrideActive: false }
+});
+assert.equal(domElements['panelO4Fitting'].style.display, 'none', 'TEST H4b PASS: stage != B (Stage C) leaves panel hidden');
+
+console.log('ALL CONTROLLER RECONCILIATION & O4 PANEL DERIVATION TESTS PASSED!');

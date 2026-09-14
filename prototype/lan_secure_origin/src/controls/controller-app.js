@@ -425,7 +425,6 @@ export function updateTelemetryUI(data) {
           currentStage = data.calibrationStage;
           if (currentStage !== 'B' && o4FittingActive) setO4FittingActive(false);
           ['A', 'B', 'C'].forEach(s => document.getElementById('btnStage' + s)?.classList.toggle('active', s === currentStage));
-          applyStageLocks(currentStage);
         }
       }
       const remoteFittingActive = !!(data.opticsRuntime?.calibrationDistortionOverrideActive);
@@ -440,9 +439,9 @@ export function updateTelemetryUI(data) {
             b.style.borderColor = o4FittingActive ? '#a855f7' : '#475569';
           }
           if (ban) ban.style.display = o4FittingActive ? 'block' : 'none';
-          applyStageLocks(currentStage);
         }
       }
+      applyStageLocks(currentStage);
     }
     if (data.videoProfile) {
       const vp = data.videoProfile;
