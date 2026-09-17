@@ -147,6 +147,10 @@ export class CalibrationUI {
       }
       showFeedbackToast(state.calibrationDistortionFittingActive ? '🔬 O4 Fitting Mode: ACTIVE' : '⚪ O4 Fitting Mode: OFF');
       logAction('Set Distortion Fitting Mode: ' + state.calibrationDistortionFittingActive);
+    } else if (act === 'set_provisional_optics_preview') {
+      state.provisionalOpticsPreviewActive = (msg.enabled === true);
+      showFeedbackToast(state.provisionalOpticsPreviewActive ? '🎬 Optics Preview: ACTIVE' : '⚪ Optics Preview: OFF');
+      logAction('Set Provisional Optics Preview: ' + state.provisionalOpticsPreviewActive);
     } else if (act === 'set_candidate_distortion') {
       if (typeof msg.k1 === 'number') state.candidateDistortion.k1 = msg.k1;
       if (typeof msg.k2 === 'number') state.candidateDistortion.k2 = msg.k2;

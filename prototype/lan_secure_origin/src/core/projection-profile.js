@@ -53,12 +53,19 @@ export function isCalibrationDistortionOverrideActive(appState = state) {
          appState.calibrationDistortionFittingActive === true;
 }
 
+export function isProvisionalOpticsPreviewActive(appState = state) {
+  if (!appState) return false;
+  return appState.provisionalOpticsPreviewActive === true;
+}
+
 export function getRenderViewerProfile(baseProfile, appState = state, tempOffset = 0.0) {
   const effective = getEffectiveViewerProfile(baseProfile, tempOffset);
   if (!effective) return effective;
 
   const isOverrideActive = isCalibrationDistortionOverrideActive(appState);
-  if (!isOverrideActive) {
+  const isPreviewActive = isProvisionalOpticsPreviewActive(appState);
+
+  if (!isOverrideActive && !isPreviewActive) {
     return effective;
   }
 
@@ -70,14 +77,15 @@ export function getRenderViewerProfile(baseProfile, appState = state, tempOffset
     ...effective,
     // Preserve strict uncalibrated provenance & frozen geometry
     isCalibrated: false,
-    // Visible candidate lens correction path for O4 grid-only fitting
+    // Visible candidate lens correction path for O4 grid-only fitting or session video preview
     lensCorrectionEnabled: true,
     distortion: {
-      model: 'o4-candidate-fitting',
+      model: isOverrideActive ? 'o4-candidate-fitting' : 'provisional-preview',
       k1: k1,
       k2: k2
     },
-    _calibrationDistortionOverrideActive: true
+    _calibrationDistortionOverrideActive: isOverrideActive,
+    _provisionalOpticsPreviewActive: isPreviewActive
   };
 }
 

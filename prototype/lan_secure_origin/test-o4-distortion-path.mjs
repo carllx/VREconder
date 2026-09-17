@@ -4,6 +4,7 @@ import {
   getEffectiveViewerProfile,
   getRenderViewerProfile,
   isCalibrationDistortionOverrideActive,
+  isProvisionalOpticsPreviewActive,
   distortRadius,
   deriveCardboardEyeGeometry
 } from './src/core/projection-profile.js';
@@ -193,4 +194,80 @@ assert.ok(!scene1Body.includes('isCenterBadge'), 'uSceneType == 1 block must NOT
 
 assert.equal(calUI.activeViewerProfile.isCalibrated, false, 'isCalibrated strictly remains false');
 
+// -------------------------------------------------------------
+// Section 7: Session-Only Provisional Optics Preview for Normal Video (Issue #20)
+// -------------------------------------------------------------
+// Reset to normal video playback state in Stage C with candidate k1 = 0.250, k2 = 0.000
+state.calibrationStage = 'C';
+state.viewerVisualMode = 'normal';
+state.calibrationDistortionFittingActive = false;
+state.provisionalOpticsPreviewActive = false;
+state.inVR = true;
+calUI.handleRemoteControlAction({ action: 'set_candidate_distortion', k1: 0.250, k2: 0.000 });
+
+// 1. Preview OFF + Normal Video: lens correction inactive, fail-closed policy holds
+const previewOffEff = getEffectiveViewerProfile(calUI.activeViewerProfile);
+const previewOffRnd = getRenderViewerProfile(calUI.activeViewerProfile, state);
+assert.equal(isProvisionalOpticsPreviewActive(state), false, 'isProvisionalOpticsPreviewActive must be false when preview is OFF');
+assert.equal(previewOffEff.lensCorrectionEnabled, false, 'Baseline effective profile must be fail-closed (lensCorrectionEnabled false)');
+assert.equal(previewOffRnd.lensCorrectionEnabled, false, 'Render profile must NOT enable lens correction when preview is OFF');
+assert.equal(previewOffRnd.isCalibrated, false, 'isCalibrated must be false when preview is OFF');
+
+// 2. Control Action: set_provisional_optics_preview enabled: true
+calUI.handleRemoteControlAction({ action: 'set_provisional_optics_preview', enabled: true });
+assert.equal(state.provisionalOpticsPreviewActive, true, 'State flag provisionalOpticsPreviewActive must become true via control action');
+assert.equal(isProvisionalOpticsPreviewActive(state), true, 'isProvisionalOpticsPreviewActive must be true');
+
+// 3. Preview ON + Normal Video: provisional candidate applied to render profile
+const previewOnEff = getEffectiveViewerProfile(calUI.activeViewerProfile);
+const previewOnRnd = getRenderViewerProfile(calUI.activeViewerProfile, state);
+
+// Strict baseline safety: activeViewerProfile and effectiveViewerProfile must remain fail-closed & uncalibrated
+assert.equal(calUI.activeViewerProfile.isCalibrated, false, 'activeViewerProfile.isCalibrated strictly remains false');
+assert.equal(calUI.activeViewerProfile.lensCorrectionEnabled, false, 'activeViewerProfile.lensCorrectionEnabled must remain false');
+assert.equal(previewOnEff.lensCorrectionEnabled, false, 'Production effective lens policy must remain fail-closed (false)');
+assert.equal(previewOnEff.isCalibrated, false, 'Production effective isCalibrated strictly remains false');
+
+// Render profile receives candidate distortion under provisional-preview model
+assert.equal(previewOnRnd.lensCorrectionEnabled, true, 'Render profile must enable lens correction when preview is ON');
+assert.equal(previewOnRnd.isCalibrated, false, 'Render profile isCalibrated strictly remains false');
+assert.equal(previewOnRnd.distortion.model, 'provisional-preview', 'Distortion model must be provisional-preview');
+assert.equal(previewOnRnd.distortion.k1, 0.250, 'Distortion k1 must be 0.250');
+assert.equal(previewOnRnd.distortion.k2, 0.000, 'Distortion k2 must be 0.000');
+assert.equal(previewOnRnd._provisionalOpticsPreviewActive, true, '_provisionalOpticsPreviewActive must be marked true');
+assert.equal(previewOnRnd._calibrationDistortionOverrideActive, false, '_calibrationDistortionOverrideActive must be false for normal video');
+
+// Frozen geometry invariant: S2L = 43mm, ILD = 65mm, verticalAlignment = CENTER
+assert.equal(previewOnRnd.screenToLensDistance, 0.0430, 'S2L must remain 43mm (0.0430)');
+assert.equal(previewOnRnd.interLensDistance, 0.0650, 'ILD must remain 65mm (0.0650)');
+assert.equal(previewOnRnd.verticalAlignment, 'CENTER', 'verticalAlignment must remain CENTER');
+
+// 4. Eye Geometry derivation with preview
+const eyePreview = deriveCardboardEyeGeometry(activeScreenProfile, previewOnRnd);
+assert.equal(eyePreview.distortion.k1, 0.250, 'Derived eye geometry distortion k1 must be 0.250');
+assert.equal(eyePreview.distortion.k2, 0.000, 'Derived eye geometry distortion k2 must be 0.000');
+const eyeBaseUncal = deriveCardboardEyeGeometry(activeScreenProfile, calUI.activeViewerProfile);
+assert.notDeepEqual(eyePreview.leftEye.virtTanBounds, eyeBaseUncal.leftEye.virtTanBounds, 'Virtual tan bounds under preview must differ from uncalibrated base');
+
+// 5. Stage B Grid Only fitting precedence over general session preview
+const stageBFittingState = {
+  ...state,
+  calibrationStage: 'B',
+  viewerVisualMode: 'grid_only',
+  calibrationDistortionFittingActive: true,
+  provisionalOpticsPreviewActive: true
+};
+const rndStageB = getRenderViewerProfile(calUI.activeViewerProfile, stageBFittingState);
+assert.equal(rndStageB.distortion.model, 'o4-candidate-fitting', 'Stage B Grid Only fitting model takes precedence over provisional-preview');
+assert.equal(rndStageB._calibrationDistortionOverrideActive, true, 'Stage B override active must be true');
+
+// 6. Control Action: set_provisional_optics_preview enabled: false
+calUI.handleRemoteControlAction({ action: 'set_provisional_optics_preview', enabled: false });
+assert.equal(state.provisionalOpticsPreviewActive, false, 'State flag provisionalOpticsPreviewActive must be toggled false');
+assert.equal(isProvisionalOpticsPreviewActive(state), false, 'isProvisionalOpticsPreviewActive must report false');
+const restoredRnd = getRenderViewerProfile(calUI.activeViewerProfile, state);
+assert.equal(restoredRnd.lensCorrectionEnabled, false, 'Render profile reverts to lens correction disabled when preview turned OFF');
+assert.equal(calUI.activeViewerProfile.isCalibrated, false, 'isCalibrated strictly remains false across all toggles');
+
 console.log('ALL ENHANCED O4 DISTORTION PATH & CONTROLLER ASSERTIONS PASSED!');
+

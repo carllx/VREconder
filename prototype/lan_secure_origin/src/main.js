@@ -12,7 +12,7 @@ import { GazeEngine } from './controls/gaze-engine.js';
 import { renderStereoUI, isStereoUIVisible } from './controls/stereo-ui.js';
 import { telemetry, perfTelemetry, stallDetector } from './telemetry/telemetry.js';
 import { initAudioContext } from './controls/audio-haptics.js';
-import { profileStorage, computeMediaFingerprint, getEffectiveViewerProfile, getRenderViewerProfile, isCalibrationDistortionOverrideActive, deriveCardboardEyeGeometry } from './core/projection-profile.js';
+import { profileStorage, computeMediaFingerprint, getEffectiveViewerProfile, getRenderViewerProfile, isCalibrationDistortionOverrideActive, isProvisionalOpticsPreviewActive, deriveCardboardEyeGeometry } from './core/projection-profile.js';
 import { activeScreenProfile } from './core/screen-profile.js';
 import { CalibrationUI } from './controls/calibration-ui.js';
 import { ControllerInputProbe, setRemoteLogFunction } from './controls/controller-input-probe.js';
@@ -483,6 +483,13 @@ setInterval(() => {
         (state.inVR || calibrationUI.currentMode === 'vr') &&
         getRenderViewerProfile(calibrationUI.activeViewerProfile, state)._calibrationDistortionOverrideActive
       ),
+      provisionalOpticsPreviewActive: isProvisionalOpticsPreviewActive(state),
+      provisionalOpticsPreviewApplied: !!(
+        (state.inVR || calibrationUI.currentMode === 'vr') &&
+        getRenderViewerProfile(calibrationUI.activeViewerProfile, state)._provisionalOpticsPreviewActive
+      ),
+      previewCandidateK1: (state.candidateDistortion && typeof state.candidateDistortion.k1 === 'number') ? state.candidateDistortion.k1 : 0.0,
+      previewCandidateK2: (state.candidateDistortion && typeof state.candidateDistortion.k2 === 'number') ? state.candidateDistortion.k2 : 0.0,
       lensCorrectionRequested: !!(calibrationUI.activeViewerProfile && calibrationUI.activeViewerProfile.lensCorrectionEnabled),
       lensCorrectionApplied: !!(
         (state.inVR || calibrationUI.currentMode === 'vr')

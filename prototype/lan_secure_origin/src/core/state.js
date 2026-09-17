@@ -27,6 +27,9 @@ export const state = {
   calibrationDistortionFittingActive: false,
   candidateDistortion: { k1: 0.0, k2: 0.0 },
 
+  // Session-only Provisional Optics Preview for Normal Video (Issue #20)
+  provisionalOpticsPreviewActive: false,
+
   // First-Frame Timing & Black-Screen Instrumentation
   firstFrameTimings: {
     appShellReadyAt: 0,

@@ -9,9 +9,10 @@ export let diagOverlays = { showGrid: true, showPlumbLines: true, showHorizon: t
 export let latestSavedMyProfile = null;
 export let videoList = [];
 export let o4FittingActive = false;
+export let provisionalPreviewActive = false;
 export let candidateDistortion = { k1: 0.0, k2: 0.0 };
 export let currentIphoneStatus = { state: 'offline' };
-export let pendingAck = null; // { type: 'stage'|'visual_mode'|'fitting', target, requestedAt }
+export let pendingAck = null; // { type: 'stage'|'visual_mode'|'fitting'|'preview', target, requestedAt }
 
 let isServerOnline = false;
 export function setServerConnectionBadge(online = true, text = '') {
@@ -61,16 +62,11 @@ export async function loadVideoList() {
   try {
     const res = await fetch('/api/videos');
     const data = await res.json();
-    if (data && Array.isArray(data.videos)) {
-      videoList = data.videos;
-    } else if (Array.isArray(data)) {
-      videoList = data;
-    }
-    renderVideoSelect();
+    videoList = Array.isArray(data?.videos) ? data.videos : (Array.isArray(data) ? data : []);
   } catch (e) {
     videoList = [];
-    renderVideoSelect();
   }
+  renderVideoSelect();
 }
 
 export function renderVideoSelect() {
@@ -234,31 +230,18 @@ export function populateSlidersFromProfile(p) {
   if (p.screenToLensDistance) setSlider('rngScreenToLens', 'valScreenToLens', p.screenToLensDistance * 1000, (p.screenToLensDistance * 1000).toFixed(1));
   if (p.interLensDistance) setSlider('rngInterLens', 'valInterLens', p.interLensDistance * 1000, (p.interLensDistance * 1000).toFixed(1));
   if (p.trayToLensDistance) setSlider('rngTrayToLens', 'valTrayToLens', p.trayToLensDistance * 1000, (p.trayToLensDistance * 1000).toFixed(1));
-  if (p.maxFovAngles && p.maxFovAngles.outerDeg) setSlider('rngFov', 'valFov', p.maxFovAngles.outerDeg, p.maxFovAngles.outerDeg.toFixed(1) + '°');
+  if (p.maxFovAngles?.outerDeg) setSlider('rngFov', 'valFov', p.maxFovAngles.outerDeg, p.maxFovAngles.outerDeg.toFixed(1) + '°');
 }
 
 export function onVideoMappingChange() {
-  const proj = document.getElementById('selProjection').value;
-  const stereo = document.getElementById('selStereo').value;
-  const covVal = document.getElementById('selCoverageFov').value;
-  const eye = document.getElementById('selEyeOrder').value;
+  const proj = document.getElementById('selProjection').value, stereo = document.getElementById('selStereo').value;
+  const covVal = document.getElementById('selCoverageFov').value, eye = document.getElementById('selEyeOrder').value;
   const fov = (covVal === 'unknown' || isNaN(parseFloat(covVal))) ? 180 : parseFloat(covVal);
-  sendControl({
-    action: 'set_video_mapping',
-    mapping: {
-      projection: proj,
-      stereoMode: stereo,
-      horizontalCoverageDeg: fov,
-      verticalCoverageDeg: 180,
-      eyeOrder: eye
-    }
-  });
+  sendControl({ action: 'set_video_mapping', mapping: { projection: proj, stereoMode: stereo, horizontalCoverageDeg: fov, verticalCoverageDeg: 180, eyeOrder: eye } });
 }
 
 export function saveVideoMapping() {
-  const proj = document.getElementById('selProjection')?.value;
-  const stereo = document.getElementById('selStereo')?.value;
-  const eye = document.getElementById('selEyeOrder')?.value;
+  const proj = document.getElementById('selProjection')?.value, stereo = document.getElementById('selStereo')?.value, eye = document.getElementById('selEyeOrder')?.value;
   if (!proj || proj === 'unknown' || !stereo || stereo === 'unknown' || !eye || eye === 'unknown') {
     alert('⚠️ Cannot save unconfirmed video mapping.\nPlease select Projection, Stereo Mode, and Eye Order first.');
     return;
@@ -266,9 +249,7 @@ export function saveVideoMapping() {
   sendControl({ action: 'save_video_profile' });
 }
 
-export function toggleReferenceGrid(checked) {
-  sendControl({ action: 'set_reference_grid', enabled: checked });
-}
+export function toggleReferenceGrid(checked) { sendControl({ action: 'set_reference_grid', enabled: checked }); }
 
 export function toggleLensCorrection() {
   if (o4FittingActive) return;
@@ -279,6 +260,28 @@ export function toggleLensCorrection() {
     btn.className = 'action-btn ' + (lensEnabled ? 'btn-lens-on' : 'btn-lens-off');
   }
   sendControl({ action: 'set_lens_correction', enabled: lensEnabled });
+}
+
+export function setProvisionalPreviewActive(active) {
+  provisionalPreviewActive = (active === true);
+  const btn = document.getElementById('btnToggleProvisionalPreview');
+  if (btn) {
+    btn.textContent = provisionalPreviewActive ? '🎬 Optics Preview: ACTIVE' : '⚪ Optics Preview: OFF';
+    btn.style.background = provisionalPreviewActive ? '#0284c7' : '#334155';
+    btn.style.color = provisionalPreviewActive ? '#f0f9ff' : '#cbd5e1';
+    btn.style.borderColor = provisionalPreviewActive ? '#38bdf8' : '#475569';
+  }
+  sendControl({ action: 'set_provisional_optics_preview', enabled: provisionalPreviewActive });
+}
+
+export function toggleProvisionalPreview() {
+  const desired = !provisionalPreviewActive;
+  if (desired && !isPhoneActive()) {
+    notifyFailClosed('provisional preview requires active iPhone');
+    return;
+  }
+  pendingAck = { type: 'preview', target: desired, requestedAt: Date.now() };
+  setProvisionalPreviewActive(desired);
 }
 
 export function onOpticsChange() {
@@ -315,22 +318,23 @@ export function updateTelemetryUI(data) {
   if (data.perf) {
     try {
       const { cadence: cad = {}, frameTimeMs: ft = {}, playback: pb = {}, display: disp = {}, webgl: wg = {} } = data.perf, q = pb.quality || {};
-      setEl('valPerfCadence', `rAF: ${cad.rafPerSec || 0}/s | rVFC: ${cad.rvfcPerSec || 0}/s`);
-      setEl('valUploadCadence', `VidUp: ${cad.videoUploadsPerSec || 0}/s | UIUp: ${cad.uiUploadsPerSec || 0}/s`);
-      setEl('valFrameTimeAvg', `avg: ${ft.avg || 0}ms | p95: ${ft.p95 || 0}ms`);
-      setEl('valFrameTimeMax', `max: ${ft.max || 0}ms (${ft.samples || 0} frames)`);
-      setEl('valVideoQuality', `total: ${q.totalVideoFrames} | drop: ${q.droppedVideoFrames}`);
-      setEl('valVideoDropRate', (typeof q.dropRate === 'number') ? `${q.dropRate}% dropped` : String(q.dropRate));
-      setEl('valDisplayViewport', `VP: ${disp.cssViewport || '--'} (DPR: ${disp.dpr || '--'})`);
-      setEl('valDrawingBuffer', `DrawBuf: ${disp.drawingBuffer || '--'} | FBO: ${disp.eyeFbo || '--'}`);
-      setEl('valPlaybackStates', `ready: ${pb.readyState} | net: ${pb.networkState} | ${pb.paused ? '⏸' : '▶'}`);
-      setEl('valBufferDetails', `ahead: ${pb.bufferAheadSec}s`);
-      setEl('valGlError', wg.glError || 'NO_ERROR');
-      setEl('valGlContextLoss', `Loss/Rest: ${wg.contextLostCount || 0}/${wg.contextRestoredCount || 0}`);
-      setEl('valActivePerfMode', data.perf.performanceMode || 'baseline');
-      setEl('valActiveRenderScale', (data.perf.renderScale || 1.0).toFixed(2) + 'x');
-      setEl('valEyeFboSize', disp.eyeFbo || '--');
-      setEl('valBufferAhead', `${pb.bufferAheadSec}s`);
+      const entries = [
+        ['valPerfCadence', `rAF: ${cad.rafPerSec || 0}/s | rVFC: ${cad.rvfcPerSec || 0}/s`],
+        ['valUploadCadence', `VidUp: ${cad.videoUploadsPerSec || 0}/s | UIUp: ${cad.uiUploadsPerSec || 0}/s`],
+        ['valFrameTimeAvg', `avg: ${ft.avg || 0}ms | p95: ${ft.p95 || 0}ms`],
+        ['valFrameTimeMax', `max: ${ft.max || 0}ms (${ft.samples || 0} frames)`],
+        ['valVideoQuality', `total: ${q.totalVideoFrames} | drop: ${q.droppedVideoFrames}`],
+        ['valVideoDropRate', (typeof q.dropRate === 'number') ? `${q.dropRate}% dropped` : String(q.dropRate)],
+        ['valDisplayViewport', `VP: ${disp.cssViewport || '--'} (DPR: ${disp.dpr || '--'})`],
+        ['valDrawingBuffer', `DrawBuf: ${disp.drawingBuffer || '--'} | FBO: ${disp.eyeFbo || '--'}`],
+        ['valPlaybackStates', `ready: ${pb.readyState} | net: ${pb.networkState} | ${pb.paused ? '⏸' : '▶'}`],
+        ['valBufferDetails', `ahead: ${pb.bufferAheadSec}s`], ['valGlError', wg.glError || 'NO_ERROR'],
+        ['valGlContextLoss', `Loss/Rest: ${wg.contextLostCount || 0}/${wg.contextRestoredCount || 0}`],
+        ['valActivePerfMode', data.perf.performanceMode || 'baseline'],
+        ['valActiveRenderScale', (data.perf.renderScale || 1.0).toFixed(2) + 'x'],
+        ['valEyeFboSize', disp.eyeFbo || '--'], ['valBufferAhead', `${pb.bufferAheadSec}s`]
+      ];
+      entries.forEach(([id, val]) => setEl(id, val));
     } catch (e) {
       console.warn('Error updating perf telemetry UI:', e);
     }
@@ -411,6 +415,7 @@ export function updateTelemetryUI(data) {
         else if (pendingAck.type === 'stage' && data.calibrationStage === pendingAck.target) pendingAck = null;
         else if (pendingAck.type === 'visual_mode' && data.viewerVisualMode === pendingAck.target) pendingAck = null;
         else if (pendingAck.type === 'fitting' && data.opticsRuntime?.calibrationDistortionOverrideActive === pendingAck.target) pendingAck = null;
+        else if (pendingAck.type === 'preview' && data.opticsRuntime?.provisionalOpticsPreviewActive === pendingAck.target) pendingAck = null;
       }
       if (!pendingAck || pendingAck.type !== 'visual_mode') {
         if (data.viewerVisualMode && data.viewerVisualMode !== currentVisualMode) {
@@ -439,6 +444,19 @@ export function updateTelemetryUI(data) {
             b.style.borderColor = o4FittingActive ? '#a855f7' : '#475569';
           }
           if (ban) ban.style.display = o4FittingActive ? 'block' : 'none';
+        }
+      }
+      const remotePreviewActive = !!(data.opticsRuntime?.provisionalOpticsPreviewActive);
+      if (!pendingAck || pendingAck.type !== 'preview') {
+        if (remotePreviewActive !== provisionalPreviewActive) {
+          provisionalPreviewActive = remotePreviewActive;
+          const bp = document.getElementById('btnToggleProvisionalPreview');
+          if (bp) {
+            bp.textContent = provisionalPreviewActive ? '🎬 Optics Preview: ACTIVE' : '⚪ Optics Preview: OFF';
+            bp.style.background = provisionalPreviewActive ? '#0284c7' : '#334155';
+            bp.style.color = provisionalPreviewActive ? '#f0f9ff' : '#cbd5e1';
+            bp.style.borderColor = provisionalPreviewActive ? '#38bdf8' : '#475569';
+          }
         }
       }
       applyStageLocks(currentStage);
@@ -483,19 +501,13 @@ export function updateTelemetryUI(data) {
       populateSlidersFromProfile(vp);
       const statEl = document.getElementById('txtProfileStatus');
       if (statEl) {
-        if (vp.confidence === 'working-user-tuned' || vp.viewerProfileId === 'viewer:my_profile') {
-          statEl.textContent = '⚙️ ' + (vp.name || 'My Viewer Profile') + ' [Unvalidated / User-tuned — Not Ground Truth]';
-          statEl.style.color = '#38bdf8';
-        } else if (vp.viewerProfileId === 'g04:provisional_geometry') {
-          statEl.textContent = '🔬 ' + (vp.name || 'G04 Provisional Geometry') + ' [Provisional Assembly — Not Ground Truth]';
-          statEl.style.color = '#a855f7';
-        } else if (vp.confidence === 'historical-reference' || vp.viewerProfileId === 'cardboard:reference_50deg') {
-          statEl.textContent = '✓ ' + (vp.name || 'Cardboard Reference') + ' [Reference Optics — Not Ground Truth]';
-          statEl.style.color = '#34d399';
-        } else {
-          statEl.textContent = '⚠️ UNCALIBRATED BASELINE (Draft edits not validated)';
-          statEl.style.color = '#f87171';
-        }
+        const statusMap = {
+          'viewer:my_profile': ['⚙️ ' + (vp.name || 'My Viewer Profile') + ' [Unvalidated / User-tuned — Not Ground Truth]', '#38bdf8'],
+          'g04:provisional_geometry': ['🔬 ' + (vp.name || 'G04 Provisional Geometry') + ' [Provisional Assembly — Not Ground Truth]', '#a855f7'],
+          'cardboard:reference_50deg': ['✓ ' + (vp.name || 'Cardboard Reference') + ' [Reference Optics — Not Ground Truth]', '#34d399']
+        };
+        const [text, color] = statusMap[vp.viewerProfileId] || (vp.confidence === 'working-user-tuned' ? statusMap['viewer:my_profile'] : ['⚠️ UNCALIBRATED BASELINE (Draft edits not validated)', '#f87171']);
+        statEl.textContent = text; statEl.style.color = color;
       }
       if (data.opticsRuntime && data.opticsRuntime.evidenceMarkers) {
         const em = data.opticsRuntime.evidenceMarkers;
@@ -529,23 +541,12 @@ export function updateTelemetryUI(data) {
       setEl('valRenderAt', ms(t.firstRenderAt)); setEl('valTotalLat', t.firstRenderAt ? ms(t.firstRenderAt) : (t.statusText || '--'));
     }
     if (data.controllerInput) {
-      const ci = data.controllerInput;
-      const statEl = document.getElementById('valControllerStatus');
-      const evtEl = document.getElementById('valControllerEvent');
+      const ci = data.controllerInput, statEl = document.getElementById('valControllerStatus'), evtEl = document.getElementById('valControllerEvent');
       if (statEl) {
-        if (ci.activeGamepads && ci.activeGamepads.length > 0) {
-          statEl.textContent = `🎮 Gamepad Active (${ci.activeGamepads[0].id || 'SHINECON'})`;
-        } else if (ci.lastKeyDown) {
-          statEl.textContent = `⌨️ Keyboard (${ci.lastKeyDown.key || ci.lastKeyDown.code})`;
-        } else if (ci.lastPointer) {
-          statEl.textContent = `🖱️ Pointer (${ci.lastPointer.pointerType})`;
-        } else {
-          statEl.textContent = 'Standby (Listening)';
-        }
+        statEl.textContent = (ci.activeGamepads && ci.activeGamepads.length > 0) ? `🎮 Gamepad Active (${ci.activeGamepads[0].id || 'SHINECON'})`
+          : (ci.lastKeyDown ? `⌨️ Keyboard (${ci.lastKeyDown.key || ci.lastKeyDown.code})` : (ci.lastPointer ? `🖱️ Pointer (${ci.lastPointer.pointerType})` : 'Standby (Listening)'));
       }
-      if (evtEl && ci.lastEvent) {
-        evtEl.textContent = `${ci.lastEvent.type}: ${JSON.stringify(ci.lastEvent.data || {})}`;
-      }
+      if (evtEl && ci.lastEvent) evtEl.textContent = `${ci.lastEvent.type}: ${JSON.stringify(ci.lastEvent.data || {})}`;
     }
   } catch (e) {}
 }
@@ -556,6 +557,7 @@ export function onRenderScaleChange(scaleVal) { sendControl({ action: 'set_rende
 // Window Globals for inline HTML event handlers
 Object.assign(window, {
   setStage, setViewerVisualMode, toggleO4FittingMode, setO4FittingActive,
+  toggleProvisionalPreview, setProvisionalPreviewActive,
   onPerformanceModeChange, onRenderScaleChange,
   onSelectMedia, sendSeek, toggleDiagnosticEye, toggleDiagnosticOverlay,
   onPoseChange, resetPose, onVideoMappingChange,
