@@ -10,6 +10,7 @@ import {
 import { activeScreenProfile } from './src/core/screen-profile.js';
 import { CalibrationUI } from './src/controls/calibration-ui.js';
 import { state } from './src/core/state.js';
+import { fsIdealSceneSource } from './src/render/shaders.js';
 
 console.log('--- RUNNING ENHANCED O4 DISTORTION PATH & CONTROLLER REGRESSION ---');
 
@@ -165,6 +166,31 @@ assert.equal(productionLensCorrectionApplied, false, 'productionLensCorrectionAp
 assert.equal(calibrationDistortionOverrideActive, true, 'calibrationDistortionOverrideActive must be true');
 assert.equal(calibrationDistortionOverrideApplied, true, 'calibrationDistortionOverrideApplied must be true when rendered in VR');
 assert.equal(lensCorrectionApplied, true, 'lensCorrectionApplied must report true when renderViewerProfile has override');
+
+// -------------------------------------------------------------
+// Section 6: Binocular-Friendly Synthetic Grid Semantics (Issue #20)
+// -------------------------------------------------------------
+// 1. Synthetic Grid geometry math remains unchanged
+assert.ok(fsIdealSceneSource.includes('vec2 gridPos = vec2(tanX, tanY) * 2.5;'), 'Synthetic grid must use tanX, tanY coordinate space');
+assert.ok(fsIdealSceneSource.includes('float tanX = mix(-uVirtTanBounds.x, uVirtTanBounds.y, vUv.x);'), 'tanX virtual ray bounds computation must remain intact');
+assert.ok(fsIdealSceneSource.includes('float tanY = mix(-uVirtTanBounds.z, uVirtTanBounds.w, vUv.y);'), 'tanY virtual ray bounds computation must remain intact');
+
+// 2. Grid density is the new sparse value (scale factor 2.5 instead of legacy dense 6.0)
+const sceneType1Match = fsIdealSceneSource.match(/if\s*\(uSceneType\s*==\s*1\)\s*\{([\s\S]*?)return;\s*\}/);
+assert.ok(sceneType1Match, 'uSceneType == 1 block must exist in fsIdealSceneSource');
+const scene1Body = sceneType1Match[1];
+assert.ok(scene1Body.includes('* 2.5;'), 'Synthetic grid scale must be 2.5 (sparse)');
+assert.ok(!scene1Body.includes('* 6.0;'), 'Legacy dense 6.0 scale must be removed from uSceneType == 1');
+
+// 3. Grid/background colors are identical for both eyes (pure black background and crisp neutral white lines)
+assert.ok(scene1Body.includes('vec3 bg = vec3(0.0);'), 'Background must be pure black (vec3(0.0)) for both eyes');
+assert.ok(scene1Body.includes('vec3 lineCol = vec3(0.92, 0.92, 0.92);'), 'Line color must be neutral crisp white for both eyes');
+
+// 4. No uEye-dependent appearance remains inside Grid Only (uSceneType == 1 block)
+assert.ok(!scene1Body.includes('uEye'), 'uSceneType == 1 block must NOT contain any uEye-dependent appearance branching');
+assert.ok(!scene1Body.includes('eyeThemeColor'), 'uSceneType == 1 block must NOT reference eyeThemeColor');
+assert.ok(!scene1Body.includes('isCenterBadge'), 'uSceneType == 1 block must NOT contain eye-rivalrous center badges');
+
 assert.equal(calUI.activeViewerProfile.isCalibrated, false, 'isCalibrated strictly remains false');
 
 console.log('ALL ENHANCED O4 DISTORTION PATH & CONTROLLER ASSERTIONS PASSED!');

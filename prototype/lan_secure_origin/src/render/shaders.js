@@ -39,53 +39,29 @@ export const fsIdealSceneSource = `
     float tanY = mix(-uVirtTanBounds.z, uVirtTanBounds.w, vUv.y);
     vec3 rayCam = normalize(vec3(tanX, tanY, -1.0));
 
-    // 2. Synthetic Calibration Scene (Straight Grid, 90° Corners & Directional Orientation Markers)
+    // 2. Synthetic Calibration Scene (Straight Grid, 90° Corners, Neutral Binocular Target)
     // Pure WebGL1 Standard Arithmetic (Zero fwidth dependency)
-    // Scope Boundary Notice:
-    // This synthetic test pattern validates static optical distortion geometry and corner tangents
-    // in screen/frustum space. It does not certify dynamic head tracking, world-lock, or angular drift.
+    // Issue #20: Sparser grid (scale 2.5), pure black background, and identical neutral white lines
+    // for both eyes to prevent binocular rivalry and false periodic mismatch.
     if (uSceneType == 1) {
-      vec2 gridPos = vec2(tanX, tanY) * 6.0;
+      vec2 gridPos = vec2(tanX, tanY) * 2.5;
       vec2 gridFract = abs(fract(gridPos) - 0.5);
-      float line = step(0.46, max(gridFract.x, gridFract.y));
+      float line = step(0.48, max(gridFract.x, gridFract.y));
 
       // Center crosshair (x=0, y=0)
-      float isCross = (abs(tanX) < 0.005 || abs(tanY) < 0.005) ? 1.0 : 0.0;
+      float isCross = (abs(tanX) < 0.003 || abs(tanY) < 0.003) ? 1.0 : 0.0;
 
       // 90-degree corner targets (orthogonal square markers at tan = ±0.35)
       float isCornerBox = ((abs(abs(tanX) - 0.35) < 0.007 && abs(tanY) <= 0.357) ||
                            (abs(abs(tanY) - 0.35) < 0.007 && abs(tanX) <= 0.357)) ? 1.0 : 0.0;
 
-      // Synthetic Orientation Markers:
-      // UP Arrow at top: stem (y in [0.18, 0.28], |x| < 0.008) + head (|x| < (0.35 - y)*0.7, y in [0.28, 0.35])
-      float isUpStem = (tanY >= 0.18 && tanY <= 0.28 && abs(tanX) < 0.008) ? 1.0 : 0.0;
-      float isUpHead = (tanY >= 0.28 && tanY <= 0.35 && abs(tanX) < (0.35 - tanY) * 0.7) ? 1.0 : 0.0;
-      float isUpArrow = max(isUpStem, isUpHead);
+      // Identical pure black background and neutral crisp white lines for both eyes
+      vec3 bg = vec3(0.0);
+      vec3 lineCol = vec3(0.92, 0.92, 0.92);
 
-      // DOWN marker at bottom: bar at y in [-0.30, -0.26], |x| < 0.04
-      float isDownMarker = (tanY >= -0.30 && tanY <= -0.26 && abs(tanX) < 0.04) ? 1.0 : 0.0;
-
-      // LEFT marker at left: bar at x in [-0.30, -0.26], |y| < 0.04
-      float isLeftMarker = (tanX >= -0.30 && tanX <= -0.26 && abs(tanY) < 0.04) ? 1.0 : 0.0;
-
-      // RIGHT marker at right: bar at x in [0.26, 0.30], |y| < 0.04
-      float isRightMarker = (tanX >= 0.26 && tanX <= 0.30 && abs(tanY) < 0.04) ? 1.0 : 0.0;
-
-      // Eye-specific Badge Color (Left: Cyan/Blue, Right: Orange/Amber)
-      vec3 eyeThemeColor = (uEye == 0) ? vec3(0.06, 0.75, 0.95) : vec3(0.95, 0.55, 0.10);
-      vec3 bg = (uEye == 0) ? vec3(0.03, 0.07, 0.14) : vec3(0.12, 0.06, 0.03);
-
-      // Distinctive L / R central square marker
-      float isCenterBadge = (abs(tanX) < 0.06 && abs(tanY) < 0.06) ? 1.0 : 0.0;
-
-      vec3 finalCol = mix(bg, eyeThemeColor, line * 0.75);
+      vec3 finalCol = mix(bg, lineCol, line * 0.85);
       finalCol = mix(finalCol, vec3(1.0, 1.0, 1.0), isCornerBox);
       finalCol = mix(finalCol, vec3(1.0, 0.2, 0.2), isCross);
-      finalCol = mix(finalCol, eyeThemeColor, isCenterBadge);
-      finalCol = mix(finalCol, vec3(0.2, 1.0, 0.3), isUpArrow);      // Bright Green UP Arrow
-      finalCol = mix(finalCol, vec3(1.0, 0.9, 0.2), isDownMarker);   // Yellow DOWN
-      finalCol = mix(finalCol, vec3(0.9, 0.4, 1.0), isLeftMarker);   // Purple LEFT
-      finalCol = mix(finalCol, vec3(0.3, 0.8, 1.0), isRightMarker);  // SkyBlue RIGHT
 
       gl_FragColor = vec4(finalCol, 1.0);
       return;
