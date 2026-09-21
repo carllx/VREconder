@@ -173,4 +173,44 @@ ctrl.updateTelemetryUI({
 });
 assert.equal(domElements['panelO4Fitting'].style.display, 'none', 'TEST H4b PASS: stage != B (Stage C) leaves panel hidden');
 
+// Test I: Provisional Optics Preview Session Invariants & Reconciliation
+// Case 1: Preview toggle while offline fails closed
+ctrl.currentIphoneStatus.state = 'offline';
+ctrl.setProvisionalPreviewActive(false);
+ctrl.toggleProvisionalPreview();
+assert.equal(ctrl.provisionalPreviewActive, false, 'TEST I1 PASS: Provisional preview cannot activate while phone is offline');
+
+// Case 2: Preview toggle with active phone sets pendingAck and updates state
+ctrl.currentIphoneStatus.state = 'active';
+ctrl.toggleProvisionalPreview();
+assert.equal(ctrl.provisionalPreviewActive, true, 'TEST I2 PASS: Provisional preview activates with active phone');
+assert.ok(ctrl.pendingAck !== null && ctrl.pendingAck.type === 'preview', 'Pending preview ack set');
+
+// Case 3: Echo from phone clears pendingAck
+ctrl.updateTelemetryUI({
+  type: 'telemetry_sync',
+  calibrationStage: 'C',
+  opticsRuntime: { provisionalOpticsPreviewActive: true }
+});
+assert.equal(ctrl.pendingAck, null, 'TEST I3 PASS: Telemetry echo clears pendingAck for preview');
+assert.equal(ctrl.provisionalPreviewActive, true, 'Preview remains active');
+
+// Case 4: Switching stages (C -> B -> A) preserves user's provisionalPreviewActive session intent
+ctrl.updateTelemetryUI({
+  type: 'telemetry_sync',
+  calibrationStage: 'B',
+  opticsRuntime: { provisionalOpticsPreviewActive: true }
+});
+assert.equal(ctrl.currentStage, 'B');
+assert.equal(ctrl.provisionalPreviewActive, true, 'TEST I4 PASS: Preview session intent remains ON in Stage B');
+
+ctrl.updateTelemetryUI({
+  type: 'telemetry_sync',
+  calibrationStage: 'A',
+  opticsRuntime: { provisionalOpticsPreviewActive: true }
+});
+assert.equal(ctrl.currentStage, 'A');
+assert.equal(ctrl.provisionalPreviewActive, true, 'TEST I5 PASS: Preview session intent remains ON in Stage A');
+
 console.log('ALL CONTROLLER RECONCILIATION & O4 PANEL DERIVATION TESTS PASSED!');
+process.exit(0);

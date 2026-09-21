@@ -58,20 +58,29 @@ export function isProvisionalOpticsPreviewActive(appState = state) {
   return appState.provisionalOpticsPreviewActive === true;
 }
 
+export function isProvisionalOpticsPreviewApplicable(appState = state) {
+  if (!appState) return false;
+  return appState.calibrationStage === 'C' &&
+         appState.provisionalOpticsPreviewActive === true;
+}
+
 export function getRenderViewerProfile(baseProfile, appState = state, tempOffset = 0.0) {
   const effective = getEffectiveViewerProfile(baseProfile, tempOffset);
   if (!effective) return effective;
 
   const isOverrideActive = isCalibrationDistortionOverrideActive(appState);
-  const isPreviewActive = isProvisionalOpticsPreviewActive(appState);
+  const isPreviewApplicable = isProvisionalOpticsPreviewApplicable(appState);
 
-  if (!isOverrideActive && !isPreviewActive) {
+  if (!isOverrideActive && !isPreviewApplicable) {
     return effective;
   }
 
   const candK = (appState && appState.candidateDistortion) ? appState.candidateDistortion : { k1: 0.0, k2: 0.0 };
   const k1 = typeof candK.k1 === 'number' ? candK.k1 : 0.0;
   const k2 = typeof candK.k2 === 'number' ? candK.k2 : 0.0;
+
+  // Stage B grid_only O4 fitting override takes precedence
+  const model = isOverrideActive ? 'o4-candidate-fitting' : 'provisional-preview';
 
   return {
     ...effective,
@@ -80,12 +89,12 @@ export function getRenderViewerProfile(baseProfile, appState = state, tempOffset
     // Visible candidate lens correction path for O4 grid-only fitting or session video preview
     lensCorrectionEnabled: true,
     distortion: {
-      model: isOverrideActive ? 'o4-candidate-fitting' : 'provisional-preview',
+      model: model,
       k1: k1,
       k2: k2
     },
     _calibrationDistortionOverrideActive: isOverrideActive,
-    _provisionalOpticsPreviewActive: isPreviewActive
+    _provisionalOpticsPreviewActive: !isOverrideActive && isPreviewApplicable
   };
 }
 
