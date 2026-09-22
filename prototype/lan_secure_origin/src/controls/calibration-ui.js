@@ -52,6 +52,13 @@ export class CalibrationUI {
     } catch (e) {}
   }
 
+  get domCanvasPresentationVisible() {
+    const canvas = document.getElementById('uiCanvas');
+    if (!canvas) return false;
+    const style = getComputedStyle(canvas);
+    return style.visibility === 'visible' && style.display !== 'none';
+  }
+
   handleRemoteControlAction(msg) {
     if (!msg) return;
 
@@ -66,7 +73,12 @@ export class CalibrationUI {
     if (!msg.action) return;
     const act = msg.action;
 
-    if (act === 'set_stage') {
+    if (act === 'set_ui_dom_presentation') {
+      // Issue #31 E1: presentation-only, session-only probe. Keep bitmap and rendering alive.
+      if (typeof msg.visible !== 'boolean') return;
+      const canvas = document.getElementById('uiCanvas');
+      if (canvas) canvas.style.visibility = msg.visible ? 'visible' : 'hidden';
+    } else if (act === 'set_stage') {
       this.switchStage(msg.stage);
     } else if (act === 'set_performance_mode' && msg.mode) {
       state.performanceMode = msg.mode;

@@ -460,6 +460,7 @@ setInterval(() => {
     renderScale: state.renderScale || 1.0,
     calibrationStage: state.calibrationStage,
     uiState: {
+      domCanvasPresentationVisible: calibrationUI.domCanvasPresentationVisible,
       isStereoUIVisible: (typeof isStereoUIVisible === 'function') ? isStereoUIVisible(performance.now()) : false,
       activePattern: state.activePattern,
       menuOpen: (state.activePattern === 'A' && state.patternA_open) || (state.activePattern === 'B' && state.patternB_open) || (state.activePattern === 'C' && state.patternC_open),
