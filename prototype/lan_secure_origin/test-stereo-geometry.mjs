@@ -138,7 +138,8 @@ for (const t of testTargets) {
   console.log(`    Left Eye:  u=${projL.u.toFixed(4)}, v=${projL.v.toFixed(4)}, tanX=${tanX_L.toFixed(5)}, tanY=${tanY_L.toFixed(5)}`);
   console.log(`    Right Eye: u=${projR.u.toFixed(4)}, v=${projR.v.toFixed(4)}, tanX=${tanX_R.toFixed(5)}, tanY=${tanY_R.toFixed(5)}`);
   console.log(`    Disparity: horiz=${horizTanDisp.toFixed(5)} (CROSSED), vert=${vertTanDisp.toExponential(2)}`);
-  console.log(`    Angular Disparity: ${angDispDeg.toFixed(4)}° (${angDispArcmin.toFixed(1)} arcmin)`);
+  console.log(`    Convergence Demand (Total Vergence): ${angDispDeg.toFixed(4)}° (${angDispArcmin.toFixed(1)} arcmin)`);
+  console.log(`    Relative Disparity vs Infinity Fixation: ${angDispDeg.toFixed(4)}° (${angDispArcmin.toFixed(1)} arcmin)`);
   console.log(`    Screen Separation: ${screenSepPx.toFixed(1)} px (${screenSepMm.toFixed(2)} mm vs ILD ${(ILD*1000).toFixed(1)} mm)`);
 }
 
