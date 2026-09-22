@@ -3,12 +3,13 @@
 // Primary Authority: G04 Provisional Geometry & Google WWGC Optics Contract
 // ============================================================================
 import assert from 'node:assert/strict';
-import { projectWorldDirToEye } from './src/controls/stereo-ui.js';
+import { projectWorldDirToEye, UI_STEREO_DIAGNOSTIC_MODES, getStereoUiProjectionConfig } from './src/controls/stereo-ui.js';
 import { sphericalToDir, getActiveInteractiveItems } from './src/controls/patterns.js';
 import { deriveCardboardEyeGeometry, createDefaultViewerProfile } from './src/core/projection-profile.js';
 import { activeScreenProfile } from './src/core/screen-profile.js';
 import { state } from './src/core/state.js';
 import { qCameraInv } from './src/core/orientation.js';
+import { CalibrationUI } from './src/controls/calibration-ui.js';
 
 console.log('=== RUNNING RIGOROUS BINOCULAR STEREO UI GEOMETRY ORACLE ===\n');
 
@@ -286,6 +287,115 @@ items.forEach(item => {
 });
 assert.ok(itemsMatch, 'All interactive items dirWorld must match sphericalToDir');
 console.log('  [All interactive items dirWorld exact match]: PASS');
+
+// ----------------------------------------------------------------------------
+// Section 6: Transient Stereo UI Diagnostic Comparison Harness (G1, G2, G3)
+// ----------------------------------------------------------------------------
+console.log('\nTransient Stereo UI Diagnostic Comparison Harness (G1, G2, G3):');
+
+// 1. Verify Mode Definitions
+assert.equal(UI_STEREO_DIAGNOSTIC_MODES.G1_CURRENT_WORLD_2M, 'G1_CURRENT_WORLD_2M');
+assert.equal(UI_STEREO_DIAGNOSTIC_MODES.G2_LOW_DISPARITY_10M, 'G2_LOW_DISPARITY_10M');
+assert.equal(UI_STEREO_DIAGNOSTIC_MODES.G3_ZERO_DISPARITY_HUD, 'G3_ZERO_DISPARITY_HUD');
+
+// 2. Test Projection Configs
+state.uiStereoDiagnosticMode = 'G1_CURRENT_WORLD_2M';
+const cfgG1 = getStereoUiProjectionConfig(state);
+assert.equal(cfgG1.mode, 'G1_CURRENT_WORLD_2M');
+assert.equal(cfgG1.virtualDepth, 2.0);
+assert.equal(cfgG1.eyeTranslationScale, 1.0);
+assert.ok(Math.abs(cfgG1.expectedCenterRelativeDisparityDeg - 1.8619) < 0.001);
+
+state.uiStereoDiagnosticMode = 'G2_LOW_DISPARITY_10M';
+const cfgG2 = getStereoUiProjectionConfig(state);
+assert.equal(cfgG2.mode, 'G2_LOW_DISPARITY_10M');
+assert.equal(cfgG2.virtualDepth, 10.0);
+assert.equal(cfgG2.eyeTranslationScale, 1.0);
+assert.ok(Math.abs(cfgG2.expectedCenterRelativeDisparityDeg - 0.3724) < 0.001);
+
+state.uiStereoDiagnosticMode = 'G3_ZERO_DISPARITY_HUD';
+const cfgG3 = getStereoUiProjectionConfig(state);
+assert.equal(cfgG3.mode, 'G3_ZERO_DISPARITY_HUD');
+assert.equal(cfgG3.eyeTranslationScale, 0.0);
+assert.equal(cfgG3.expectedCenterRelativeDisparityDeg, 0.0);
+
+console.log('  [Projection Configs G1, G2, G3]: PASS');
+
+// 3. Mathematical Verification of G1 vs G2 vs G3
+const centerDir = sphericalToDir(0, 0);
+const [tanL_L, tanR_L] = eyeGeomBase.leftEye.virtTanBounds;
+const [tanL_R, tanR_R] = eyeGeomBase.rightEye.virtTanBounds;
+
+// G1: 2m depth -> tanX disparity = 0.0325
+const pL_G1 = projectWorldDirToEye(centerDir, 0, eyeGeomBase, halfW, height, cfgG1);
+const pR_G1 = projectWorldDirToEye(centerDir, 1, eyeGeomBase, halfW, height, cfgG1);
+const tanX_L_G1 = pL_G1.u * (tanL_L + tanR_L) - tanL_L;
+const tanX_R_G1 = pR_G1.u * (tanL_R + tanR_R) - tanL_R;
+const disp_G1 = tanX_L_G1 - tanX_R_G1;
+assert.ok(Math.abs(disp_G1 - (ILD / 2.0)) < 1e-9, 'G1 center relative disparity must equal ILD/2.0');
+
+// G2: 10m depth -> tanX disparity = 0.0065
+const pL_G2 = projectWorldDirToEye(centerDir, 0, eyeGeomBase, halfW, height, cfgG2);
+const pR_G2 = projectWorldDirToEye(centerDir, 1, eyeGeomBase, halfW, height, cfgG2);
+const tanX_L_G2 = pL_G2.u * (tanL_L + tanR_L) - tanL_L;
+const tanX_R_G2 = pR_G2.u * (tanL_R + tanR_R) - tanL_R;
+const disp_G2 = tanX_L_G2 - tanX_R_G2;
+assert.ok(Math.abs(disp_G2 - (ILD / 10.0)) < 1e-9, 'G2 center relative disparity must equal ILD/10.0');
+assert.ok(disp_G2 < disp_G1, 'G2 disparity must be significantly smaller than G1 disparity');
+
+// G3: Zero eye translation -> tanX disparity = 0.0 across all angles
+for (const t of testTargets) {
+  const dir = sphericalToDir(t.yaw, t.pitch);
+  const pL_G3 = projectWorldDirToEye(dir, 0, eyeGeomBase, halfW, height, cfgG3);
+  const pR_G3 = projectWorldDirToEye(dir, 1, eyeGeomBase, halfW, height, cfgG3);
+  const tXL = pL_G3.u * (tanL_L + tanR_L) - tanL_L;
+  const tXR = pR_G3.u * (tanL_R + tanR_R) - tanL_R;
+  const tYL = pL_G3.v * (eyeGeomBase.leftEye.virtTanBounds[2] + eyeGeomBase.leftEye.virtTanBounds[3]) - eyeGeomBase.leftEye.virtTanBounds[2];
+  const tYR = pR_G3.v * (eyeGeomBase.rightEye.virtTanBounds[2] + eyeGeomBase.rightEye.virtTanBounds[3]) - eyeGeomBase.rightEye.virtTanBounds[2];
+
+  assert.ok(Math.abs(tXL - tXR) < 1e-9, `G3 horizontal relative disparity must be 0.0 for ${t.name}`);
+  assert.ok(Math.abs(tYL - tYR) < 1e-9, `G3 vertical relative disparity must be 0.0 for ${t.name}`);
+}
+console.log('  [G1 vs G2 vs G3 Ray Tangent Disparity Mechanics]: PASS');
+
+// 4. Remote Control Action Switching & Fail-Closed Behavior
+const calUI = new CalibrationUI({
+  storage: { activeViewerProfile: g04BaseProfile },
+  mediaController: {},
+  diagnosticOverlay: {},
+  vrRenderer: {},
+  commandModel: {}
+});
+
+// Snapshot immutable optics parameters before switching
+const s2lBefore = g04BaseProfile.screenToLensDistance;
+const ildBefore = g04BaseProfile.interLensDistance;
+const k1Before = g04BaseProfile.distortion.k1;
+const k2Before = g04BaseProfile.distortion.k2;
+
+// G1 -> G2
+calUI.handleRemoteControlAction({ action: 'set_ui_stereo_diagnostic_mode', mode: 'G2_LOW_DISPARITY_10M' });
+assert.equal(state.uiStereoDiagnosticMode, 'G2_LOW_DISPARITY_10M', 'Must switch to G2');
+assert.equal(state.uiIsDirty, true, 'Must mark uiIsDirty');
+
+// G2 -> G3
+calUI.handleRemoteControlAction({ action: 'set_ui_stereo_diagnostic_mode', mode: 'G3_ZERO_DISPARITY_HUD' });
+assert.equal(state.uiStereoDiagnosticMode, 'G3_ZERO_DISPARITY_HUD', 'Must switch to G3');
+
+// G3 -> G1
+calUI.handleRemoteControlAction({ action: 'set_ui_stereo_diagnostic_mode', mode: 'G1_CURRENT_WORLD_2M' });
+assert.equal(state.uiStereoDiagnosticMode, 'G1_CURRENT_WORLD_2M', 'Must switch back to G1');
+
+// Fail-closed test against invalid mode
+calUI.handleRemoteControlAction({ action: 'set_ui_stereo_diagnostic_mode', mode: 'G4_INVALID_NONEXISTENT' });
+assert.equal(state.uiStereoDiagnosticMode, 'G1_CURRENT_WORLD_2M', 'Invalid mode must fail-closed and leave state intact');
+
+// 5. Invariant Guards: Optical and Viewer Profiles must NEVER be mutated by UI mode
+assert.equal(g04BaseProfile.screenToLensDistance, s2lBefore, 'S2L must be untouched');
+assert.equal(g04BaseProfile.interLensDistance, ildBefore, 'ILD must be untouched');
+assert.equal(g04BaseProfile.distortion.k1, k1Before, 'k1 must be untouched');
+assert.equal(g04BaseProfile.distortion.k2, k2Before, 'k2 must be untouched');
+console.log('  [Remote Control Switching, Fail-Closed & Optics Invariance]: PASS');
 
 console.log('\n============================================================');
 console.log('ALL DETERMINISTIC BINOCULAR GEOMETRY ORACLE CHECKS PASSED ✅');

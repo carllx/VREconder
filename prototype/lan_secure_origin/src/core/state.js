@@ -22,6 +22,7 @@ export const state = {
   viewerVisualMode: 'grid_only', // Stage B sub-mode: 'grid_only' | 'video_grid'
   temporaryScreenToLensOffset: 0.0, // Session-only runtime viewing distance offset (Issue #15 / #17)
   menuVirtualDepth: 2.0, // Virtual Depth in meters for 3D UI convergence (1.5m / 2.0m / 3.0m)
+  uiStereoDiagnosticMode: 'G1_CURRENT_WORLD_2M', // Transient stereo UI diagnostic mode: G1 | G2 | G3
 
   // O4 Synthetic-Grid Candidate Distortion Fitting State (Calibration-only)
   calibrationDistortionFittingActive: false,

@@ -162,6 +162,21 @@ export class CalibrationUI {
       if (typeof msg.k1 === 'number') state.candidateDistortion.k1 = msg.k1;
       if (typeof msg.k2 === 'number') state.candidateDistortion.k2 = msg.k2;
       logAction('Set Candidate Distortion', state.candidateDistortion);
+    } else if (act === 'set_ui_stereo_diagnostic_mode') {
+      const mode = msg.mode;
+      if (mode === 'G1_CURRENT_WORLD_2M' || mode === 'G2_LOW_DISPARITY_10M' || mode === 'G3_ZERO_DISPARITY_HUD') {
+        state.uiStereoDiagnosticMode = mode;
+        state.uiIsDirty = true;
+        const toastLabels = {
+          G1_CURRENT_WORLD_2M: '🎯 UI Mode: G1 (2m World)',
+          G2_LOW_DISPARITY_10M: '🎯 UI Mode: G2 (10m Low-Disparity)',
+          G3_ZERO_DISPARITY_HUD: '🎯 UI Mode: G3 (Zero-Disparity HUD)'
+        };
+        showFeedbackToast(toastLabels[mode] || mode);
+        logAction('Set UI Stereo Diagnostic Mode: ' + mode);
+      } else {
+        logAction('Rejected set_ui_stereo_diagnostic_mode: unknown mode fail-closed', { mode });
+      }
     } else if (act === 'set_video_mapping' && msg.mapping && this.activeVideoProfile) {
       const m = msg.mapping;
       if (m.projection) this.activeVideoProfile.projection = m.projection;

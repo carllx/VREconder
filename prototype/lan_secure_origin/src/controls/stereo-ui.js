@@ -8,9 +8,50 @@ import { getActiveInteractiveItems, sphericalToDir } from './patterns.js';
 import { deriveCardboardEyeGeometry } from '../core/projection-profile.js';
 import { activeScreenProfile } from '../core/screen-profile.js';
 
-export function projectWorldDirToEye(dirWorld, eyeIndex, eyeGeom, halfW, height, depth = null) {
+export const UI_STEREO_DIAGNOSTIC_MODES = {
+  G1_CURRENT_WORLD_2M: 'G1_CURRENT_WORLD_2M',
+  G2_LOW_DISPARITY_10M: 'G2_LOW_DISPARITY_10M',
+  G3_ZERO_DISPARITY_HUD: 'G3_ZERO_DISPARITY_HUD'
+};
+
+export function getStereoUiProjectionConfig(appState = state) {
+  const mode = (appState && appState.uiStereoDiagnosticMode) || 'G1_CURRENT_WORLD_2M';
+  switch (mode) {
+    case 'G2_LOW_DISPARITY_10M':
+      return {
+        mode: 'G2_LOW_DISPARITY_10M',
+        virtualDepth: 10.0,
+        eyeTranslationScale: 1.0,
+        expectedCenterRelativeDisparityDeg: 0.3724
+      };
+    case 'G3_ZERO_DISPARITY_HUD':
+      return {
+        mode: 'G3_ZERO_DISPARITY_HUD',
+        virtualDepth: 2.0,
+        eyeTranslationScale: 0.0,
+        expectedCenterRelativeDisparityDeg: 0.0
+      };
+    case 'G1_CURRENT_WORLD_2M':
+    default:
+      return {
+        mode: 'G1_CURRENT_WORLD_2M',
+        virtualDepth: (appState && typeof appState.menuVirtualDepth === 'number') ? appState.menuVirtualDepth : 2.0,
+        eyeTranslationScale: 1.0,
+        expectedCenterRelativeDisparityDeg: 1.8619
+      };
+  }
+}
+
+export function projectWorldDirToEye(dirWorld, eyeIndex, eyeGeom, halfW, height, configOrDepth = null) {
   if (!dirWorld || !eyeGeom) return null;
-  const d = (typeof depth === 'number' && depth > 0) ? depth : (state.menuVirtualDepth || 2.0);
+  const config = (configOrDepth && typeof configOrDepth === 'object')
+    ? configOrDepth
+    : (typeof configOrDepth === 'number' && configOrDepth > 0)
+      ? { virtualDepth: configOrDepth, eyeTranslationScale: 1.0 }
+      : getStereoUiProjectionConfig(state);
+
+  const d = (typeof config.virtualDepth === 'number' && config.virtualDepth > 0) ? config.virtualDepth : 2.0;
+  const scale = (typeof config.eyeTranslationScale === 'number') ? config.eyeTranslationScale : 1.0;
   const eye = (eyeIndex === 0) ? eyeGeom.leftEye : eyeGeom.rightEye;
   const [tanL, tanR, tanB, tanT] = eye.virtTanBounds;
 
@@ -20,8 +61,13 @@ export function projectWorldDirToEye(dirWorld, eyeIndex, eyeGeom, halfW, height,
   // 2. Head / Camera space via qCameraInv
   const pHead = qCameraInv.transformVector(pWorld);
 
-  // 3. Subtract eye offset from head: P_eye = P_head - eyeFromHeadMeters
-  const eyeOffset = eye.eyeFromHeadMeters || [0, 0, 0];
+  // 3. Subtract scaled eye offset from head: P_eye = P_head - (eyeOffset * scale)
+  const baseOffset = eye.eyeFromHeadMeters || [0, 0, 0];
+  const eyeOffset = [
+    baseOffset[0] * scale,
+    baseOffset[1] * scale,
+    baseOffset[2] * scale
+  ];
   const pEye = [
     pHead[0] - eyeOffset[0],
     pHead[1] - eyeOffset[1],
@@ -141,13 +187,20 @@ export function renderStereoUI(uiCtx, gazeEngine, commandModel, videoElement, no
   state.uiIsDirty = false;
   const eyeGeom = deriveCardboardEyeGeometry(activeScreenProfile, viewerProfile);
   const halfW = Math.floor(width / 2);
-  const virtualDepth = state.menuVirtualDepth || 2.0;
+  const uiConfig = getStereoUiProjectionConfig(state);
+  const virtualDepth = uiConfig.virtualDepth;
+  const translationScale = uiConfig.eyeTranslationScale;
 
   for (let eye = 0; eye < 2; eye++) {
     const eyeOffsetX = eye * halfW;
     const eyeData = (eye === 0) ? eyeGeom.leftEye : eyeGeom.rightEye;
     const [tanL, tanR, tanB, tanT] = eyeData.virtTanBounds;
-    const eyeOffset = eyeData.eyeFromHeadMeters || [0, 0, 0];
+    const baseOffset = eyeData.eyeFromHeadMeters || [0, 0, 0];
+    const eyeOffset = [
+      baseOffset[0] * translationScale,
+      baseOffset[1] * translationScale,
+      baseOffset[2] * translationScale
+    ];
 
     // Compute optical reticle/head center in ideal eye coordinates for depth virtualDepth
     const centerTanX = -eyeOffset[0] / virtualDepth;
@@ -261,8 +314,8 @@ export function renderStereoUI(uiCtx, gazeEngine, commandModel, videoElement, no
     if (isMenuOpen && videoElement) {
       const timelinePitch = -12.0;
 
-      const pStart = projectWorldDirToEye(sphericalToDir(-21, timelinePitch), eye, eyeGeom, halfW, height, virtualDepth);
-      const pEnd = projectWorldDirToEye(sphericalToDir(21, timelinePitch), eye, eyeGeom, halfW, height, virtualDepth);
+      const pStart = projectWorldDirToEye(sphericalToDir(-21, timelinePitch), eye, eyeGeom, halfW, height, uiConfig);
+      const pEnd = projectWorldDirToEye(sphericalToDir(21, timelinePitch), eye, eyeGeom, halfW, height, uiConfig);
 
       if (pStart && pEnd) {
         const curSec = videoElement.currentTime || 0;
@@ -342,7 +395,7 @@ export function renderStereoUI(uiCtx, gazeEngine, commandModel, videoElement, no
         }
 
         // Time Text Badge above Timeline Center (01:42 / 08:36)
-        const pMid = projectWorldDirToEye(sphericalToDir(0, timelinePitch + 4.0), eye, eyeGeom, halfW, height, virtualDepth);
+        const pMid = projectWorldDirToEye(sphericalToDir(0, timelinePitch + 4.0), eye, eyeGeom, halfW, height, uiConfig);
         if (pMid) {
           const timeStr = `${formatTime(curSec)} / ${formatTime(durSec)}`;
           uiCtx.font = 'bold 13px -apple-system, monospace';
@@ -362,7 +415,7 @@ export function renderStereoUI(uiCtx, gazeEngine, commandModel, videoElement, no
     const items = getActiveInteractiveItems(commandModel, videoElement);
     items.forEach(item => {
       if (!item.dirWorld) return;
-      const p = projectWorldDirToEye(item.dirWorld, eye, eyeGeom, halfW, height, virtualDepth);
+      const p = projectWorldDirToEye(item.dirWorld, eye, eyeGeom, halfW, height, uiConfig);
       if (!p) return;
 
       const isHovered = (gazeEngine.currentHoveredItem && gazeEngine.currentHoveredItem.id === item.id);

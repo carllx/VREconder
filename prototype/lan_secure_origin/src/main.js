@@ -9,7 +9,7 @@ import { DiagnosticOverlay } from './render/diagnostic-overlay.js';
 import { MediaController } from './media/playback.js';
 import { CommandModel } from './controls/command-model.js';
 import { GazeEngine } from './controls/gaze-engine.js';
-import { renderStereoUI, isStereoUIVisible } from './controls/stereo-ui.js';
+import { renderStereoUI, isStereoUIVisible, getStereoUiProjectionConfig } from './controls/stereo-ui.js';
 import { telemetry, perfTelemetry, stallDetector } from './telemetry/telemetry.js';
 import { initAudioContext } from './controls/audio-haptics.js';
 import { profileStorage, computeMediaFingerprint, getEffectiveViewerProfile, getRenderViewerProfile, isCalibrationDistortionOverrideActive, isProvisionalOpticsPreviewActive, deriveCardboardEyeGeometry } from './core/projection-profile.js';
@@ -453,6 +453,7 @@ requestAnimationFrame(renderLoop);
 // Periodic Live Telemetry Sync to Server & PC Controller (every 500ms)
 setInterval(() => {
   const perfSnapshot = perfTelemetry.updateWindow(performance.now(), video, glCanvas, vrRenderer);
+  const uiProjConfig = getStereoUiProjectionConfig(state);
 
   const payload = {
     type: 'telemetry_sync',
@@ -465,6 +466,10 @@ setInterval(() => {
     uiState: {
       domCanvasPresentationVisible: calibrationUI.domCanvasPresentationVisible,
       isStereoUIVisible: (typeof isStereoUIVisible === 'function') ? isStereoUIVisible(performance.now()) : false,
+      stereoDiagnosticMode: uiProjConfig.mode,
+      stereoDiagnosticDepthMeters: uiProjConfig.mode === 'G3_ZERO_DISPARITY_HUD' ? null : uiProjConfig.virtualDepth,
+      stereoDiagnosticEyeTranslationScale: uiProjConfig.eyeTranslationScale,
+      expectedCenterRelativeDisparityDeg: uiProjConfig.expectedCenterRelativeDisparityDeg,
       activePattern: state.activePattern,
       menuOpen: (state.activePattern === 'A' && state.patternA_open) || (state.activePattern === 'B' && state.patternB_open) || (state.activePattern === 'C' && state.patternC_open),
       recenterActive: state.recenterCountdown.active,
