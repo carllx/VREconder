@@ -315,6 +315,8 @@ function enterVRMode() {
   }
 
   state.inVR = true;
+  // Present UI only through WebGL in VR; the canvas bitmap stays available for upload.
+  uiCanvas.style.visibility = 'hidden';
   calibrationUI.currentMode = 'vr';
   if (stageBanner) stageBanner.classList.add('hidden');
   showFeedbackToast(`🛡️ VR Armed: Stage ${state.calibrationStage}`);
@@ -323,6 +325,7 @@ function enterVRMode() {
 
 function exitVRMode() {
   state.inVR = false;
+  uiCanvas.style.visibility = 'visible';
   calibrationUI.currentMode = 'diagnostic';
   if (stageBanner) stageBanner.classList.remove('hidden');
   if (vrFloatingBar) vrFloatingBar.classList.add('fade-out');

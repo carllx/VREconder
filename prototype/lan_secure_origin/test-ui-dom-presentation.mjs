@@ -5,62 +5,99 @@ import { CalibrationUI } from './src/controls/calibration-ui.js';
 import { state } from './src/core/state.js';
 import { createDefaultViewerProfile } from './src/core/projection-profile.js';
 
-// Exercise the real SSE callback and telemetry expression with a small DOM double.
-// This verifies instrumentation, not browser compositing or the human visual hypothesis.
+// Run the actual lifecycle functions with DOM/service doubles, not an iPhone simulation.
+const main = fs.readFileSync(new URL('./src/main.js', import.meta.url), 'utf8');
+const lifecycle = main.slice(main.indexOf('async function localArmAndEnterVR()'),
+  main.indexOf('// Event Listeners', main.indexOf('function exitVRMode()')));
+assert.ok(lifecycle.includes('function exitVRMode()'));
 let bridge;
 globalThis.EventSource = class { constructor() { bridge = this; } };
 const bitmap = new Uint8Array([12, 34, 56, 255]);
-let canvas = { style: {}, width: 1920, height: 1080, bitmap };
+const canvas = { style: {}, width: 1920, height: 1080, bitmap };
 globalThis.document = { getElementById: id => id === 'uiCanvas' ? canvas : null };
 let cssVisibility = 'visible';
 globalThis.getComputedStyle = element => ({
   visibility: cssVisibility === 'visible' ? (element.style.visibility || 'visible') : cssVisibility,
   display: element.style.display || 'block'
 });
+let runtime;
 const calibrationUI = new CalibrationUI({
-  storage: { activeViewerProfile: createDefaultViewerProfile() }
+  storage: { activeViewerProfile: createDefaultViewerProfile() },
+  onEnterVR: () => runtime.enterVRMode(),
+  onExitVR: () => runtime.exitVRMode()
 });
-calibrationUI.activeVideoProfile = { projection: 'equirectangular', stereoMode: 'sbs' };
-const before = JSON.stringify({ state, viewer: calibrationUI.activeViewerProfile,
-  video: calibrationUI.activeVideoProfile });
-const main = fs.readFileSync(new URL('./src/main.js', import.meta.url), 'utf8');
+calibrationUI.activeVideoProfile = { projection: 'equirectangular', stereoMode: 'left-right' };
+const noop = () => {};
+runtime = vm.createContext({ state, calibrationUI, uiCanvas: canvas,
+  btnEnterVR: null, stageBanner: null, vrFloatingBar: null, vrRenderer: {},
+  video: { play: () => Promise.resolve() }, telemetry: { syncSummary: noop },
+  console: { warn: noop }, showFeedbackToast: noop, remoteLog: noop,
+  updateScreenOrientation: noop, requestWakeLock: noop, initAudioContext: noop });
+vm.runInContext(lifecycle, runtime);
 const expression = main.match(/domCanvasPresentationVisible:\s*([^,\n]+)/)[1];
-const telemetryVisible = () => vm.runInNewContext(expression, { calibrationUI });
-const send = visible => bridge.onmessage({
-  data: JSON.stringify({ action: 'set_ui_dom_presentation', visible })
-});
-assert.equal(telemetryVisible(), true, 'Fresh default');
-for (const visible of [false, true, false, true]) {
-  send(visible);
-  assert.equal(telemetryVisible(), visible);
-  assert.equal(canvas.style.visibility, visible ? 'visible' : 'hidden');
+const visible = () => vm.runInContext(expression, runtime);
+const send = message => bridge.onmessage({ data: JSON.stringify(message) });
+const protectedState = () => JSON.stringify({ viewer: calibrationUI.activeViewerProfile,
+  video: calibrationUI.activeVideoProfile, candidate: state.candidateDistortion,
+  preview: state.provisionalOpticsPreviewActive, renderScale: state.renderScale,
+  depth: state.menuVirtualDepth, offset: state.temporaryScreenToLensOffset });
+const before = protectedState();
+const check = expected => {
+  assert.equal(visible(), expected);
+  assert.equal(protectedState(), before, 'Optics, profiles and render settings unchanged');
   assert.equal(canvas.width, 1920);
   assert.equal(canvas.height, 1080);
   assert.equal(canvas.bitmap, bitmap);
   assert.deepEqual([...bitmap], [12, 34, 56, 255]);
-  assert.equal(JSON.stringify({ state, viewer: calibrationUI.activeViewerProfile,
-    video: calibrationUI.activeVideoProfile }), before, 'No application/profile state mutation');
+};
+const obsoleteActionCannotOverride = expected => {
+  for (const value of [true, false, 'true', null]) {
+    send({ action: 'set_ui_dom_presentation', visible: value });
+    check(expected);
+  }
+};
+state.calibrationStage = 'A';
+state.isArmed = false;
+check(true);
+obsoleteActionCannotOverride(true);
+for (const stage of ['B', 'C']) {
+  send({ action: 'set_stage', stage });
+  assert.equal(state.inVR, false, 'Unarmed entry stays non-VR');
+  assert.equal(calibrationUI.currentMode, 'diagnostic');
+  check(true);
 }
-for (const invalid of [undefined, null, 'false', 0, {}]) {
-  send(invalid);
-  assert.equal(telemetryVisible(), true, 'Reject non-boolean values');
+send({ action: 'set_stage', stage: 'A' });
+await runtime.localArmAndEnterVR();
+assert.equal(state.inVR, true);
+check(false);
+obsoleteActionCannotOverride(false);
+runtime.exitVRMode();
+check(true);
+runtime.DeviceOrientationEvent = { requestPermission: async () => 'granted' };
+await runtime.localArmAndEnterVR();
+assert.equal(state.isArmed, true, 'iOS permission path enters the same lifecycle');
+check(false);
+runtime.exitVRMode();
+check(true);
+for (const stage of ['B', 'C', 'B', 'C']) {
+  send({ action: 'set_stage', stage });
+  assert.equal(state.inVR, true);
+  assert.equal(calibrationUI.currentMode, 'vr');
+  check(false);
+  obsoleteActionCannotOverride(false);
+  send({ action: 'set_stage', stage: 'A' });
+  assert.equal(state.inVR, false);
+  check(true);
 }
-// A stylesheet override must be reported, even after a request to show the canvas.
+// Actual computed style remains the telemetry authority.
 cssVisibility = 'hidden';
-send(true);
-assert.equal(telemetryVisible(), false, 'Read actual style, not the command');
+assert.equal(visible(), false);
 cssVisibility = 'visible';
-canvas.style.display = 'none';
-assert.equal(telemetryVisible(), false);
-delete canvas.style.display;
-send(false);
-canvas = { style: {}, width: 1920, height: 1080, bitmap };
-assert.equal(telemetryVisible(), true, 'Fresh DOM resets without persistence');
-canvas = null;
-send(false);
-assert.equal(telemetryVisible(), false, 'Missing canvas is not presented');
+check(true);
 
-// Design checks: presentation visibility does not gate the existing render/upload calls.
+// Wiring/design checks; browser GPU output remains a separate real-device gate.
+assert.match(main, /onEnterVR: \(\) => enterVRMode\(\)/);
+assert.match(main, /onExitVR: \(\) => exitVRMode\(\)/);
 const renderBlock = main.slice(main.indexOf('const uiRendered = renderStereoUI('),
   main.indexOf('requestAnimationFrame(renderLoop);', main.indexOf('const uiRendered = renderStereoUI(')));
 assert.match(renderBlock, /vrRenderer\.renderStereoVR\(/);
@@ -69,5 +106,5 @@ assert.doesNotMatch(renderBlock, /domCanvasPresentationVisible|style\.visibility
 const renderer = fs.readFileSync(new URL('./src/render/vr-renderer.js', import.meta.url), 'utf8');
 assert.match(renderer, /gl\.texImage2D\([^;]*uiCanvas\)/);
 assert.doesNotMatch(renderer, /domCanvasPresentationVisible|style\.visibility/);
-console.log('PASS: telemetry true -> false -> true; boolean validation; computed-state readback;');
-console.log('bitmap/dimensions and application/profiles unchanged; render/upload preserved by design.');
+console.log('PASS: local/Stage B/C entry hides DOM; exit/Stage A restores; unarmed entry stays non-VR;');
+console.log('obsolete action cannot override; telemetry reads style; optics/bitmap/render paths preserved.');

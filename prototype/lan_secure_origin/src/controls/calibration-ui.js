@@ -73,12 +73,7 @@ export class CalibrationUI {
     if (!msg.action) return;
     const act = msg.action;
 
-    if (act === 'set_ui_dom_presentation') {
-      // Issue #31 E1: presentation-only, session-only probe. Keep bitmap and rendering alive.
-      if (typeof msg.visible !== 'boolean') return;
-      const canvas = document.getElementById('uiCanvas');
-      if (canvas) canvas.style.visibility = msg.visible ? 'visible' : 'hidden';
-    } else if (act === 'set_stage') {
+    if (act === 'set_stage') {
       this.switchStage(msg.stage);
     } else if (act === 'set_performance_mode' && msg.mode) {
       state.performanceMode = msg.mode;
@@ -295,7 +290,6 @@ export class CalibrationUI {
           this.vrRenderer.showReferenceGrid = false;
         }
       }
-      this.currentMode = 'vr';
       if (this.onEnterVR) this.onEnterVR();
       const labelMap = { ild_fusion: '🔴 ILD Fusion', vertical_alignment: '↕ Vertical Align', video_grid: 'Video + Grid', grid_only: 'Grid Only' };
       showFeedbackToast(`Stage B: Viewer Optics (${labelMap[mode] || mode})`);
@@ -304,7 +298,6 @@ export class CalibrationUI {
         this.vrRenderer.sceneType = 0;
         this.vrRenderer.showReferenceGrid = state.showReferenceGrid;
       }
-      this.currentMode = 'vr';
       if (this.onEnterVR) this.onEnterVR();
       showFeedbackToast('Stage C: Video Verification (Locked Optics)');
     }
