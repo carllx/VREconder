@@ -10,6 +10,7 @@ import { MediaController } from './media/playback.js';
 import { CommandModel } from './controls/command-model.js';
 import { GazeEngine } from './controls/gaze-engine.js';
 import { renderStereoUI, isStereoUIVisible, getStereoUiProjectionConfig } from './controls/stereo-ui.js';
+import { deriveRegistrationPixelOffsets } from './controls/nonius-harness.js';
 import { telemetry, perfTelemetry, stallDetector } from './telemetry/telemetry.js';
 import { initAudioContext } from './controls/audio-haptics.js';
 import { profileStorage, computeMediaFingerprint, getEffectiveViewerProfile, getRenderViewerProfile, isCalibrationDistortionOverrideActive, isProvisionalOpticsPreviewActive, deriveCardboardEyeGeometry } from './core/projection-profile.js';
@@ -454,6 +455,8 @@ requestAnimationFrame(renderLoop);
 setInterval(() => {
   const perfSnapshot = perfTelemetry.updateWindow(performance.now(), video, glCanvas, vrRenderer);
   const uiProjConfig = getStereoUiProjectionConfig(state);
+  const regGeom = deriveCardboardEyeGeometry(activeScreenProfile, calibrationUI.activeViewerProfile);
+  const regPx = deriveRegistrationPixelOffsets(state.uiRegistrationOffsetXDeg || 0, state.uiRegistrationOffsetYDeg || 0, regGeom, Math.floor((glCanvas.width || 1920) / 2), glCanvas.height || 1080);
 
   const payload = {
     type: 'telemetry_sync',
@@ -470,6 +473,11 @@ setInterval(() => {
       stereoDiagnosticDepthMeters: uiProjConfig.mode === 'G3_ZERO_DISPARITY_HUD' ? null : uiProjConfig.virtualDepth,
       stereoDiagnosticEyeTranslationScale: uiProjConfig.eyeTranslationScale,
       expectedCenterRelativeDisparityDeg: uiProjConfig.expectedCenterRelativeDisparityDeg,
+      registrationDiagnosticActive: !!state.uiRegistrationDiagnosticActive,
+      registrationOffsetXDeg: (typeof state.uiRegistrationOffsetXDeg === 'number') ? state.uiRegistrationOffsetXDeg : 0.0,
+      registrationOffsetYDeg: (typeof state.uiRegistrationOffsetYDeg === 'number') ? state.uiRegistrationOffsetYDeg : 0.0,
+      registrationOffsetXPx: regPx.offsetXPx,
+      registrationOffsetYPx: regPx.offsetYPx,
       activePattern: state.activePattern,
       menuOpen: (state.activePattern === 'A' && state.patternA_open) || (state.activePattern === 'B' && state.patternB_open) || (state.activePattern === 'C' && state.patternC_open),
       recenterActive: state.recenterCountdown.active,

@@ -1,6 +1,7 @@
 import { state, showFeedbackToast } from '../core/state.js';
 import { createDefaultViewerProfile, deriveCardboardEyeGeometry } from '../core/projection-profile.js';
 import { activeScreenProfile } from '../core/screen-profile.js';
+import { validateRegistrationOffset, REGISTRATION_BOUNDS, REGISTRATION_STEPS } from './nonius-harness.js';
 
 function logAction(msg, data = null) {
   fetch('/api/log', {
@@ -53,6 +54,7 @@ export class CalibrationUI {
   }
 
   get domCanvasPresentationVisible() {
+    if (typeof document === 'undefined') return false;
     const canvas = document.getElementById('uiCanvas');
     if (!canvas) return false;
     const style = getComputedStyle(canvas);
@@ -177,6 +179,71 @@ export class CalibrationUI {
       } else {
         logAction('Rejected set_ui_stereo_diagnostic_mode: unknown mode fail-closed', { mode });
       }
+    } else if (act === 'set_ui_registration_active') {
+      if (typeof msg.active === 'boolean') {
+        state.uiRegistrationDiagnosticActive = msg.active;
+        state.uiIsDirty = true;
+        logAction('Set UI Registration Diagnostic Active: ' + state.uiRegistrationDiagnosticActive);
+      } else {
+        logAction('Rejected set_ui_registration_active: active must be boolean', { msg });
+      }
+    } else if (act === 'set_ui_registration_offset') {
+      const x = msg.xDeg;
+      const y = msg.yDeg;
+      const validation = validateRegistrationOffset(x, y);
+      if (validation.valid) {
+        state.uiRegistrationOffsetXDeg = Number(x.toFixed(4));
+        state.uiRegistrationOffsetYDeg = Number(y.toFixed(4));
+        state.uiIsDirty = true;
+        logAction('Set UI Registration Offset', { xDeg: state.uiRegistrationOffsetXDeg, yDeg: state.uiRegistrationOffsetYDeg });
+      } else {
+        logAction('Rejected set_ui_registration_offset: ' + validation.reason, { msg });
+      }
+    } else if (act === 'adjust_ui_registration_x') {
+      let delta = 0;
+      if (typeof msg.deltaDeg === 'number' && Number.isFinite(msg.deltaDeg) && !Number.isNaN(msg.deltaDeg)) {
+        delta = msg.deltaDeg;
+      } else {
+        const stepSize = (msg.step === 'fine') ? REGISTRATION_STEPS.fineDeg : REGISTRATION_STEPS.coarseDeg;
+        const dir = (msg.direction === -1) ? -1 : 1;
+        delta = stepSize * dir;
+      }
+      const currentX = (typeof state.uiRegistrationOffsetXDeg === 'number') ? state.uiRegistrationOffsetXDeg : 0.0;
+      const targetX = Number((currentX + delta).toFixed(4));
+      const currentY = (typeof state.uiRegistrationOffsetYDeg === 'number') ? state.uiRegistrationOffsetYDeg : 0.0;
+      const validation = validateRegistrationOffset(targetX, currentY);
+      if (validation.valid) {
+        state.uiRegistrationOffsetXDeg = targetX;
+        state.uiIsDirty = true;
+        logAction('Adjusted UI Registration X', { xDeg: state.uiRegistrationOffsetXDeg, delta });
+      } else {
+        logAction('Rejected adjust_ui_registration_x: ' + validation.reason, { currentX, targetX, delta });
+      }
+    } else if (act === 'adjust_ui_registration_y') {
+      let delta = 0;
+      if (typeof msg.deltaDeg === 'number' && Number.isFinite(msg.deltaDeg) && !Number.isNaN(msg.deltaDeg)) {
+        delta = msg.deltaDeg;
+      } else {
+        const stepSize = (msg.step === 'fine') ? REGISTRATION_STEPS.fineDeg : REGISTRATION_STEPS.coarseDeg;
+        const dir = (msg.direction === -1) ? -1 : 1;
+        delta = stepSize * dir;
+      }
+      const currentX = (typeof state.uiRegistrationOffsetXDeg === 'number') ? state.uiRegistrationOffsetXDeg : 0.0;
+      const currentY = (typeof state.uiRegistrationOffsetYDeg === 'number') ? state.uiRegistrationOffsetYDeg : 0.0;
+      const targetY = Number((currentY + delta).toFixed(4));
+      const validation = validateRegistrationOffset(currentX, targetY);
+      if (validation.valid) {
+        state.uiRegistrationOffsetYDeg = targetY;
+        state.uiIsDirty = true;
+        logAction('Adjusted UI Registration Y', { yDeg: state.uiRegistrationOffsetYDeg, delta });
+      } else {
+        logAction('Rejected adjust_ui_registration_y: ' + validation.reason, { currentY, targetY, delta });
+      }
+    } else if (act === 'reset_ui_registration_offset') {
+      state.uiRegistrationOffsetXDeg = 0.0;
+      state.uiRegistrationOffsetYDeg = 0.0;
+      state.uiIsDirty = true;
+      logAction('Reset UI Registration Offset to 0.0');
     } else if (act === 'set_video_mapping' && msg.mapping && this.activeVideoProfile) {
       const m = msg.mapping;
       if (m.projection) this.activeVideoProfile.projection = m.projection;

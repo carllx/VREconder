@@ -7,6 +7,7 @@ import { qCameraInv } from '../core/orientation.js';
 import { getActiveInteractiveItems, sphericalToDir } from './patterns.js';
 import { deriveCardboardEyeGeometry } from '../core/projection-profile.js';
 import { activeScreenProfile } from '../core/screen-profile.js';
+import { renderNoniusRegistrationScreen } from './nonius-harness.js';
 
 export const UI_STEREO_DIAGNOSTIC_MODES = {
   G1_CURRENT_WORLD_2M: 'G1_CURRENT_WORLD_2M',
@@ -117,6 +118,7 @@ export function isIsolatedCalibrationGateActive() {
 
 export function isStereoUIVisible(now) {
   if (!state.inVR) return false;
+  if (state.uiRegistrationDiagnosticActive) return true;
   if (state.recenterCountdown.active) return true;
   if (state.calibrationStage === 'C' && !state.firstFrameTimings.ready) return true;
   if (!isIsolatedCalibrationGateActive() && state.toastText && (now - state.toastTime < 2000)) return true;
@@ -135,6 +137,7 @@ export function isStereoUIVisible(now) {
 }
 
 export function isStereoUIDynamic(gazeEngine, now) {
+  if (state.uiRegistrationDiagnosticActive) return true;
   if (state.recenterCountdown.active) return true;
   if (!isIsolatedCalibrationGateActive() && state.toastText && (now - state.toastTime < 2000)) return true;
   if (state.calibrationStage === 'C' && !state.firstFrameTimings.ready) return true;
@@ -187,6 +190,13 @@ export function renderStereoUI(uiCtx, gazeEngine, commandModel, videoElement, no
   state.uiIsDirty = false;
   const eyeGeom = deriveCardboardEyeGeometry(activeScreenProfile, viewerProfile);
   const halfW = Math.floor(width / 2);
+
+  // Dedicated Nonius Registration Screen (Issue #31)
+  // Independent of G1/G2/G3; covers both eyes with opaque black
+  if (state.uiRegistrationDiagnosticActive) {
+    return renderNoniusRegistrationScreen(uiCtx, width, height, eyeGeom, state);
+  }
+
   const uiConfig = getStereoUiProjectionConfig(state);
   const virtualDepth = uiConfig.virtualDepth;
   const translationScale = uiConfig.eyeTranslationScale;
