@@ -52,6 +52,8 @@
     <div class="card">
       <div class="btn-row">
         <button id="btnStartTest" onclick="startTestSession()" style="background:#059669; font-size:0.9rem; padding:8px 16px;">▶️ Start Test Protocol (User Gesture)</button>
+        <button id="btnToggleRoute" onclick="toggleRoute()" class="btn-seek" style="font-size:0.85rem;">🔀 Route: Standard (/video)</button>
+        <button id="btnCopyTelemetry" onclick="copyTelemetry()" class="btn-seek" style="font-size:0.85rem; background:#0284c7;">📋 Copy Telemetry</button>
         <span id="sessionStatus" style="font-size:0.8rem; color:#94a3b8; align-self:center; font-family:monospace;">Session: Not Started</span>
       </div>
     </div>
@@ -95,6 +97,14 @@
           <div class="metric-label">Video Resolution</div>
           <div class="metric-val" id="valResolution">--</div>
         </div>
+        <div class="metric-box">
+          <div class="metric-label">rVFC Presented</div>
+          <div class="metric-val" id="valRvfc">0</div>
+        </div>
+        <div class="metric-box">
+          <div class="metric-label">Stream Route</div>
+          <div class="metric-val" id="valRoute" style="font-size:0.8rem;">/video (Gated)</div>
+        </div>
       </div>
       <div style="margin-top:8px; font-size:0.75rem; color:#94a3b8;">
         <b>Buffered Ranges:</b> <span id="valBufferedRanges" style="font-family:monospace; color:#cbd5e1;">None</span>
@@ -121,12 +131,31 @@
     let sessionId = null;
     let sessionStartTime = 0;
     let selectedMediaName = '';
+    let selectedFullPath = '';
     let stallCount = 0;
     let totalStallDurationMs = 0;
     let currentStallStart = 0;
     let activeSeekRecord = null;
+    const playbackEvents = [];
+    const MAX_SAVED_EVENTS = 200;
+
+    function recordPlaybackEvent(type, detail = {}) {
+      playbackEvents.push({
+        t: Number((performance.now() - (sessionStartTime || performance.now())).toFixed(1)),
+        evt: type,
+        curTime: Number((video.currentTime || 0).toFixed(2)),
+        ready: video.readyState,
+        net: video.networkState,
+        rvfc: rvfcCount,
+        ...detail
+      });
+      if (playbackEvents.length > MAX_SAVED_EVENTS) {
+        playbackEvents.shift();
+      }
+    }
 
     function sendSessionEvent(event, data = {}) {
+      recordPlaybackEvent(event, data);
       if (!sessionId) return;
       const payload = {
         stage: 'STAGE_A_NATIVE',
@@ -138,6 +167,8 @@
         readyState: video.readyState,
         networkState: video.networkState,
         bufferedRanges: getBufferedRangesList(),
+        rvfcCount: rvfcCount,
+        route: useDirectHealthStream ? 'direct' : 'gated',
         ...data
       };
       fetch('/api/diagnostic-session', {
@@ -162,13 +193,17 @@
       }).catch(() => {});
     }
 
+    const videoMap = new Map();
+
     async function loadVideos() {
       try {
         const res = await fetch('/api/videos');
         const data = await res.json();
         mediaSelect.innerHTML = '';
+        videoMap.clear();
         if (data.videos && data.videos.length > 0) {
           data.videos.forEach(v => {
+            videoMap.set(v.relPath, v);
             const opt = document.createElement('option');
             opt.value = v.relPath;
             opt.textContent = `[${v.sizeGB}] ${v.name}`;
@@ -183,11 +218,70 @@
       }
     }
 
+    let useDirectHealthStream = new URLSearchParams(window.location.search).get('direct') === '1';
+    let rvfcCount = 0;
+    let rvfcHandle = null;
+
+    if (useDirectHealthStream) {
+      window.addEventListener('DOMContentLoaded', () => {
+        const btn = document.getElementById('btnToggleRoute');
+        if (btn) {
+          btn.textContent = '🔀 Route: Direct (/api/health/video)';
+          btn.style.background = '#0284c7';
+        }
+      });
+    }
+
+    function onVideoFrame(now, metadata) {
+      rvfcCount++;
+      if ('requestVideoFrameCallback' in video) {
+        rvfcHandle = video.requestVideoFrameCallback(onVideoFrame);
+      }
+    }
+
+    function toggleRoute() {
+      useDirectHealthStream = !useDirectHealthStream;
+      const btn = document.getElementById('btnToggleRoute');
+      if (btn) {
+        btn.textContent = useDirectHealthStream ? '🔀 Route: Direct (/api/health/video)' : '🔀 Route: Standard (/video)';
+        btn.style.background = useDirectHealthStream ? '#0284c7' : '#334155';
+      }
+      if (mediaSelect.value) {
+        selectVideo(mediaSelect.value);
+      }
+    }
+
     function selectVideo(relPath) {
       selectedMediaName = relPath.split('/').pop().split('\\').pop();
-      log('Selecting media: ' + selectedMediaName, 'ok');
-      video.src = '/video?path=' + encodeURIComponent(relPath);
+      const vObj = videoMap.get(relPath);
+      selectedFullPath = vObj?.fullPath || '';
+
+      // Reset presentation counters and cancel prior callbacks
+      rvfcCount = 0;
+      if (rvfcHandle !== null && 'cancelVideoFrameCallback' in video) {
+        try { video.cancelVideoFrameCallback(rvfcHandle); } catch (_) {}
+        rvfcHandle = null;
+      }
+
+      // Reset playback metrics to avoid mixing previous video data
+      stallCount = 0;
+      totalStallDurationMs = 0;
+      currentStallStart = 0;
+      activeSeekRecord = null;
+      playbackEvents.length = 0;
+
+      const targetPath = (useDirectHealthStream && vObj?.fullPath) ? vObj.fullPath : relPath;
+      const endpoint = useDirectHealthStream ? '/api/health/video' : '/video';
+      const routeLabel = useDirectHealthStream ? 'Direct (/api/health/video)' : 'Standard Gated (/video)';
+      log(`Selecting media [${routeLabel}]: ${selectedMediaName}`, 'ok');
+
+      video.pause();
+      video.src = `${endpoint}?path=${encodeURIComponent(targetPath)}`;
       video.load();
+
+      if ('requestVideoFrameCallback' in video) {
+        rvfcHandle = video.requestVideoFrameCallback(onVideoFrame);
+      }
     }
 
     mediaSelect.addEventListener('change', (e) => {
@@ -197,9 +291,9 @@
     function startTestSession() {
       sessionId = 'SESS_A_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6);
       sessionStartTime = performance.now();
-      document.getElementById('sessionStatus').textContent = 'Active: ' + sessionId;
+      document.getElementById('sessionStatus').textContent = 'Manual Protocol Active: ' + sessionId;
       document.getElementById('sessionStatus').style.color = '#34d399';
-      log(`Starting Test Session ${sessionId}...`, 'ok');
+      log(`Starting Manual Protocol Session ${sessionId} (Observing real frames & seeks; no auto PASS)...`, 'ok');
 
       sendSessionEvent('session_start', { userGestureTime: Date.now() });
 
@@ -287,6 +381,8 @@
           const err = video.error ? `code ${video.error.code}: ${video.error.message}` : 'unknown';
           log(`❌ Video Error: ${err}`, 'error');
           sendSessionEvent('video_error', { error: err });
+        } else {
+          recordPlaybackEvent(evt);
         }
       });
     });
@@ -318,12 +414,66 @@
       document.getElementById('valBufferAhead').textContent = getBufferAhead().toFixed(2) + 's';
       document.getElementById('valStalls').textContent = `${stallCount} / ${(totalStallDurationMs / 1000).toFixed(1)}s`;
       document.getElementById('valResolution').textContent = video.videoWidth ? `${video.videoWidth}x${video.videoHeight}` : '--';
+      const elRvfc = document.getElementById('valRvfc');
+      if (elRvfc) elRvfc.textContent = String(rvfcCount);
+      const elRoute = document.getElementById('valRoute');
+      if (elRoute) {
+        elRoute.textContent = useDirectHealthStream ? 'Direct (/api/health)' : 'Gated (/video)';
+        elRoute.style.color = useDirectHealthStream ? '#34d399' : '#38bdf8';
+      }
 
       const ranges = getBufferedRangesList();
       if (ranges.length > 0) {
         document.getElementById('valBufferedRanges').textContent = ranges.map(r => `[${r.start}s - ${r.end}s]`).join(', ');
       } else {
         document.getElementById('valBufferedRanges').textContent = 'None';
+      }
+    }
+
+    function copyTelemetry() {
+      const payload = {
+        exportedAt: new Date().toISOString(),
+        sessionId: sessionId,
+        media: {
+          name: selectedMediaName,
+          relPath: mediaSelect.value,
+          fullPath: selectedFullPath
+        },
+        route: {
+          mode: useDirectHealthStream ? 'direct' : 'gated',
+          endpoint: useDirectHealthStream ? '/api/health/video' : '/video',
+          src: video.currentSrc || video.src
+        },
+        playbackState: {
+          currentTime: Number((video.currentTime || 0).toFixed(2)),
+          duration: Number((video.duration || 0).toFixed(2)),
+          paused: video.paused,
+          readyState: video.readyState,
+          readyStateLabel: READY_STATES[video.readyState] || String(video.readyState),
+          networkState: video.networkState,
+          networkStateLabel: NET_STATES[video.networkState] || String(video.networkState),
+          videoWidth: video.videoWidth || 0,
+          videoHeight: video.videoHeight || 0,
+          bufferAheadSec: Number(getBufferAhead().toFixed(2)),
+          bufferedRanges: getBufferedRangesList(),
+          rvfcCount: rvfcCount,
+          stallCount: stallCount,
+          totalStallDurationMs: Math.round(totalStallDurationMs),
+          mediaError: video.error ? { code: video.error.code, message: video.error.message } : null
+        },
+        recentEvents: playbackEvents
+      };
+
+      const jsonStr = JSON.stringify(payload, null, 2);
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(jsonStr).then(() => {
+          log('📋 Telemetry copied to clipboard successfully!', 'ok');
+        }).catch(err => {
+          log('Failed to copy to clipboard: ' + err.message, 'warn');
+          prompt('Copy telemetry manually:', jsonStr);
+        });
+      } else {
+        prompt('Copy telemetry manually:', jsonStr);
       }
     }
 
