@@ -6,8 +6,10 @@ import { DeviceProbeCache } from '../preflight/device-probe-cache.mjs';
 import { preflightIncomingMedia } from '../preflight/intake-preflight.mjs';
 import { getMediaFingerprint } from '../normalization/fingerprint.mjs';
 import { recordIncident } from '../telemetry/incident-store.mjs';
+import { getProvisionalAdmissionStore } from '../preflight/provisional-admission-store.mjs';
 
 const probeCache = new DeviceProbeCache();
+const provisionalStore = getProvisionalAdmissionStore();
 const engine = new NormalizationEngine({ executionEnabled: false });
 const admissionCache = new Map();
 
@@ -45,7 +47,7 @@ export async function checkPlaybackAdmission(filePath) {
   }
 
   try {
-    const decision = await preflightIncomingMedia(fp.canonicalPath, { probeCache });
+    const decision = await preflightIncomingMedia(fp.canonicalPath, { probeCache, provisionalAdmissionStore: provisionalStore });
     const allowed = Boolean(decision && decision.mayPromoteToVrReady);
     const result = {
       allowed,
@@ -104,6 +106,18 @@ export async function checkPlaybackAdmission(filePath) {
 
 export function clearAdmissionCache() {
   admissionCache.clear();
+}
+
+export function getProvisionalStore() {
+  return provisionalStore;
+}
+
+export function revokeProvisionalAdmission(fingerprintId) {
+  const ok = provisionalStore.revokeAdmission(fingerprintId);
+  if (ok) {
+    admissionCache.delete(fingerprintId);
+  }
+  return ok;
 }
 
 // Initialize engine asynchronously on startup
@@ -328,6 +342,55 @@ export function handlePreflightRoutes(req, res, pathname, __dirname, allowedRoot
         classification: 'INTERNAL_ERROR',
         reason: err.message
       }));
+    });
+    return true;
+  }
+
+  // 9. Loopback-only PC Management endpoints for Provisional Admissions
+  if (pathname === '/api/provisional-admissions' && req.method === 'GET') {
+    const list = provisionalStore.listAdmissions();
+    res.writeHead(200, {
+      'Content-Type': 'application/json; charset=utf-8',
+      'Cache-Control': 'no-cache, no-store'
+    });
+    res.end(JSON.stringify({ count: list.length, admissions: list }, null, 2));
+    return true;
+  }
+
+  if (pathname === '/api/provisional-admissions' && req.method === 'POST') {
+    const remoteAddress = req.socket.remoteAddress || '';
+    const cleaned = remoteAddress.replace(/^::ffff:/, '');
+    const isLoopback = cleaned === '127.0.0.1' || cleaned === '::1' || cleaned === 'localhost';
+    if (!isLoopback) {
+      res.writeHead(403, { 'Content-Type': 'application/json; charset=utf-8' });
+      res.end(JSON.stringify({ error: 'Provisional admission mutations are only permitted from PC loopback (127.0.0.1)' }));
+      return true;
+    }
+
+    let body = '';
+    req.on('data', chunk => { body += chunk; });
+    req.on('end', () => {
+      try {
+        const payload = JSON.parse(body);
+        if (payload.action === 'revoke' && payload.fingerprintId) {
+          const revoked = revokeProvisionalAdmission(payload.fingerprintId);
+          res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+          res.end(JSON.stringify({ ok: true, revoked, fingerprintId: payload.fingerprintId }));
+          return;
+        }
+        if (payload.fingerprintId) {
+          const added = provisionalStore.addAdmission(payload);
+          clearAdmissionCache();
+          res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+          res.end(JSON.stringify({ ok: true, admission: added }));
+          return;
+        }
+        res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' });
+        res.end(JSON.stringify({ error: 'fingerprintId is required' }));
+      } catch (err) {
+        res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' });
+        res.end(JSON.stringify({ error: err.message }));
+      }
     });
     return true;
   }

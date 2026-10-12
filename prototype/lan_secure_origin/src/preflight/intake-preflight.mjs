@@ -38,6 +38,7 @@ export const IntakeClassification = {
 export const EvidenceBasis = {
   STATIC_POLICY_ONLY: 'STATIC_POLICY_ONLY',
   CERTIFIED_PHYSICAL_DEVICE: 'CERTIFIED_PHYSICAL_DEVICE',
+  USER_REPORTED_DEVICE_PASS: 'USER_REPORTED_DEVICE_PASS',
   FILE_SPECIFIC_DEVICE_PROBE: 'FILE_SPECIFIC_DEVICE_PROBE',
   UNCERTIFIED_HEVC: 'UNCERTIFIED_HEVC',
   UNCERTIFIED_DEVICE_PROBE_REQUIRED: 'UNCERTIFIED_DEVICE_PROBE_REQUIRED',
@@ -375,6 +376,24 @@ export async function preflightIncomingMedia(filePath, options = {}) {
       decision.classification === IntakeClassification.EXPERIMENT_DERIVATIVE ||
       decision.classification === IntakeClassification.UNREADABLE_MEDIA) {
     return decision;
+  }
+
+  // Check file-specific provisional admission store if supplied
+  const provisionalStore = options.provisionalAdmissionStore || options.provisionalStore || null;
+  if (provisionalStore && facts && facts.fingerprint?.fingerprintId) {
+    const admission = provisionalStore.getAdmission(facts.fingerprint.fingerprintId);
+    if (admission) {
+      return {
+        ...decision,
+        classification: IntakeClassification.READY_DIRECT,
+        evidenceBasis: EvidenceBasis.USER_REPORTED_DEVICE_PASS,
+        matchedPolicy: 'user-approved-provisional-admission',
+        provisionalAdmission: admission,
+        mayPromoteToVrReady: true,
+        reason: `Provisional admission granted via user-reported device pass (${admission.notes || 'User-verified'}) [fp=${facts.fingerprint.fingerprintId}]`,
+        allowedNextActions: ['PROMOTE_TO_VR_READY']
+      };
+    }
   }
 
   // Check file-specific device probe cache if supplied
