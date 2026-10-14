@@ -11,6 +11,7 @@ import {
   CandidateState,
   BatchProbeVerdict,
   getProbeNeutralId,
+  computeCandidatesHash,
   BATCH_PROBE_POLICY_VERSION
 } from './batch-probe-types.mjs';
 import { loadBatchRegistry } from './batch-probe-store.mjs';
@@ -47,6 +48,7 @@ export async function buildBatchCandidateQueue(options = {}) {
 
   const inventory = {
     targetDir,
+    candidatesHash: '',
     totalDiscovered: videoFiles.length,
     counts: {
       ALREADY_ADMITTED: 0,
@@ -57,10 +59,12 @@ export async function buildBatchCandidateQueue(options = {}) {
       DEVICE_TESTED: 0
     },
     items: [],
-    queue: []
+    queue: [],
+    itemMap: new Map() // itemId -> item
   };
 
   let queueIndex = 0;
+  const candidateFps = [];
 
   for (const filePath of videoFiles) {
     if (!fs.existsSync(filePath)) {
@@ -130,10 +134,14 @@ export async function buildBatchCandidateQueue(options = {}) {
     }
 
     inventory.counts.POLICY_DENIED_CANDIDATE++;
+    candidateFps.push(fp.fingerprintId);
+
+    const itemId = `probe_${queueIndex}_${fp.fingerprintId.substring(0, 8)}`;
 
     const itemMeta = {
+      itemId,
       queueIndex: queueIndex++,
-      filePath,
+      filePath, // internal server only
       neutralId,
       fingerprintId: fp.fingerprintId,
       sizeBytes: fp.sizeBytes,
@@ -152,7 +160,36 @@ export async function buildBatchCandidateQueue(options = {}) {
 
     inventory.items.push(itemMeta);
     inventory.queue.push(itemMeta);
+    inventory.itemMap.set(itemId, itemMeta);
   }
 
+  inventory.candidatesHash = computeCandidatesHash(candidateFps);
   return inventory;
+}
+
+/**
+ * Sanitizes candidate queue for public API response, removing full file paths.
+ *
+ * @param {Array<object>} queue
+ * @returns {Array<object>}
+ */
+export function serializePublicBatchQueue(queue = []) {
+  return queue.map(item => ({
+    itemId: item.itemId,
+    queueIndex: item.queueIndex,
+    neutralId: item.neutralId,
+    fingerprintId: item.fingerprintId,
+    sizeBytes: item.sizeBytes,
+    state: item.state,
+    classification: item.classification,
+    reason: item.reason,
+    codec: item.codec,
+    tag: item.tag,
+    dimensions: item.dimensions,
+    rFps: item.rFps,
+    avgFps: item.avgFps,
+    isTested: item.isTested,
+    recordedVerdict: item.recordedVerdict,
+    lastTestedAt: item.lastTestedAt
+  }));
 }

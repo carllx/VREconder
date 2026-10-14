@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { BATCH_PROBE_POLICY_VERSION, BatchProbeVerdict } from './batch-probe-types.mjs';
 
@@ -12,6 +13,15 @@ export function getBatchProbeFilePaths(baseDir = DEFAULT_DIR) {
     registry: path.join(baseDir, 'batch_probe_registry.jsonl'),
     checkpoint: path.join(baseDir, 'batch_probe_checkpoint.json')
   };
+}
+
+/**
+ * Generates a cryptographically strong session probe token.
+ *
+ * @returns {string}
+ */
+export function generateSessionToken() {
+  return crypto.randomBytes(16).toString('hex');
 }
 
 /**
@@ -63,6 +73,31 @@ export function recordBatchResult(record, baseDir = DEFAULT_DIR) {
 }
 
 /**
+ * Validates whether an existing checkpoint matches the current active root and candidate inventory.
+ *
+ * @param {object} cp
+ * @param {string} currentRoot
+ * @param {string} currentCandidatesHash
+ * @returns {{ valid: boolean, reason: string | null }}
+ */
+export function validateCheckpointIntegrity(cp, currentRoot, currentCandidatesHash) {
+  if (!cp || !cp.runId) {
+    return { valid: false, reason: 'No active run checkpoint' };
+  }
+  if (cp.rootPath && currentRoot) {
+    const normCp = path.normalize(cp.rootPath).toLowerCase();
+    const normCur = path.normalize(currentRoot).toLowerCase();
+    if (normCp !== normCur) {
+      return { valid: false, reason: `Active media root changed: checkpoint was for ${cp.rootPath}, current is ${currentRoot}` };
+    }
+  }
+  if (cp.candidatesHash && currentCandidatesHash && cp.candidatesHash !== currentCandidatesHash) {
+    return { valid: false, reason: 'Candidate inventory snapshot mismatch: media set in folder changed' };
+  }
+  return { valid: true, reason: null };
+}
+
+/**
  * Loads batch probe checkpoint.
  *
  * @param {string} [baseDir]
@@ -73,7 +108,10 @@ export function loadBatchCheckpoint(baseDir = DEFAULT_DIR) {
   if (!fs.existsSync(checkpoint)) {
     return {
       runId: null,
-      status: 'IDLE', // IDLE, RUNNING, PAUSED, COMPLETED
+      rootPath: null,
+      candidatesHash: null,
+      sessionToken: null,
+      status: 'IDLE', // IDLE, RUNNING, PAUSED, COMPLETED, INVALID_STALE_ROOT
       cursor: 0,
       totalQueue: 0,
       completedCount: 0,
@@ -90,6 +128,9 @@ export function loadBatchCheckpoint(baseDir = DEFAULT_DIR) {
   } catch (_) {
     return {
       runId: null,
+      rootPath: null,
+      candidatesHash: null,
+      sessionToken: null,
       status: 'IDLE',
       cursor: 0,
       totalQueue: 0,

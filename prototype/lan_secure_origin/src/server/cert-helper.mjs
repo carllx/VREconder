@@ -64,7 +64,10 @@ ${sanList.join('\n')}
 }
 
 // Media Root & Scanner SSOT State
-let activeMediaRoot = path.normalize('G:\\Media\\VR\\VR_Video_Processing\\01_Download_Completed');
+const CANDIDATE_TARGET_SUBDIR = path.normalize('G:\\Media\\VR\\VR_Video_Processing\\01_Download_Completed\\New folder (2)');
+let activeMediaRoot = fs.existsSync(CANDIDATE_TARGET_SUBDIR)
+  ? CANDIDATE_TARGET_SUBDIR
+  : path.normalize('G:\\Media\\VR\\VR_Video_Processing\\01_Download_Completed');
 let cachedVideos = [];
 
 export function isLoopbackIp(remoteAddress) {

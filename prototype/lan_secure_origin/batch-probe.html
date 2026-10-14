@@ -3,129 +3,41 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-  <title>VREconder - AV1 Media Compatibility Batch Probe</title>
+  <title>VREconder - AV1 Compatibility Batch Probe</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    body {
-      background: #090d16;
-      color: #f8fafc;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, monospace;
-      padding: 12px;
-      line-height: 1.4;
-    }
-    h1 {
-      font-size: 1.15rem;
-      color: #38bdf8;
-      margin-bottom: 4px;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
-    .subtitle {
-      font-size: 0.75rem;
-      color: #94a3b8;
-      margin-bottom: 10px;
-    }
-    .card {
-      background: #131b2e;
-      border: 1px solid #243048;
-      border-radius: 8px;
-      padding: 10px 12px;
-      margin-bottom: 10px;
-    }
-    .btn-row {
-      display: flex;
-      gap: 8px;
-      flex-wrap: wrap;
-      margin-bottom: 8px;
-    }
-    button {
-      background: #1e293b;
-      color: #fff;
-      border: 1px solid #334155;
-      padding: 8px 14px;
-      border-radius: 6px;
-      font-size: 0.85rem;
-      font-weight: 600;
-      cursor: pointer;
-    }
+    body { background: #090d16; color: #f8fafc; font-family: -apple-system, BlinkMacSystemFont, monospace; padding: 12px; line-height: 1.4; }
+    h1 { font-size: 1.15rem; color: #38bdf8; margin-bottom: 4px; display: flex; align-items: center; gap: 8px; }
+    .subtitle { font-size: 0.75rem; color: #94a3b8; margin-bottom: 10px; }
+    .card { background: #131b2e; border: 1px solid #243048; border-radius: 8px; padding: 10px 12px; margin-bottom: 10px; }
+    .btn-row { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
+    button { background: #1e293b; color: #fff; border: 1px solid #334155; padding: 8px 14px; border-radius: 6px; font-size: 0.85rem; font-weight: 600; cursor: pointer; }
     button:disabled { opacity: 0.45; cursor: not-allowed; }
     .btn-primary { background: #0284c7; border-color: #38bdf8; }
     .btn-action { background: #059669; border-color: #34d399; }
     .btn-pause { background: #d97706; border-color: #fbbf24; }
-    .stats-grid {
-      display: grid;
-      grid-template-columns: repeat(4, 1fr);
-      gap: 6px;
-    }
-    @media (max-width: 600px) {
-      .stats-grid { grid-template-columns: repeat(2, 1fr); }
-    }
-    .stat-box {
-      background: #0b1120;
-      border: 1px solid #1e293b;
-      border-radius: 6px;
-      padding: 6px 8px;
-      text-align: center;
-    }
+    .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+    @media (max-width: 600px) { .stats-grid { grid-template-columns: repeat(2, 1fr); } }
+    .stat-box { background: #0b1120; border: 1px solid #1e293b; border-radius: 6px; padding: 6px 8px; text-align: center; }
     .stat-val { font-size: 1.15rem; font-weight: bold; color: #38bdf8; }
     .stat-label { font-size: 0.68rem; color: #94a3b8; text-transform: uppercase; }
-    .test-viewport {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      background: #020617;
-      border: 1px solid #1e293b;
-      border-radius: 8px;
-      padding: 8px 10px;
-    }
-    video {
-      width: 130px;
-      height: 75px;
-      background: #000;
-      border-radius: 4px;
-      border: 1px solid #334155;
-      object-fit: contain;
-    }
-    .video-info {
-      font-size: 0.74rem;
-      color: #94a3b8;
-      flex: 1;
-    }
+    .test-viewport { display: flex; align-items: center; gap: 10px; background: #020617; border: 1px solid #1e293b; border-radius: 8px; padding: 8px 10px; }
+    video { width: 130px; height: 75px; background: #000; border-radius: 4px; border: 1px solid #334155; object-fit: contain; }
+    .video-info { font-size: 0.74rem; color: #94a3b8; flex: 1; }
     .video-info div { margin-bottom: 2px; }
-    .badge {
-      display: inline-block;
-      padding: 2px 6px;
-      border-radius: 4px;
-      font-size: 0.7rem;
-      font-weight: bold;
-    }
+    .badge { display: inline-block; padding: 2px 6px; border-radius: 4px; font-size: 0.7rem; font-weight: bold; }
     .badge-ok { background: rgba(16, 185, 129, 0.2); color: #34d399; }
     .badge-err { background: rgba(239, 68, 68, 0.2); color: #f87171; }
     .badge-warn { background: rgba(245, 158, 11, 0.2); color: #fbbf24; }
     .badge-info { background: rgba(56, 189, 248, 0.2); color: #38bdf8; }
     .badge-pending { background: #334155; color: #94a3b8; }
-    .trace-box {
-      max-height: 200px;
-      overflow-y: auto;
-      font-size: 0.72rem;
-      background: #0b1120;
-      padding: 6px 8px;
-      border-radius: 6px;
-      border: 1px solid #1e293b;
-    }
-    .trace-item {
-      padding: 3px 0;
-      border-bottom: 1px solid #1e293b;
-      display: flex;
-      justify-content: space-between;
-      gap: 6px;
-    }
+    .trace-box { max-height: 200px; overflow-y: auto; font-size: 0.72rem; background: #0b1120; padding: 6px 8px; border-radius: 6px; border: 1px solid #1e293b; }
+    .trace-item { padding: 3px 0; border-bottom: 1px solid #1e293b; display: flex; justify-content: space-between; gap: 6px; }
   </style>
 </head>
 <body>
   <h1><span>🔬</span> AV1 Batch Compatibility Probe</h1>
-  <div class="subtitle">iPhone Safari 物理硬件解码批测 (Sequential rVFC + Multi-Point Seek)</div>
+  <div class="subtitle">iPhone Safari 物理硬件解码批测 (Dual Windows + Advancing Seek)</div>
 
   <div class="card">
     <div class="btn-row">
@@ -135,33 +47,21 @@
       <button id="btnReload" onclick="location.reload()">Reload</button>
     </div>
     <div class="stats-grid">
-      <div class="stat-box">
-        <div id="valProgress" class="stat-val">0 / 0</div>
-        <div class="stat-label">Progress</div>
-      </div>
-      <div class="stat-box">
-        <div id="valPass" class="stat-val" style="color:#34d399;">0</div>
-        <div class="stat-label">PASS (Sampled)</div>
-      </div>
-      <div class="stat-box">
-        <div id="valFail" class="stat-val" style="color:#f87171;">0</div>
-        <div class="stat-label">FAIL / Error</div>
-      </div>
-      <div class="stat-box">
-        <div id="valRemaining" class="stat-val" style="color:#fbbf24;">0</div>
-        <div class="stat-label">Remaining</div>
-      </div>
+      <div class="stat-box"><div id="valProgress" class="stat-val">0 / 0</div><div class="stat-label">Progress</div></div>
+      <div class="stat-box"><div id="valPass" class="stat-val" style="color:#34d399;">0</div><div class="stat-label">PASS (Sampled)</div></div>
+      <div class="stat-box"><div id="valFail" class="stat-val" style="color:#f87171;">0</div><div class="stat-label">FAIL / Error</div></div>
+      <div class="stat-box"><div id="valRemaining" class="stat-val" style="color:#fbbf24;">0</div><div class="stat-label">Remaining</div></div>
     </div>
   </div>
 
   <div class="card test-viewport">
     <video id="probeVideo" playsinline webkit-playsinline muted preload="auto"></video>
     <div class="video-info">
-      <div><b>当前媒体:</b> <span id="lblItemName" style="color:#f8fafc;">None</span></div>
+      <div><b>当前测试:</b> <span id="lblItemName" style="color:#f8fafc;">None</span></div>
       <div>分辨率: <b id="lblDimensions">--</b> | 时长: <span id="lblDuration">0s</span></div>
-      <div>rVFC 帧: <b id="lblRvfc" style="color:#38bdf8;">0</b> | Seek 帧: <b id="lblSeekRvfc" style="color:#a855f7;">0</b></div>
-      <div>时间: <span id="lblCurTime">0.0s</span> | Ready: <span id="lblReady">0</span></div>
-      <div>测试结论: <span id="lblVerdict" class="badge badge-pending">IDLE</span></div>
+      <div>W1 帧: <b id="lblW1Frames" style="color:#38bdf8;">0</b> | W2 帧: <b id="lblW2Frames" style="color:#a855f7;">0</b></div>
+      <div>媒体时间: <span id="lblMediaTime">0.0s</span> | Ready: <span id="lblReady">0</span></div>
+      <div>当前状态: <span id="lblVerdict" class="badge badge-pending">IDLE</span></div>
     </div>
   </div>
 
@@ -171,28 +71,12 @@
   </div>
 
   <script>
-    let queue = [];
-    let currentIndex = 0;
-    let isRunning = false;
-    let currentToken = 0;
-
+    let queue = [], currentIndex = 0, isRunning = false, currentToken = 0, sessionToken = '', currentRunId = '';
     const video = document.getElementById('probeVideo');
-    const btnStart = document.getElementById('btnStart');
-    const btnResume = document.getElementById('btnResume');
-    const btnPause = document.getElementById('btnPause');
-    const valProgress = document.getElementById('valProgress');
-    const valPass = document.getElementById('valPass');
-    const valFail = document.getElementById('valFail');
-    const valRemaining = document.getElementById('valRemaining');
-    const lblItemName = document.getElementById('lblItemName');
-    const lblDimensions = document.getElementById('lblDimensions');
-    const lblDuration = document.getElementById('lblDuration');
-    const lblRvfc = document.getElementById('lblRvfc');
-    const lblSeekRvfc = document.getElementById('lblSeekRvfc');
-    const lblCurTime = document.getElementById('lblCurTime');
-    const lblReady = document.getElementById('lblReady');
-    const lblVerdict = document.getElementById('lblVerdict');
-    const traceLog = document.getElementById('traceLog');
+    const btnStart = document.getElementById('btnStart'), btnResume = document.getElementById('btnResume'), btnPause = document.getElementById('btnPause');
+    const valProgress = document.getElementById('valProgress'), valPass = document.getElementById('valPass'), valFail = document.getElementById('valFail'), valRemaining = document.getElementById('valRemaining');
+    const lblItemName = document.getElementById('lblItemName'), lblDimensions = document.getElementById('lblDimensions'), lblDuration = document.getElementById('lblDuration');
+    const lblW1Frames = document.getElementById('lblW1Frames'), lblW2Frames = document.getElementById('lblW2Frames'), lblMediaTime = document.getElementById('lblMediaTime'), lblReady = document.getElementById('lblReady'), lblVerdict = document.getElementById('lblVerdict'), traceLog = document.getElementById('traceLog');
 
     function logTrace(msg, type = 'info') {
       const d = document.createElement('div');
@@ -203,74 +87,62 @@
 
     async function initHarness() {
       try {
-        logTrace('获取批测候选队列与检查点...', 'info');
-        const [statusRes, queueRes] = await Promise.all([
-          fetch('/api/batch-probe/status').then(r => r.json()),
-          fetch('/api/batch-probe/queue').then(r => r.json())
-        ]);
-
+        logTrace('从服务器加载批测队列与授权会话...', 'info');
+        const queueRes = await fetch('/api/batch-probe/queue').then(r => r.json());
         queue = queueRes.queue || [];
         currentIndex = queueRes.cursor || 0;
-        updateStats(statusRes.checkpoint);
+        sessionToken = queueRes.sessionToken || '';
+        currentRunId = queueRes.runId || '';
 
-        logTrace(`批测队列初始化完成: 共 ${queue.length} 个候选项目, Cursor=${currentIndex}`, 'info');
+        const statusRes = await fetch('/api/batch-probe/status').then(r => r.json());
+        updateStats(statusRes.checkpoint);
+        logTrace(`会话建立: 共 ${queue.length} 个候选项目, 游标=${currentIndex}`, 'info');
         if (statusRes.checkpoint && statusRes.checkpoint.status === 'RUNNING') {
-          logTrace('上次批测处于运行状态，可点击 Resume 继续', 'warn');
+          logTrace('检测到进行中的测试会话，点击 Resume 继续', 'warn');
         }
-      } catch (err) {
-        logTrace(`初始化失败: ${err.message}`, 'err');
-      }
+      } catch (err) { logTrace(`初始化失败: ${err.message}`, 'err'); }
     }
 
     function updateStats(cp) {
-      const pass = cp ? (cp.passCount || 0) : 0;
-      const fail = cp ? (cp.failCount || 0) : 0;
-      valProgress.textContent = `${currentIndex} / ${queue.length}`;
+      const pass = cp ? (cp.passCount || 0) : 0, fail = cp ? (cp.failCount || 0) : 0, completed = cp ? (cp.completedCount || 0) : 0;
+      valProgress.textContent = `${completed} / ${queue.length}`;
       valPass.textContent = String(pass);
       valFail.textContent = String(fail);
-      valRemaining.textContent = String(Math.max(0, queue.length - currentIndex));
+      valRemaining.textContent = String(Math.max(0, queue.length - completed));
+    }
+
+    async function sendControl(action) {
+      return fetch('/api/batch-probe/control', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-probe-token': sessionToken },
+        body: JSON.stringify({ action, token: sessionToken })
+      }).then(r => r.json());
     }
 
     async function startBatch() {
       if (isRunning) return;
       isRunning = true;
-      btnStart.disabled = true;
-      btnResume.disabled = true;
-      btnPause.disabled = false;
-      await fetch('/api/batch-probe/control', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'start' })
-      });
-      logTrace('🚀 启动 iPhone 硬件解码批量探测队列...', 'info');
+      btnStart.disabled = true; btnResume.disabled = true; btnPause.disabled = false;
+      await sendControl('start');
+      logTrace('🚀 启动 iPhone 硬件解码批量测试队列...', 'info');
       runNextItem();
     }
 
     async function resumeBatch() {
       if (isRunning) return;
       isRunning = true;
-      btnStart.disabled = true;
-      btnResume.disabled = true;
-      btnPause.disabled = false;
-      await fetch('/api/batch-probe/control', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'resume' })
-      });
-      logTrace(`▶️ 恢复批测 (从第 ${currentIndex + 1} 项开始)...`, 'info');
+      btnStart.disabled = true; btnResume.disabled = true; btnPause.disabled = false;
+      const res = await sendControl('resume');
+      if (res && res.checkpoint) currentIndex = res.checkpoint.cursor || 0;
+      logTrace(`▶️ 恢复测试 (从游标第 ${currentIndex + 1} 项开始)...`, 'info');
       runNextItem();
     }
 
     async function pauseBatch() {
       isRunning = false;
-      btnStart.disabled = false;
-      btnResume.disabled = false;
-      btnPause.disabled = true;
-      await fetch('/api/batch-probe/control', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'pause' })
-      });
+      currentToken++;
+      btnStart.disabled = false; btnResume.disabled = false; btnPause.disabled = true;
+      await sendControl('pause');
       logTrace('⏸️ 批测队列已暂停', 'warn');
     }
 
@@ -278,114 +150,65 @@
       if (!isRunning) return;
       if (currentIndex >= queue.length) {
         isRunning = false;
-        btnStart.disabled = false;
-        btnResume.disabled = true;
-        btnPause.disabled = true;
+        btnStart.disabled = false; btnResume.disabled = true; btnPause.disabled = true;
         logTrace('🎉 所有候选文件硬件解码批测全部完成！', 'ok');
-        lblVerdict.textContent = 'COMPLETED';
-        lblVerdict.className = 'badge badge-ok';
+        lblVerdict.textContent = 'COMPLETED'; lblVerdict.className = 'badge badge-ok';
         return;
       }
 
       const item = queue[currentIndex];
-      // Skip if previously tested and recorded valid verdict
-      if (item.isTested && (item.recordedVerdict === 'NATIVE_SAMPLE_PASS' || item.recordedVerdict === 'MEDIA_ERROR')) {
-        logTrace(`跳过已测项: ${item.neutralId} (${item.recordedVerdict})`, 'info');
-        currentIndex++;
-        updateStats(null);
-        runNextItem();
-        return;
-      }
-
       currentToken++;
       const token = currentToken;
+
       lblItemName.textContent = item.neutralId;
-      lblDimensions.textContent = '--';
-      lblDuration.textContent = '0s';
-      lblRvfc.textContent = '0';
-      lblSeekRvfc.textContent = '0';
-      lblCurTime.textContent = '0.0s';
-      lblVerdict.textContent = 'PROBING...';
-      lblVerdict.className = 'badge badge-info';
+      lblDimensions.textContent = item.dimensions || '--';
+      lblDuration.textContent = '0s'; lblW1Frames.textContent = '0'; lblW2Frames.textContent = '0';
+      lblMediaTime.textContent = '0.0s'; lblVerdict.textContent = 'PROBING...'; lblVerdict.className = 'badge badge-info';
       logTrace(`[#${currentIndex + 1}/${queue.length}] 探测: ${item.neutralId}`, 'info');
 
       try {
-        let result = await probeSample(item, token, 8000);
+        let result = await probeSampleWithDualWindows(item, token, 9000);
+        if (token !== currentToken || !isRunning) return;
 
-        // Controlled retry for transient TIMEOUT / TRANSPORT_ERROR
         if (result.verdict === 'TIMEOUT_INCONCLUSIVE' || result.verdict === 'TRANSPORT_ERROR') {
-          logTrace(`⚠️ 样本出现 ${result.verdict}，进行受控二次复测 (延长到 12s)...`, 'warn');
+          logTrace(`⚠️ 样本出现 ${result.verdict}，进行受控二次延长复测 (14s)...`, 'warn');
           currentToken++;
-          result = await probeSample(item, currentToken, 12000);
+          const retryToken = currentToken;
+          result = await probeSampleWithDualWindows(item, retryToken, 14000);
+          if (retryToken !== currentToken || !isRunning) return;
         }
 
-        if (token !== currentToken && token !== (currentToken - 1)) {
-          logTrace(`丢弃过期 Token 回调`, 'warn');
-          return;
-        }
-
-        // Persist result before advancing
         logTrace(`持久化: ${item.neutralId} => ${result.verdict}`, result.verdict === 'NATIVE_SAMPLE_PASS' ? 'ok' : 'err');
-
         const postRes = await fetch('/api/batch-probe/result', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', 'x-probe-token': sessionToken },
           body: JSON.stringify({
-            queueIndex: currentIndex,
-            generation: token,
-            neutralId: item.neutralId,
-            fingerprintId: item.fingerprintId,
-            filePath: item.filePath,
-            candidateState: item.state,
-            verdict: result.verdict,
-            videoWidth: result.videoWidth,
-            videoHeight: result.videoHeight,
-            rvfcCount: result.rvfcCount,
-            sampleDurationSec: result.sampleDurationSec,
-            seekCount: result.seekCount,
-            seekSuccess: result.seekSuccess,
-            seekDetails: result.seekDetails,
-            stallCount: result.stallCount,
-            readyState: result.readyState,
-            networkState: result.networkState,
-            error: result.error,
-            elapsedMs: result.elapsedMs
+            runId: currentRunId, queueIndex: currentIndex, itemId: item.itemId, fingerprintId: item.fingerprintId,
+            generation: token, verdict: result.verdict, videoWidth: result.videoWidth, videoHeight: result.videoHeight,
+            rvfcCount: result.totalRvfcCount, sampleDurationSec: result.sampleDurationSec, seekCount: result.seekAttempted ? 1 : 0,
+            seekSuccess: result.seekSuccess, seekDetails: result.seekDetails, stallCount: result.stallCount,
+            observationEvidence: result.observationEvidence, readyState: result.readyState, networkState: result.networkState,
+            error: result.error, elapsedMs: result.elapsedMs, token: sessionToken
           })
         }).then(r => r.json());
 
-        if (!postRes || !postRes.ok) {
-          throw new Error(postRes?.error || 'Server rejected probe result');
-        }
-
+        if (!postRes || !postRes.ok) throw new Error(postRes?.error || 'Persistence rejected');
         updateStats(postRes.checkpoint);
-        currentIndex++;
-
-        if (isRunning) {
-          setTimeout(runNextItem, 250);
-        }
+        currentIndex = postRes.checkpoint.cursor;
+        if (isRunning) setTimeout(runNextItem, 250);
       } catch (err) {
-        logTrace(`❌ 执行异常: ${err.message}，暂停保护游标`, 'err');
+        logTrace(`❌ 执行异常: ${err.message}，已自动暂停`, 'err');
         await pauseBatch();
-        lblVerdict.textContent = 'PROBE_ERROR';
-        lblVerdict.className = 'badge badge-err';
+        lblVerdict.textContent = 'PROBE_ERROR'; lblVerdict.className = 'badge badge-err';
       }
     }
 
-    function probeSample(item, token, timeoutMs = 8000) {
+    function probeSampleWithDualWindows(item, token, timeoutMs = 9000) {
       return new Promise((resolve) => {
-        let resolved = false;
-        let timeoutId = null;
-        let rvfcHandle = null;
-        let rvfcCount = 0;
-        let seekRvfcCount = 0;
-        let stallCount = 0;
-        let phase = 'INIT'; // INIT -> PLAYING -> SEEKING -> SEEK_CONFIRMED
-        let seekAttempted = false;
-        let seekSuccess = false;
-        let seekTargetSec = 0;
-        let seekApiLat = 0;
-        let seekFrameLat = 0;
-        let seekStartTime = 0;
+        let resolved = false, timeoutId = null, rvfcHandle = null, phase = 'INIT', stallCount = 0;
+        let w1StartWall = 0, w1StartMediaTime = -1, w1LastMediaTime = -1, w1Frames = 0;
+        let seekAttempted = false, seekTargetSec = 0, seekStartTime = 0, seekApiFired = false, seekApiLatencyMs = 0, seekFirstFrameLatMs = 0, seekSuccess = false;
+        let w2StartWall = 0, w2StartMediaTime = -1, w2LastMediaTime = -1, w2Frames = 0;
         const startTime = Date.now();
 
         function cleanup() {
@@ -394,157 +217,117 @@
             try { video.cancelVideoFrameCallback(rvfcHandle); } catch (_) {}
             rvfcHandle = null;
           }
-          ['loadstart', 'loadedmetadata', 'loadeddata', 'canplay', 'playing', 'seeking', 'seeked', 'waiting', 'stalled', 'timeupdate', 'error'].forEach(evt => {
-            video.removeEventListener(evt, onEvent);
-          });
-          video.pause();
-          video.removeAttribute('src');
-          video.load();
+          ['loadstart', 'loadedmetadata', 'loadeddata', 'canplay', 'playing', 'seeking', 'seeked', 'waiting', 'stalled', 'timeupdate', 'error'].forEach(evt => video.removeEventListener(evt, onEvent));
+          video.pause(); video.removeAttribute('src'); video.load();
         }
 
         function finish(verdict, err = null) {
           if (resolved) return;
           resolved = true;
-          const capturedWidth = video.videoWidth || 0;
-          const capturedHeight = video.videoHeight || 0;
-          const capturedReady = video.readyState;
-          const capturedNet = video.networkState;
-          const elapsedMs = Date.now() - startTime;
-          const sampleDurationSec = Number((video.currentTime || 0).toFixed(2));
-
+          const capturedWidth = video.videoWidth || 0, capturedHeight = video.videoHeight || 0;
+          const capturedReady = video.readyState, capturedNet = video.networkState;
+          const elapsedMs = Date.now() - startTime, sampleDurationSec = Number((video.currentTime || 0).toFixed(2));
           cleanup();
-
           lblVerdict.textContent = verdict;
           lblVerdict.className = (verdict === 'NATIVE_SAMPLE_PASS') ? 'badge badge-ok' : 'badge badge-err';
-
           resolve({
-            verdict,
-            videoWidth: capturedWidth,
-            videoHeight: capturedHeight,
-            rvfcCount,
-            sampleDurationSec,
-            seekCount: seekAttempted ? 1 : 0,
-            seekSuccess,
-            seekDetails: seekAttempted ? {
-              targetSec: seekTargetSec,
-              seekApiLatMs: seekApiLat,
-              seekFrameLatMs: seekFrameLat,
-              postSeekFrames: seekRvfcCount
-            } : null,
+            verdict, videoWidth: capturedWidth, videoHeight: capturedHeight, totalRvfcCount: w1Frames + w2Frames,
+            sampleDurationSec, seekAttempted, seekSuccess,
+            seekDetails: seekAttempted ? { targetSec: seekTargetSec, seekApiLatMs: seekApiLatencyMs, seekFirstFrameLatMs, postSeekFrames: w2Frames } : null,
             stallCount,
-            readyState: capturedReady,
-            networkState: capturedNet,
-            error: err,
-            elapsedMs
+            observationEvidence: {
+              window1Frames: w1Frames, window1MediaDelta: w1StartMediaTime >= 0 ? Number((w1LastMediaTime - w1StartMediaTime).toFixed(3)) : 0,
+              window2Frames: w2Frames, window2MediaDelta: w2StartMediaTime >= 0 ? Number((w2LastMediaTime - w2StartMediaTime).toFixed(3)) : 0
+            },
+            readyState: capturedReady, networkState: capturedNet, error: err, elapsedMs
           });
         }
 
         function onVideoFrame(now, metadata) {
           if (resolved || token !== currentToken) return;
-          rvfcCount++;
-          lblRvfc.textContent = String(rvfcCount);
+          const mTime = typeof metadata?.mediaTime === 'number' ? metadata.mediaTime : (video.currentTime || 0);
+          lblMediaTime.textContent = `${mTime.toFixed(2)}s`;
 
-          if (phase === 'INIT' && video.videoWidth > 0 && video.videoHeight > 0 && rvfcCount >= 3) {
-            phase = 'PLAYING';
-            // Perform automatic mid-point seek after 3 advancing frames
-            const duration = video.duration || 60;
-            seekTargetSec = Math.max(2, Math.min(duration * 0.5, 30));
-            phase = 'SEEKING';
-            seekAttempted = true;
-            seekStartTime = performance.now();
-            video.currentTime = seekTargetSec;
-          } else if (phase === 'SEEKING') {
-            // Check if frame rendered at new seek position
-            if (Math.abs((video.currentTime || 0) - seekTargetSec) < 2.5) {
-              seekRvfcCount++;
-              lblSeekRvfc.textContent = String(seekRvfcCount);
-              if (seekRvfcCount >= 2) {
-                phase = 'SEEK_CONFIRMED';
-                seekSuccess = true;
-                seekFrameLat = Number((performance.now() - seekStartTime).toFixed(1));
-                // Verified: positive dimensions + advancing playback + verified advancing frame post-seek!
-                finish('NATIVE_SAMPLE_PASS', null);
-                return;
+          if (phase === 'INIT' || phase === 'W1_PLAYING') {
+            if (video.videoWidth > 0 && video.videoHeight > 0) {
+              if (phase === 'INIT') { phase = 'W1_PLAYING'; w1StartWall = performance.now(); w1StartMediaTime = mTime; }
+              w1Frames++; w1LastMediaTime = mTime; lblW1Frames.textContent = String(w1Frames);
+              if (w1Frames >= 12 && (w1LastMediaTime - w1StartMediaTime) >= 0.35 && (performance.now() - w1StartWall) >= 300) {
+                phase = 'SEEKING'; seekAttempted = true;
+                const dur = video.duration || 60;
+                seekTargetSec = Math.max(3, Math.min(dur * 0.5, 30));
+                seekStartTime = performance.now();
+                video.currentTime = seekTargetSec;
+              }
+            }
+          } else if (phase === 'SEEKING' || phase === 'W2_PLAYING') {
+            if (seekApiFired && Math.abs(mTime - seekTargetSec) < 2.5) {
+              if (phase === 'SEEKING') { phase = 'W2_PLAYING'; seekFirstFrameLatMs = Number((performance.now() - seekStartTime).toFixed(1)); w2StartWall = performance.now(); w2StartMediaTime = mTime; }
+              w2Frames++; w2LastMediaTime = mTime; lblW2Frames.textContent = String(w2Frames);
+              if (w2Frames >= 8 && (w2LastMediaTime - w2StartMediaTime) >= 0.25) {
+                seekSuccess = true; finish('NATIVE_SAMPLE_PASS', null); return;
               }
             }
           }
-
-          if ('requestVideoFrameCallback' in video && !resolved) {
-            rvfcHandle = video.requestVideoFrameCallback(onVideoFrame);
-          }
+          if ('requestVideoFrameCallback' in video && !resolved) rvfcHandle = video.requestVideoFrameCallback(onVideoFrame);
         }
 
         const onEvent = (e) => {
           if (resolved || token !== currentToken) return;
           lblDimensions.textContent = video.videoWidth ? `${video.videoWidth} × ${video.videoHeight}` : '--';
           lblDuration.textContent = video.duration ? `${video.duration.toFixed(1)}s` : '0s';
-          lblCurTime.textContent = `${(video.currentTime || 0).toFixed(1)}s`;
           lblReady.textContent = String(video.readyState);
-
           if (e.type === 'seeked' && phase === 'SEEKING') {
-            seekApiLat = Number((performance.now() - seekStartTime).toFixed(1));
+            seekApiFired = true; seekApiLatencyMs = Number((performance.now() - seekStartTime).toFixed(1));
           } else if (e.type === 'waiting' || e.type === 'stalled') {
             stallCount++;
           } else if (e.type === 'error') {
             const err = video.error;
             const errInfo = err ? { code: err.code, message: err.message } : { code: -1, message: 'Unknown error' };
-            if (err && (err.code === 1 || err.code === 2)) {
-              finish('TRANSPORT_ERROR', errInfo);
-            } else {
-              finish('MEDIA_ERROR', errInfo);
-            }
+            finish((err && (err.code === 1 || err.code === 2)) ? 'TRANSPORT_ERROR' : 'MEDIA_ERROR', errInfo);
           }
         };
 
-        ['loadstart', 'loadedmetadata', 'loadeddata', 'canplay', 'playing', 'seeking', 'seeked', 'waiting', 'stalled', 'timeupdate', 'error'].forEach(evt => {
-          video.addEventListener(evt, onEvent);
-        });
-
-        if ('requestVideoFrameCallback' in video) {
-          rvfcHandle = video.requestVideoFrameCallback(onVideoFrame);
-        }
+        ['loadstart', 'loadedmetadata', 'loadeddata', 'canplay', 'playing', 'seeking', 'seeked', 'waiting', 'stalled', 'timeupdate', 'error'].forEach(evt => video.addEventListener(evt, onEvent));
+        if ('requestVideoFrameCallback' in video) rvfcHandle = video.requestVideoFrameCallback(onVideoFrame);
 
         timeoutId = setTimeout(() => {
           if (!resolved && token === currentToken) {
-            if (rvfcCount >= 1 && !seekSuccess) {
-              finish('SEEK_FAILED', { code: 'SEEK_TIMEOUT', message: 'Failed to confirm frame progression post-seek' });
-            } else if (rvfcCount === 1) {
-              finish('FIRST_FRAME_ONLY', { code: 'NO_FRAME_ADVANCE', message: 'First frame rendered but no playback advance' });
+            const totalFrames = w1Frames + w2Frames;
+            const w1Delta = w1StartMediaTime >= 0 ? (w1LastMediaTime - w1StartMediaTime) : 0;
+            const w2Delta = w2StartMediaTime >= 0 ? (w2LastMediaTime - w2StartMediaTime) : 0;
+            if (totalFrames === 0) {
+              finish(stallCount > 0 ? 'PLAYBACK_STALLED' : 'TIMEOUT_INCONCLUSIVE', { message: 'Timed out waiting for initial frame' });
+            } else if (w1Frames <= 1 || w1Delta < 0.1) {
+              finish('FIRST_FRAME_ONLY', { message: `Frozen on initial frame (frames=${w1Frames})` });
+            } else if (seekAttempted && (!seekSuccess || w2Frames < 5 || w2Delta < 0.2)) {
+              finish('SEEK_FAILED', { message: `Seek failed to advance frames (postSeekFrames=${w2Frames})` });
             } else if (stallCount > 0) {
-              finish('PLAYBACK_STALLED', { code: 'STALL_TIMEOUT', message: 'Playback stalled before completing sample' });
+              finish('PLAYBACK_STALLED', { message: `Playback stalled (w1Frames=${w1Frames}, w2Frames=${w2Frames})` });
             } else {
-              finish('TIMEOUT_INCONCLUSIVE', { code: 'SAMPLE_TIMEOUT', message: `Sample timed out after ${timeoutMs / 1000}s` });
+              finish('TIMEOUT_INCONCLUSIVE', { message: 'Timed out before observation window completion' });
             }
           }
         }, timeoutMs);
 
-        // Stream via direct health diagnosis channel
-        video.src = '/api/health/video?path=' + encodeURIComponent(item.filePath);
+        video.src = `/api/batch-probe/video?itemId=${encodeURIComponent(item.itemId)}&token=${encodeURIComponent(sessionToken)}`;
         video.load();
         const p = video.play();
         if (p !== undefined) {
-          p.catch(err => {
-            if (err && err.name === 'NotAllowedError') {
-              finish('AUTOPLAY_BLOCKED', { code: err.name, message: err.message });
-            }
-          });
+          p.catch(err => { if (err && err.name === 'NotAllowedError') finish('AUTOPLAY_BLOCKED', { code: err.name, message: err.message }); });
         }
       });
     }
 
-    // Interruption handling: pause queue if page is hidden (lock screen, app switch)
     document.addEventListener('visibilitychange', () => {
       if (document.hidden && isRunning) {
-        logTrace('📱 页面转入后台/锁屏，自动暂停批测以防异常判错', 'warn');
+        logTrace('📱 页面转入后台/锁屏，废弃在途探测并自动暂停', 'warn');
         pauseBatch();
       }
     });
 
     window.addEventListener('offline', () => {
-      if (isRunning) {
-        logTrace('📡 网络已断开，自动暂停批测', 'err');
-        pauseBatch();
-      }
+      if (isRunning) { logTrace('📡 网络已断开，自动暂停', 'err'); pauseBatch(); }
     });
 
     window.addEventListener('DOMContentLoaded', initHarness);

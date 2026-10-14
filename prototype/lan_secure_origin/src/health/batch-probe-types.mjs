@@ -1,7 +1,8 @@
 import path from 'node:path';
+import crypto from 'node:crypto';
 import { AUTHORITATIVE_HEALTH_ROOTS } from './media-health-types.mjs';
 
-export const BATCH_PROBE_POLICY_VERSION = 'v1.0.0-av1-batch-probe';
+export const BATCH_PROBE_POLICY_VERSION = 'v1.1.0-av1-batch-probe';
 
 /**
  * Candidate item intake status categories.
@@ -32,6 +33,20 @@ export const BatchProbeVerdict = {
 };
 
 /**
+ * Computes deterministic candidate list hash from ordered fingerprint IDs.
+ *
+ * @param {string[]} fingerprintIds
+ * @returns {string}
+ */
+export function computeCandidatesHash(fingerprintIds = []) {
+  const hash = crypto.createHash('sha256');
+  for (const fp of fingerprintIds) {
+    hash.update(String(fp || ''));
+  }
+  return hash.digest('hex').substring(0, 16);
+}
+
+/**
  * Creates a public-safe neutral identity from path and fingerprint without exposing local filesystem layout.
  *
  * @param {string} filePath
@@ -39,7 +54,7 @@ export const BatchProbeVerdict = {
  * @returns {string}
  */
 export function getProbeNeutralId(filePath, fingerprintId) {
-  if (!filePath) return `unknown:${fingerprintId || 'nofp'}`;
+  if (!filePath) return `item:${fingerprintId || 'nofp'}`;
   const norm = path.normalize(filePath);
   for (const root of AUTHORITATIVE_HEALTH_ROOTS) {
     if (norm.startsWith(root)) {
@@ -61,7 +76,8 @@ export function sanitizeBatchProbeRecord(record) {
   if (!record) return null;
   return {
     runId: record.runId,
-    itemIndex: record.itemIndex,
+    itemIndex: record.queueIndex ?? record.itemIndex,
+    itemId: record.itemId || `candidate_${record.fingerprintId}`,
     neutralId: `candidate:${record.fingerprintId || 'unknown'}`,
     fingerprintId: record.fingerprintId,
     candidateState: record.candidateState,
@@ -74,6 +90,7 @@ export function sanitizeBatchProbeRecord(record) {
     seekSuccess: !!record.seekSuccess,
     stallCount: record.stallCount || 0,
     error: record.error || null,
+    observationEvidence: record.observationEvidence || null,
     deviceContext: record.deviceContext ? {
       userAgent: record.deviceContext.userAgent || '',
       screenResolution: record.deviceContext.screenResolution || null
