@@ -278,8 +278,74 @@ describe('AV1 Batch Compatibility Probe Test Suite (Final Readiness Delta)', () 
     assert.equal(deniedResult.allowed, false, 'Production gate must fail closed');
   });
 
-  // 8. 600-line code structure guardrail verification
-  test('8. all modified and created source files strictly adhere to 600 physical lines limit', () => {
+  // 8. Cohort switching and multi-queue integrity
+  test('8. supports cohort queues (denied, admitted, derivatives, all) with appropriate streaming endpoints', async () => {
+    const pinRes = await simulateRequest('GET', '/api/batch-probe/auth/pin', null, {}, true, '127.0.0.1');
+    const pairRes = await simulateRequest('POST', '/api/batch-probe/auth/pair', { pin: pinRes.data.pin }, {}, true);
+    const cookieVal = pairRes.headers['set-cookie'].split(';')[0];
+
+    // Switch to admitted cohort
+    const admSwitch = await simulateRequest('POST', '/api/batch-probe/cohort', { cohort: 'admitted' }, { cookie: cookieVal });
+    assert.equal(admSwitch.statusCode, 200);
+    assert.equal(admSwitch.data.activeCohort, 'admitted');
+    assert.equal(admSwitch.data.total, 32);
+    assert.ok(admSwitch.data.queue.length === 32);
+    // Admitted items must use PRODUCTION_PLAYER stream type and /video?path=...
+    const firstAdm = admSwitch.data.queue[0];
+    assert.equal(firstAdm.cohort, 'admitted');
+    assert.equal(firstAdm.streamType, 'PRODUCTION_PLAYER');
+    assert.ok(firstAdm.streamUrl.startsWith('/video?path='));
+
+    // Switch to derivatives cohort
+    const derivSwitch = await simulateRequest('POST', '/api/batch-probe/cohort', { cohort: 'derivatives' }, { cookie: cookieVal });
+    assert.equal(derivSwitch.statusCode, 200);
+    assert.equal(derivSwitch.data.activeCohort, 'derivatives');
+    assert.equal(derivSwitch.data.total, 2);
+    const firstDeriv = derivSwitch.data.queue[0];
+    assert.equal(firstDeriv.cohort, 'derivatives');
+    assert.equal(firstDeriv.streamType, 'DERIVATIVE_DIAGNOSTIC');
+
+    // Switch to all cohort
+    const allSwitch = await simulateRequest('POST', '/api/batch-probe/cohort', { cohort: 'all' }, { cookie: cookieVal });
+    assert.equal(allSwitch.statusCode, 200);
+    assert.equal(allSwitch.data.activeCohort, 'all');
+    assert.equal(allSwitch.data.total, 90);
+
+    // Switch back to denied cohort
+    const deniedSwitch = await simulateRequest('POST', '/api/batch-probe/cohort', { cohort: 'denied' }, { cookie: cookieVal });
+    assert.equal(deniedSwitch.statusCode, 200);
+    assert.equal(deniedSwitch.data.activeCohort, 'denied');
+    assert.equal(deniedSwitch.data.total, 56);
+  });
+
+  // 9. Full 90-file reconciliation matrix summary
+  test('9. GET /api/batch-probe/summary delivers 90-file reconciliation matrix with cohort counts', async () => {
+    const pinRes = await simulateRequest('GET', '/api/batch-probe/auth/pin', null, {}, true, '127.0.0.1');
+    const pairRes = await simulateRequest('POST', '/api/batch-probe/auth/pair', { pin: pinRes.data.pin }, {}, true);
+    const cookieVal = pairRes.headers['set-cookie'].split(';')[0];
+
+    const sumRes = await simulateRequest('GET', '/api/batch-probe/summary', null, { cookie: cookieVal });
+    assert.equal(sumRes.statusCode, 200);
+    assert.equal(sumRes.data.totalFiles, 90);
+    assert.equal(sumRes.data.cohortCounts.denied, 56);
+    assert.equal(sumRes.data.cohortCounts.admitted, 32);
+    assert.equal(sumRes.data.cohortCounts.derivatives, 2);
+    assert.equal(sumRes.data.items.length, 90);
+
+    // Verify properties on items
+    for (const item of sumRes.data.items) {
+      assert.ok(item.neutralId, 'Must have neutralId');
+      assert.ok(item.fingerprintId, 'Must have fingerprintId');
+      assert.ok(['denied', 'admitted', 'derivatives'].includes(item.cohort), 'Must have valid cohort');
+      assert.ok(item.candidateState, 'Must have candidateState');
+      assert.ok(typeof item.physicalTested === 'boolean', 'Must have physicalTested boolean');
+      assert.ok(item.physicalVerdict, 'Must have physicalVerdict');
+      assert.ok(['ALLOWED', 'DENIED', 'NOT_TESTED'].includes(item.productionGateStatus), 'Must have productionGateStatus');
+    }
+  });
+
+  // 10. 600-line code structure guardrail verification
+  test('10. all modified and created source files strictly adhere to 600 physical lines limit', () => {
     const filesToCheck = [
       './batch-probe.html',
       './src/health/batch-probe-types.mjs',

@@ -28,6 +28,7 @@ export const BatchProbeVerdict = {
   MEDIA_ERROR: 'MEDIA_ERROR',
   TRANSPORT_ERROR: 'TRANSPORT_ERROR',
   AUTOPLAY_BLOCKED: 'AUTOPLAY_BLOCKED',
+  SERVER_ADMISSION_DENIED: 'SERVER_ADMISSION_DENIED',
   TIMEOUT_INCONCLUSIVE: 'TIMEOUT_INCONCLUSIVE',
   NOT_TESTED: 'NOT_TESTED'
 };
@@ -81,6 +82,9 @@ export function sanitizeBatchProbeRecord(record) {
     neutralId: `candidate:${record.fingerprintId || 'unknown'}`,
     fingerprintId: record.fingerprintId,
     candidateState: record.candidateState,
+    cohort: record.cohort || 'denied',
+    productionGateStatus: record.productionGateStatus || null,
+    productionPlayerVerified: record.productionPlayerVerified ?? null,
     verdict: record.verdict,
     sampleDurationSec: record.sampleDurationSec || null,
     videoWidth: record.videoWidth || null,

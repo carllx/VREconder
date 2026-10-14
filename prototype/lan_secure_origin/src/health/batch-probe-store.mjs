@@ -280,3 +280,106 @@ export function saveBatchCheckpoint(cp, baseDir = DEFAULT_DIR) {
   fs.renameSync(tmp, checkpoint);
   return updated;
 }
+
+/**
+ * Synchronizes top-level execution metrics into cohort dictionary within checkpoint.
+ *
+ * @param {object} cp
+ * @returns {object}
+ */
+export function syncActiveCohortToCheckpoint(cp) {
+  if (!cp) return cp;
+  if (!cp.cohorts) cp.cohorts = {};
+  const activeCohort = cp.activeCohort || 'denied';
+  cp.cohorts[activeCohort] = {
+    runId: cp.runId,
+    status: cp.status,
+    cursor: cp.cursor || 0,
+    totalQueue: cp.totalQueue || 0,
+    completedCount: cp.completedCount || 0,
+    passCount: cp.passCount || 0,
+    failCount: cp.failCount || 0,
+    inconclusiveCount: cp.inconclusiveCount || 0,
+    candidatesHash: cp.candidatesHash || null,
+    lastTestedItem: cp.lastTestedItem || null
+  };
+  return cp;
+}
+
+/**
+ * Switches the active batch probe cohort safely while preserving prior cohort run state.
+ *
+ * @param {object} cp
+ * @param {string} targetCohort 'denied' | 'admitted' | 'derivatives' | 'all'
+ * @param {number} [queueLength]
+ * @param {string} [candidatesHash]
+ * @param {string} [baseDir]
+ * @returns {object}
+ */
+export function switchBatchCohort(cp, targetCohort, queueLength = 0, candidatesHash = null, baseDir = DEFAULT_DIR) {
+  if (!cp) return cp;
+  if (!cp.cohorts) {
+    cp.cohorts = {};
+    const cur = cp.activeCohort || 'denied';
+    cp.cohorts[cur] = {
+      runId: cp.runId,
+      status: cp.status || 'IDLE',
+      cursor: cp.cursor || 0,
+      totalQueue: cp.totalQueue || 0,
+      completedCount: cp.completedCount || 0,
+      passCount: cp.passCount || 0,
+      failCount: cp.failCount || 0,
+      inconclusiveCount: cp.inconclusiveCount || 0,
+      candidatesHash: cp.candidatesHash || null,
+      lastTestedItem: cp.lastTestedItem || null
+    };
+  }
+
+  // Save current active cohort state
+  if (cp.activeCohort) {
+    cp.cohorts[cp.activeCohort] = {
+      runId: cp.runId,
+      status: cp.status,
+      cursor: cp.cursor || 0,
+      totalQueue: cp.totalQueue || 0,
+      completedCount: cp.completedCount || 0,
+      passCount: cp.passCount || 0,
+      failCount: cp.failCount || 0,
+      inconclusiveCount: cp.inconclusiveCount || 0,
+      candidatesHash: cp.candidatesHash || null,
+      lastTestedItem: cp.lastTestedItem || null
+    };
+  }
+
+  cp.activeCohort = targetCohort;
+
+  if (!cp.cohorts[targetCohort]) {
+    cp.cohorts[targetCohort] = {
+      runId: targetCohort === 'denied' && cp.runId ? cp.runId : `run_${targetCohort}_${Date.now()}`,
+      status: 'IDLE',
+      cursor: 0,
+      totalQueue: queueLength || 0,
+      completedCount: 0,
+      passCount: 0,
+      failCount: 0,
+      inconclusiveCount: 0,
+      candidatesHash: candidatesHash || null,
+      lastTestedItem: null
+    };
+  }
+
+  const target = cp.cohorts[targetCohort];
+  cp.runId = target.runId;
+  cp.status = target.status;
+  cp.cursor = target.cursor;
+  cp.totalQueue = queueLength || target.totalQueue;
+  cp.completedCount = target.completedCount;
+  cp.passCount = target.passCount;
+  cp.failCount = target.failCount;
+  cp.inconclusiveCount = target.inconclusiveCount;
+  cp.candidatesHash = candidatesHash || target.candidatesHash;
+  cp.lastTestedItem = target.lastTestedItem;
+
+  saveBatchCheckpoint(cp, baseDir);
+  return cp;
+}

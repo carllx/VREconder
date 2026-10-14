@@ -14,7 +14,7 @@ import {
   computeCandidatesHash,
   BATCH_PROBE_POLICY_VERSION
 } from './batch-probe-types.mjs';
-import { loadBatchRegistryForRun, loadBatchCheckpoint } from './batch-probe-store.mjs';
+import { loadBatchRegistryForRun, loadBatchRegistryRecords, loadBatchCheckpoint } from './batch-probe-store.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -27,11 +27,13 @@ const PROTOTYPE_DIR = path.resolve(__dirname, '..', '..');
  * @param {string} [options.targetDir] Custom directory (defaults to active media root)
  * @param {string} [options.prototypeDir]
  * @param {string} [options.runId]
+ * @param {string} [options.cohort] 'denied' | 'admitted' | 'derivatives' | 'all'
  * @returns {Promise<object>}
  */
 export async function buildBatchCandidateQueue(options = {}) {
   const targetDir = options.targetDir || getActiveMediaRoot();
   const prototypeDir = options.prototypeDir || PROTOTYPE_DIR;
+  const cohort = options.cohort || 'denied';
 
   if (!targetDir || !fs.existsSync(targetDir)) {
     throw new Error(`Target media directory not found: ${targetDir}`);
@@ -48,6 +50,8 @@ export async function buildBatchCandidateQueue(options = {}) {
   const activeCp = loadBatchCheckpoint(prototypeDir);
   const activeRunId = options.runId || activeCp.runId;
   const currentRunRecords = loadBatchRegistryForRun(activeRunId, prototypeDir);
+  const allRegistryRecords = loadBatchRegistryRecords(prototypeDir);
+
   const runRecordsMap = new Map();
   for (const r of currentRunRecords) {
     if (r && r.fingerprintId) {
@@ -56,8 +60,14 @@ export async function buildBatchCandidateQueue(options = {}) {
     }
   }
 
+  const registryFpsMap = new Map();
+  for (const r of allRegistryRecords) {
+    if (r && r.fingerprintId) registryFpsMap.set(r.fingerprintId, r);
+  }
+
   const inventory = {
     targetDir,
+    cohort,
     candidatesHash: '',
     totalDiscovered: videoFiles.length,
     counts: {
@@ -70,107 +80,125 @@ export async function buildBatchCandidateQueue(options = {}) {
     },
     items: [],
     queue: [],
-    itemMap: new Map() // itemId -> item
+    itemMap: new Map(),
+    allItemMap: new Map()
   };
 
-  let queueIndex = 0;
-  const candidateFps = [];
+  const discoveredItems = [];
 
   for (const filePath of videoFiles) {
     if (!fs.existsSync(filePath)) {
       inventory.counts.MISSING++;
-      inventory.items.push({
-        filePath,
-        neutralId: path.basename(filePath),
-        state: CandidateState.MISSING,
-        reason: 'File missing on disk'
-      });
       continue;
     }
 
     const fp = getMediaFingerprint(filePath);
     if (!fp) {
       inventory.counts.UNREADABLE++;
-      inventory.items.push({
-        filePath,
-        neutralId: path.basename(filePath),
-        state: CandidateState.UNREADABLE,
-        reason: 'Failed to compute file fingerprint'
-      });
       continue;
     }
 
     const neutralId = getProbeNeutralId(filePath, fp.fingerprintId);
-
-    if (isDerivativeFile(filePath)) {
-      inventory.counts.DERIVATIVE_EXCLUDED++;
-      inventory.items.push({
-        filePath,
-        neutralId,
-        fingerprintId: fp.fingerprintId,
-        sizeBytes: fp.sizeBytes,
-        state: CandidateState.DERIVATIVE_EXCLUDED,
-        reason: 'Matches derivative / test file pattern'
-      });
-      continue;
-    }
-
+    const relPath = path.relative(targetDir, filePath).replace(/\\/g, '/');
     const cachedFacts = factsMap.get(fp.fingerprintId);
-    const decision = await preflightIncomingMedia(filePath, {
-      facts: cachedFacts,
-      provisionalAdmissionStore: provisionalStore
-    });
+    const isDeriv = isDerivativeFile(filePath);
 
-    if (decision.mayPromoteToVrReady) {
-      inventory.counts.ALREADY_ADMITTED++;
-      inventory.items.push({
-        filePath,
-        neutralId,
-        fingerprintId: fp.fingerprintId,
-        sizeBytes: fp.sizeBytes,
-        state: CandidateState.ALREADY_ADMITTED,
-        classification: decision.classification,
-        matchedEnvelopeId: decision.matchedEnvelopeId,
-        reason: decision.reason
+    let state = CandidateState.POLICY_DENIED_CANDIDATE;
+    let fileCohort = 'denied';
+    let streamType = 'DIRECT_DIAGNOSTIC';
+    let decision = null;
+
+    if (isDeriv) {
+      state = CandidateState.DERIVATIVE_EXCLUDED;
+      fileCohort = 'derivatives';
+      streamType = 'DERIVATIVE_DIAGNOSTIC';
+      inventory.counts.DERIVATIVE_EXCLUDED++;
+    } else {
+      decision = await preflightIncomingMedia(filePath, {
+        facts: cachedFacts,
+        provisionalAdmissionStore: provisionalStore
       });
-      continue;
+      if (decision.mayPromoteToVrReady) {
+        state = CandidateState.ALREADY_ADMITTED;
+        fileCohort = 'admitted';
+        streamType = 'PRODUCTION_PLAYER';
+        inventory.counts.ALREADY_ADMITTED++;
+      } else {
+        state = CandidateState.POLICY_DENIED_CANDIDATE;
+        fileCohort = 'denied';
+        streamType = 'DIRECT_DIAGNOSTIC';
+        inventory.counts.POLICY_DENIED_CANDIDATE++;
+      }
     }
 
-    // Policy denied candidate (e.g. UNSUPPORTED_UNKNOWN_FIX)
-    const previousResult = runRecordsMap.get(`${queueIndex}_${fp.fingerprintId}`) || runRecordsMap.get(fp.fingerprintId);
-    const isTested = Boolean(previousResult && (!activeRunId || previousResult.runId === activeRunId));
-    if (isTested) {
-      inventory.counts.DEVICE_TESTED++;
-    }
-
-    inventory.counts.POLICY_DENIED_CANDIDATE++;
-    candidateFps.push(fp.fingerprintId);
-
-    const itemId = `probe_${queueIndex}_${fp.fingerprintId.substring(0, 8)}`;
-
-    const itemMeta = {
-      itemId,
-      queueIndex: queueIndex++,
-      filePath, // internal server only
+    discoveredItems.push({
+      filePath,
+      relPath,
       neutralId,
       fingerprintId: fp.fingerprintId,
       sizeBytes: fp.sizeBytes,
-      state: CandidateState.POLICY_DENIED_CANDIDATE,
-      classification: decision.classification,
-      reason: decision.reason,
-      codec: cachedFacts?.video?.codec || 'av1',
-      tag: cachedFacts?.video?.codecTag || 'av01',
+      state,
+      cohort: fileCohort,
+      streamType,
+      isDerivative: isDeriv,
+      classification: decision ? decision.classification : (isDeriv ? 'DERIVATIVE_EXCLUDED' : 'UNKNOWN'),
+      reason: decision ? decision.reason : (isDeriv ? 'Matches derivative / test file pattern' : null),
+      codec: cachedFacts?.video?.codec || (fileCohort === 'denied' ? 'av1' : 'unknown'),
+      tag: cachedFacts?.video?.codecTag || (fileCohort === 'denied' ? 'av01' : 'unknown'),
       dimensions: cachedFacts?.video ? `${cachedFacts.video.width}x${cachedFacts.video.height}` : 'unknown',
       rFps: cachedFacts?.video?.rFps || null,
-      avgFps: cachedFacts?.video?.avgFps || null,
+      avgFps: cachedFacts?.video?.avgFps || null
+    });
+  }
+
+  inventory.items = discoveredItems;
+
+  const cohortFilter = cohort === 'all'
+    ? () => true
+    : (it => it.cohort === cohort);
+
+  const selectedItems = discoveredItems.filter(cohortFilter);
+  const candidateFps = [];
+  let queueIndex = 0;
+
+  for (const item of selectedItems) {
+    candidateFps.push(item.fingerprintId);
+
+    const itemId = cohort === 'denied'
+      ? `probe_${queueIndex}_${item.fingerprintId.substring(0, 8)}`
+      : `${item.cohort}_${queueIndex}_${item.fingerprintId.substring(0, 8)}`;
+
+    const streamUrl = item.streamType === 'PRODUCTION_PLAYER'
+      ? `/video?path=${encodeURIComponent(item.relPath)}`
+      : `/api/batch-probe/video?itemId=${encodeURIComponent(itemId)}`;
+
+    const prevRunResult = runRecordsMap.get(`${queueIndex}_${item.fingerprintId}`) || runRecordsMap.get(item.fingerprintId);
+    const regResult = registryFpsMap.get(item.fingerprintId);
+    const isTested = Boolean(prevRunResult || regResult);
+    if (isTested) inventory.counts.DEVICE_TESTED++;
+
+    const itemMeta = {
+      ...item,
+      itemId,
+      queueIndex: queueIndex++,
+      streamUrl,
       isTested,
-      recordedVerdict: previousResult ? previousResult.verdict : BatchProbeVerdict.NOT_TESTED,
-      lastTestedAt: previousResult ? previousResult.timestamp : null
+      recordedVerdict: (prevRunResult || regResult)?.verdict || BatchProbeVerdict.NOT_TESTED,
+      lastTestedAt: (prevRunResult || regResult)?.timestamp || null
     };
 
-    inventory.items.push(itemMeta);
     inventory.queue.push(itemMeta);
     inventory.itemMap.set(itemId, itemMeta);
+  }
+
+  let allIdx = 0;
+  for (const item of discoveredItems) {
+    const probeId = `probe_${allIdx}_${item.fingerprintId.substring(0, 8)}`;
+    const cohortId = `${item.cohort}_${allIdx}_${item.fingerprintId.substring(0, 8)}`;
+    inventory.allItemMap.set(probeId, item);
+    inventory.allItemMap.set(cohortId, item);
+    inventory.allItemMap.set(item.fingerprintId, item);
+    allIdx++;
   }
 
   inventory.candidatesHash = computeCandidatesHash(candidateFps);
@@ -188,7 +216,12 @@ export function serializePublicBatchQueue(queue = []) {
     itemId: item.itemId,
     queueIndex: item.queueIndex,
     neutralId: item.neutralId,
+    relPath: item.relPath,
     fingerprintId: item.fingerprintId,
+    cohort: item.cohort,
+    streamType: item.streamType,
+    streamUrl: item.streamUrl,
+    isDerivative: !!item.isDerivative,
     sizeBytes: item.sizeBytes,
     state: item.state,
     classification: item.classification,
@@ -202,4 +235,115 @@ export function serializePublicBatchQueue(queue = []) {
     recordedVerdict: item.recordedVerdict,
     lastTestedAt: item.lastTestedAt
   }));
+}
+
+/**
+ * Builds full 90-file reconciliation matrix comparing static discovery with physical test evidence.
+ *
+ * @param {string} [prototypeDir]
+ * @param {object} [cp]
+ * @param {string} [targetDir]
+ * @returns {Promise<object>}
+ */
+export async function build90FileReconciliationMatrix(prototypeDir = PROTOTYPE_DIR, cp = null, targetDir = null) {
+  const mediaRoot = targetDir || getActiveMediaRoot();
+  const inventory = await buildBatchCandidateQueue({ prototypeDir, targetDir: mediaRoot, cohort: 'all' });
+  const allRegistryRecords = loadBatchRegistryRecords(prototypeDir);
+
+  const regByFp = new Map();
+  for (const r of allRegistryRecords) {
+    if (r && r.fingerprintId) {
+      regByFp.set(r.fingerprintId, r);
+    }
+  }
+
+  const items = [];
+  const stats = {
+    totalFiles: inventory.items.length,
+    nativeTested: 0,
+    nativePass: 0,
+    nativeFail: 0,
+    untested: 0,
+    productionAllowed: 0,
+    productionDenied: 0,
+    productionVerified: 0
+  };
+
+  const cohortCounts = {
+    denied: 0,
+    admitted: 0,
+    derivatives: 0
+  };
+
+  for (const item of inventory.items) {
+    if (item.cohort && cohortCounts[item.cohort] !== undefined) {
+      cohortCounts[item.cohort]++;
+    }
+
+    const rec = regByFp.get(item.fingerprintId) || null;
+    const physicalTested = Boolean(rec);
+    const physicalVerdict = rec ? rec.verdict : BatchProbeVerdict.NOT_TESTED;
+
+    let productionGateStatus = 'NOT_TESTED';
+    let productionPlayerVerified = null;
+
+    if (item.cohort === 'admitted') {
+      productionGateStatus = 'ALLOWED';
+      if (rec && rec.productionPlayerVerified !== undefined && rec.productionPlayerVerified !== null) {
+        productionPlayerVerified = rec.productionPlayerVerified;
+      } else if (rec && rec.verdict === BatchProbeVerdict.NATIVE_SAMPLE_PASS) {
+        productionPlayerVerified = true;
+      }
+    } else {
+      productionGateStatus = 'DENIED';
+      productionPlayerVerified = false;
+    }
+
+    if (rec && rec.productionGateStatus) {
+      productionGateStatus = rec.productionGateStatus;
+    }
+
+    if (physicalTested) {
+      stats.nativeTested++;
+      if (physicalVerdict === BatchProbeVerdict.NATIVE_SAMPLE_PASS) stats.nativePass++;
+      else stats.nativeFail++;
+    } else {
+      stats.untested++;
+    }
+
+    if (productionGateStatus === 'ALLOWED') stats.productionAllowed++;
+    else if (productionGateStatus === 'DENIED') stats.productionDenied++;
+
+    if (productionPlayerVerified === true) stats.productionVerified++;
+
+    items.push({
+      neutralId: item.neutralId,
+      relPath: item.relPath,
+      fingerprintId: item.fingerprintId,
+      cohort: item.cohort,
+      candidateState: item.state,
+      codec: item.codec,
+      tag: item.tag,
+      dimensions: item.dimensions,
+      isDerivative: !!item.isDerivative,
+      physicalTested,
+      physicalVerdict,
+      productionGateStatus,
+      productionPlayerVerified,
+      seekSuccess: rec ? (rec.seekSuccess ?? null) : null,
+      rvfcCount: rec ? (rec.rvfcCount ?? null) : null,
+      lastTestedAt: rec ? (rec.timestamp || rec.testedAt || null) : null,
+      testedRunId: rec ? (rec.runId || null) : null
+    });
+  }
+
+  return {
+    policyVersion: BATCH_PROBE_POLICY_VERSION,
+    activeCohort: cp ? (cp.activeCohort || 'denied') : 'denied',
+    checkpoint: cp || loadBatchCheckpoint(prototypeDir),
+    stats,
+    cohortCounts,
+    totalFiles: items.length,
+    items
+  };
 }

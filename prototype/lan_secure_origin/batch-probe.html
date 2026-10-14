@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-  <title>VREconder - AV1 Compatibility Batch Probe</title>
+  <title>VREconder - 90-File Media Compatibility Batch Probe</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { background: #090d16; color: #f8fafc; font-family: -apple-system, BlinkMacSystemFont, monospace; padding: 12px; line-height: 1.4; }
@@ -17,6 +17,8 @@
     .btn-primary { background: #0284c7; border-color: #38bdf8; }
     .btn-action { background: #059669; border-color: #34d399; }
     .btn-pause { background: #d97706; border-color: #fbbf24; }
+    .tab-btn { background: #1e293b; color: #94a3b8; border: 1px solid #334155; padding: 6px 10px; border-radius: 6px; font-size: 0.76rem; font-weight: 600; cursor: pointer; }
+    .tab-btn.active { background: #0284c7; color: #fff; border-color: #38bdf8; }
     .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
     @media (max-width: 600px) { .stats-grid { grid-template-columns: repeat(2, 1fr); } }
     .stat-box { background: #0b1120; border: 1px solid #1e293b; border-radius: 6px; padding: 6px 8px; text-align: center; }
@@ -32,21 +34,33 @@
     .badge-warn { background: rgba(245, 158, 11, 0.2); color: #fbbf24; }
     .badge-info { background: rgba(56, 189, 248, 0.2); color: #38bdf8; }
     .badge-pending { background: #334155; color: #94a3b8; }
-    .trace-box { max-height: 200px; overflow-y: auto; font-size: 0.72rem; background: #0b1120; padding: 6px 8px; border-radius: 6px; border: 1px solid #1e293b; }
+    .trace-box { max-height: 180px; overflow-y: auto; font-size: 0.72rem; background: #0b1120; padding: 6px 8px; border-radius: 6px; border: 1px solid #1e293b; }
     .trace-item { padding: 3px 0; border-bottom: 1px solid #1e293b; display: flex; justify-content: space-between; gap: 6px; }
+    .summary-table { width: 100%; border-collapse: collapse; font-size: 0.7rem; margin-top: 8px; }
+    .summary-table th, .summary-table td { border: 1px solid #243048; padding: 4px 6px; text-align: left; }
+    .summary-table th { background: #1e293b; color: #38bdf8; }
   </style>
 </head>
 <body>
-  <h1><span>🔬</span> AV1 Batch Compatibility Probe</h1>
-  <div class="subtitle">iPhone Safari 物理硬件解码批测 (Dual Windows + Advancing Seek)</div>
+  <h1><span>🔬</span> VREconder 90-File Media Probe</h1>
+  <div class="subtitle">iPhone Safari 真实硬件解码批测与生产播放器对账</div>
 
-  <!-- Pairing Card (Shown if not paired) -->
   <div id="cardPairing" class="card" style="display:none; border-color:#38bdf8;">
     <div style="font-size:0.85rem; font-weight:bold; color:#38bdf8; margin-bottom:6px;">🔐 设备配对 (HTTPS Device Pairing)</div>
     <div style="font-size:0.75rem; color:#94a3b8; margin-bottom:8px;">请输入 PC 控制台显示的 6 位配对码以建立加密会话：</div>
     <div style="display:flex; gap:8px;">
       <input id="txtPin" type="number" placeholder="6 位 PIN" style="width:120px; text-align:center;">
       <button class="btn-primary" onclick="submitPairing()">配对并解锁</button>
+    </div>
+  </div>
+
+  <div class="card" style="padding: 8px 10px;">
+    <div style="display:flex; gap:6px; flex-wrap:wrap; align-items:center;">
+      <button id="tabDenied" class="tab-btn active" onclick="switchCohort('denied')">56 拒播候选</button>
+      <button id="tabAdmitted" class="tab-btn" onclick="switchCohort('admitted')">32 已准入</button>
+      <button id="tabDerivatives" class="tab-btn" onclick="switchCohort('derivatives')">2 衍生品</button>
+      <button id="tabAll" class="tab-btn" onclick="switchCohort('all')">全部 90</button>
+      <button id="btnToggleSummary" style="margin-left:auto; background:#334155; font-size:0.75rem;" onclick="toggleSummary()">📊 90 部对账报告</button>
     </div>
   </div>
 
@@ -69,10 +83,24 @@
     <video id="probeVideo" playsinline webkit-playsinline muted preload="auto"></video>
     <div class="video-info">
       <div><b>当前测试:</b> <span id="lblItemName" style="color:#f8fafc;">None</span></div>
-      <div>分辨率: <b id="lblDimensions">--</b> | 时长: <span id="lblDuration">0s</span></div>
-      <div>W1 帧: <b id="lblW1Frames" style="color:#38bdf8;">0</b> | W2 帧: <b id="lblW2Frames" style="color:#a855f7;">0</b></div>
-      <div>媒体时间: <span id="lblMediaTime">0.0s</span> | Ready: <span id="lblReady">0</span></div>
-      <div>当前状态: <span id="lblVerdict" class="badge badge-pending">IDLE</span></div>
+      <div>分组: <b id="lblCohort" style="color:#38bdf8;">--</b> | 流类型: <span id="lblStreamType">--</span></div>
+      <div>分辨率: <b id="lblDimensions">--</b> | W1: <b id="lblW1Frames" style="color:#38bdf8;">0</b> | W2: <b id="lblW2Frames" style="color:#a855f7;">0</b></div>
+      <div>媒体时间: <span id="lblMediaTime">0.0s</span> | Gate: <span id="lblGate" class="badge badge-pending">--</span></div>
+      <div>实机判定: <span id="lblVerdict" class="badge badge-pending">IDLE</span></div>
+    </div>
+  </div>
+
+  <div id="cardSummary" class="card" style="display:none;">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+      <span style="font-size:0.85rem; font-weight:bold; color:#38bdf8;">📊 90 部媒体全量对账矩阵</span>
+      <button style="padding:2px 8px; font-size:0.7rem;" onclick="refreshSummary()">刷新</button>
+    </div>
+    <div id="summaryStats" style="font-size:0.75rem; color:#94a3b8; margin-bottom:8px;"></div>
+    <div style="max-height: 220px; overflow-y:auto;">
+      <table class="summary-table">
+        <thead><tr><th>项目</th><th>分组</th><th>静态准入</th><th>原生解码</th><th>生产验证</th></tr></thead>
+        <tbody id="summaryTableBody"></tbody>
+      </table>
     </div>
   </div>
 
@@ -82,20 +110,29 @@
   </div>
 
   <script>
-    let queue = [], currentIndex = 0, isRunning = false, currentToken = 0, currentRunId = '';
+    let queue = [], currentIndex = 0, isRunning = false, currentToken = 0, currentRunId = '', currentCohort = 'denied';
     let activeProbeAborter = null;
-    const video = document.getElementById('probeVideo');
-    const cardPairing = document.getElementById('cardPairing'), txtPin = document.getElementById('txtPin');
+    const video = document.getElementById('probeVideo'), cardPairing = document.getElementById('cardPairing'), txtPin = document.getElementById('txtPin');
     const btnStart = document.getElementById('btnStart'), btnResume = document.getElementById('btnResume'), btnPause = document.getElementById('btnPause');
     const valProgress = document.getElementById('valProgress'), valPass = document.getElementById('valPass'), valFail = document.getElementById('valFail'), valRemaining = document.getElementById('valRemaining');
-    const lblItemName = document.getElementById('lblItemName'), lblDimensions = document.getElementById('lblDimensions'), lblDuration = document.getElementById('lblDuration');
-    const lblW1Frames = document.getElementById('lblW1Frames'), lblW2Frames = document.getElementById('lblW2Frames'), lblMediaTime = document.getElementById('lblMediaTime'), lblReady = document.getElementById('lblReady'), lblVerdict = document.getElementById('lblVerdict'), traceLog = document.getElementById('traceLog');
+    const lblItemName = document.getElementById('lblItemName'), lblCohort = document.getElementById('lblCohort'), lblStreamType = document.getElementById('lblStreamType');
+    const lblDimensions = document.getElementById('lblDimensions'), lblW1Frames = document.getElementById('lblW1Frames'), lblW2Frames = document.getElementById('lblW2Frames');
+    const lblMediaTime = document.getElementById('lblMediaTime'), lblGate = document.getElementById('lblGate'), lblVerdict = document.getElementById('lblVerdict'), traceLog = document.getElementById('traceLog');
 
     function logTrace(msg, type = 'info') {
       const d = document.createElement('div');
       d.className = 'trace-item';
       d.innerHTML = `<span>[${new Date().toLocaleTimeString()}] ${msg}</span><span class="badge badge-${type}">${type.toUpperCase()}</span>`;
       traceLog.prepend(d);
+    }
+
+    function updateCohortTabsUI(cohort) {
+      ['tabDenied', 'tabAdmitted', 'tabDerivatives', 'tabAll'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.classList.remove('active');
+      });
+      const map = { denied: 'tabDenied', admitted: 'tabAdmitted', derivatives: 'tabDerivatives', all: 'tabAll' };
+      if (map[cohort]) document.getElementById(map[cohort])?.classList.add('active');
     }
 
     async function initHarness() {
@@ -111,15 +148,17 @@
 
         cardPairing.style.display = 'none';
         btnStart.disabled = false; btnResume.disabled = false;
-        logTrace('✅ 设备已通过安全验证，加载批测队列...', 'ok');
+        logTrace('✅ 设备已通过安全验证，加载当前队列...', 'ok');
 
         const queueRes = await fetch('/api/batch-probe/queue').then(r => r.json());
         queue = queueRes.queue || [];
         currentIndex = queueRes.cursor || 0;
         currentRunId = queueRes.runId || '';
+        currentCohort = queueRes.activeCohort || 'denied';
+        updateCohortTabsUI(currentCohort);
 
         updateStats(statusRes.checkpoint);
-        logTrace(`会话建立: 共 ${queue.length} 个候选项目, 游标=${currentIndex}`, 'info');
+        logTrace(`会话建立: 分组 [${currentCohort}], 共 ${queue.length} 项, 游标=${currentIndex}`, 'info');
         if (statusRes.checkpoint && statusRes.checkpoint.status === 'RUNNING') {
           logTrace('检测到进行中的测试批次，点击 Resume 继续', 'warn');
         }
@@ -141,9 +180,28 @@
         } else {
           logTrace(`❌ 配对失败: ${res.error}`, 'err');
         }
-      } catch (err) {
-        logTrace(`❌ 配对网络异常: ${err.message}`, 'err');
-      }
+      } catch (err) { logTrace(`❌ 配对网络异常: ${err.message}`, 'err'); }
+    }
+
+    async function switchCohort(cohortName) {
+      if (isRunning) { alert('请先暂停当前批测再切换分组'); return; }
+      try {
+        logTrace(`切换队列分组至: ${cohortName}...`, 'info');
+        const res = await fetch('/api/batch-probe/cohort', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ cohort: cohortName })
+        }).then(r => r.json());
+        if (!res.ok) throw new Error(res.error || 'Switch failed');
+
+        currentCohort = res.activeCohort;
+        queue = res.queue || [];
+        currentIndex = res.checkpoint.cursor || 0;
+        currentRunId = res.checkpoint.runId || '';
+        updateCohortTabsUI(currentCohort);
+        updateStats(res.checkpoint);
+        logTrace(`分组切换完成: [${currentCohort}], 游标=${currentIndex}/${queue.length}`, 'ok');
+      } catch (err) { logTrace(`切换分组失败: ${err.message}`, 'err'); }
     }
 
     function updateStats(cp) {
@@ -167,7 +225,7 @@
       isRunning = true;
       btnStart.disabled = true; btnResume.disabled = true; btnPause.disabled = false;
       await sendControl('start');
-      logTrace('🚀 启动 iPhone 硬件解码批量测试队列...', 'info');
+      logTrace(`🚀 启动 [${currentCohort}] 批测队列...`, 'info');
       runNextItem();
     }
 
@@ -185,10 +243,7 @@
       isRunning = false;
       currentToken++;
       btnStart.disabled = false; btnResume.disabled = false; btnPause.disabled = true;
-      if (activeProbeAborter) {
-        activeProbeAborter('USER_PAUSE');
-        activeProbeAborter = null;
-      }
+      if (activeProbeAborter) { activeProbeAborter('USER_PAUSE'); activeProbeAborter = null; }
       await sendControl('pause');
       logTrace('⏸️ 批测队列已暂停并释放解码资源', 'warn');
     }
@@ -198,7 +253,7 @@
       if (currentIndex >= queue.length) {
         isRunning = false;
         btnStart.disabled = false; btnResume.disabled = true; btnPause.disabled = true;
-        logTrace('🎉 所有候选文件硬件解码批测全部完成！', 'ok');
+        logTrace(`🎉 分组 [${currentCohort}] 全部测完！`, 'ok');
         lblVerdict.textContent = 'COMPLETED'; lblVerdict.className = 'badge badge-ok';
         return;
       }
@@ -208,10 +263,13 @@
       const token = currentToken;
 
       lblItemName.textContent = item.neutralId;
+      lblCohort.textContent = item.cohort || currentCohort;
+      lblStreamType.textContent = item.streamType;
       lblDimensions.textContent = item.dimensions || '--';
-      lblDuration.textContent = '0s'; lblW1Frames.textContent = '0'; lblW2Frames.textContent = '0';
-      lblMediaTime.textContent = '0.0s'; lblVerdict.textContent = 'PROBING...'; lblVerdict.className = 'badge badge-info';
-      logTrace(`[#${currentIndex + 1}/${queue.length}] 探测: ${item.neutralId}`, 'info');
+      lblW1Frames.textContent = '0'; lblW2Frames.textContent = '0';
+      lblMediaTime.textContent = '0.0s'; lblGate.textContent = '--'; lblGate.className = 'badge badge-pending';
+      lblVerdict.textContent = 'PROBING...'; lblVerdict.className = 'badge badge-info';
+      logTrace(`[#${currentIndex + 1}/${queue.length}] 测试 (${item.cohort}): ${item.neutralId}`, 'info');
 
       try {
         let result = await probeSampleWithDualWindows(item, token, 15000);
@@ -234,6 +292,7 @@
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             runId: currentRunId, queueIndex: currentIndex, itemId: item.itemId, fingerprintId: item.fingerprintId,
+            cohort: item.cohort, productionGateStatus: result.productionGateStatus, productionPlayerVerified: result.productionPlayerVerified,
             generation: token, verdict: result.verdict, videoWidth: result.videoWidth, videoHeight: result.videoHeight,
             rvfcCount: result.totalRvfcCount, sampleDurationSec: result.sampleDurationSec, seekCount: result.seekAttempted ? 1 : 0,
             seekSuccess: result.seekSuccess, seekDetails: result.seekDetails, stallCount: result.stallCount,
@@ -273,27 +332,33 @@
 
         activeProbeAborter = (reason) => {
           if (resolved) return;
-          resolved = true;
-          cleanup();
+          resolved = true; cleanup();
           resolve({ aborted: true, reason });
         };
 
         function finish(verdict, err = null) {
           if (resolved) return;
-          resolved = true;
-          activeProbeAborter = null;
+          resolved = true; activeProbeAborter = null;
           const capturedWidth = video.videoWidth || 0, capturedHeight = video.videoHeight || 0;
           const capturedReady = video.readyState, capturedNet = video.networkState;
           const elapsedMs = Date.now() - startTime, sampleDurationSec = Number((video.currentTime || 0).toFixed(2));
           cleanup();
+
+          let productionGateStatus = item.streamType === 'PRODUCTION_PLAYER' ? 'ALLOWED' : (item.cohort === 'admitted' ? 'ALLOWED' : 'DENIED');
+          let productionPlayerVerified = item.streamType === 'PRODUCTION_PLAYER' ? (verdict === 'NATIVE_SAMPLE_PASS') : null;
+          if (err && err.productionGateStatus) productionGateStatus = err.productionGateStatus;
+          if (err && err.productionPlayerVerified !== undefined) productionPlayerVerified = err.productionPlayerVerified;
+
           lblVerdict.textContent = verdict;
           lblVerdict.className = (verdict === 'NATIVE_SAMPLE_PASS') ? 'badge badge-ok' : 'badge badge-err';
+          lblGate.textContent = productionGateStatus;
+          lblGate.className = productionGateStatus === 'ALLOWED' ? 'badge badge-ok' : 'badge badge-err';
+
           resolve({
-            aborted: false, verdict, videoWidth: capturedWidth, videoHeight: capturedHeight, totalRvfcCount: w1Frames + w2Frames,
-            sampleDurationSec, seekAttempted, seekSuccess,
+            aborted: false, verdict, productionGateStatus, productionPlayerVerified, videoWidth: capturedWidth, videoHeight: capturedHeight,
+            totalRvfcCount: w1Frames + w2Frames, sampleDurationSec, seekAttempted, seekSuccess,
             seekDetails: seekAttempted ? { targetSec: seekTargetSec, seekApiLatMs: seekApiLatencyMs, seekFirstFrameLatMs, postSeekFrames: w2Frames } : null,
-            stallCount,
-            observationEvidence: {
+            stallCount, observationEvidence: {
               window1Frames: w1Frames, window1MediaDelta: w1StartMediaTime >= 0 ? Number((w1LastMediaTime - w1StartMediaTime).toFixed(3)) : 0,
               window2Frames: w2Frames, window2MediaDelta: w2StartMediaTime >= 0 ? Number((w2LastMediaTime - w2StartMediaTime).toFixed(3)) : 0,
               presentedFramesAdvanced: true
@@ -305,8 +370,7 @@
         function onVideoFrame(now, metadata) {
           if (resolved || token !== currentToken) return;
           if (typeof metadata?.mediaTime !== 'number' || typeof metadata?.presentedFrames !== 'number') return;
-          const mTime = metadata.mediaTime;
-          const pFrames = metadata.presentedFrames;
+          const mTime = metadata.mediaTime, pFrames = metadata.presentedFrames;
           lblMediaTime.textContent = `${mTime.toFixed(2)}s`;
 
           if (phase === 'INIT' || phase === 'W1_PLAYING') {
@@ -338,8 +402,6 @@
         const onEvent = (e) => {
           if (resolved || token !== currentToken) return;
           lblDimensions.textContent = video.videoWidth ? `${video.videoWidth} × ${video.videoHeight}` : '--';
-          lblDuration.textContent = video.duration ? `${video.duration.toFixed(1)}s` : '0s';
-          lblReady.textContent = String(video.readyState);
           if (e.type === 'seeked' && phase === 'SEEKING') {
             seekApiFired = true; seekApiLatencyMs = Number((performance.now() - seekStartTime).toFixed(1));
           } else if (e.type === 'waiting' || e.type === 'stalled') {
@@ -359,28 +421,79 @@
             const totalFrames = w1Frames + w2Frames;
             const w1Delta = w1StartMediaTime >= 0 ? (w1LastMediaTime - w1StartMediaTime) : 0;
             const w2Delta = w2StartMediaTime >= 0 ? (w2LastMediaTime - w2StartMediaTime) : 0;
-            if (totalFrames === 0) {
-              finish(stallCount > 0 ? 'PLAYBACK_STALLED' : 'TIMEOUT_INCONCLUSIVE', { message: 'Timed out waiting for initial frame' });
-            } else if (w1Frames <= 1 || w1Delta < 0.1) {
-              finish('FIRST_FRAME_ONLY', { message: `Frozen on initial frame (frames=${w1Frames})` });
-            } else if (seekAttempted && (!seekSuccess || w2Frames < 5 || w2Delta < 0.2)) {
-              finish('SEEK_FAILED', { message: `Seek failed to advance frames (postSeekFrames=${w2Frames})` });
-            } else if (stallCount > 0) {
-              finish('PLAYBACK_STALLED', { message: `Playback stalled (w1Frames=${w1Frames}, w2Frames=${w2Frames})` });
-            } else {
-              finish('TIMEOUT_INCONCLUSIVE', { message: 'Timed out before observation window completion' });
-            }
+            if (totalFrames === 0) finish(stallCount > 0 ? 'PLAYBACK_STALLED' : 'TIMEOUT_INCONCLUSIVE', { message: 'Timed out waiting for initial frame' });
+            else if (w1Frames <= 1 || w1Delta < 0.1) finish('FIRST_FRAME_ONLY', { message: `Frozen on initial frame (frames=${w1Frames})` });
+            else if (seekAttempted && (!seekSuccess || w2Frames < 5 || w2Delta < 0.2)) finish('SEEK_FAILED', { message: `Seek failed to advance frames (postSeekFrames=${w2Frames})` });
+            else if (stallCount > 0) finish('PLAYBACK_STALLED', { message: `Playback stalled (w1Frames=${w1Frames}, w2Frames=${w2Frames})` });
+            else finish('TIMEOUT_INCONCLUSIVE', { message: 'Timed out before observation window completion' });
           }
         }, timeoutMs);
 
-        // Opaque streaming endpoint - cookie authorizes access, NO token in query string
-        video.src = `/api/batch-probe/video?itemId=${encodeURIComponent(item.itemId)}`;
-        video.load();
-        const p = video.play();
-        if (p !== undefined) {
-          p.catch(err => { if (err && err.name === 'NotAllowedError') finish('AUTOPLAY_BLOCKED', { code: err.name, message: err.message }); });
+        function startVideoPlayback(streamSrc) {
+          video.src = streamSrc;
+          video.load();
+          const p = video.play();
+          if (p !== undefined) {
+            p.catch(err => { if (err && err.name === 'NotAllowedError') finish('AUTOPLAY_BLOCKED', { code: err.name, message: err.message }); });
+          }
+        }
+
+        // Preflight Range 206 for production /video route
+        if (item.streamType === 'PRODUCTION_PLAYER') {
+          phase = 'PREFLIGHT';
+          lblGate.textContent = 'CHECK_RANGE'; lblGate.className = 'badge badge-warn';
+          const targetUrl = item.streamUrl || `/video?path=${encodeURIComponent(item.relPath)}`;
+          fetch(targetUrl, { method: 'GET', headers: { 'Range': 'bytes=0-1024' } }).then(preRes => {
+            if (resolved || token !== currentToken) return;
+            if (preRes.status === 403) {
+              finish('SERVER_ADMISSION_DENIED', { message: 'Admission gate denied playback (403)', productionGateStatus: 'DENIED', productionPlayerVerified: false });
+              return;
+            }
+            if (preRes.status !== 206 && preRes.status !== 200) {
+              finish('TRANSPORT_ERROR', { message: `Server HTTP ${preRes.status}`, productionGateStatus: 'ERROR', productionPlayerVerified: false });
+              return;
+            }
+            lblGate.textContent = 'ALLOWED'; lblGate.className = 'badge badge-ok';
+            startVideoPlayback(targetUrl);
+          }).catch(netErr => {
+            if (!resolved && token === currentToken) {
+              finish('TRANSPORT_ERROR', { message: `Range request error: ${netErr.message}`, productionGateStatus: 'ERROR', productionPlayerVerified: false });
+            }
+          });
+        } else {
+          startVideoPlayback(item.streamUrl || `/api/batch-probe/video?itemId=${encodeURIComponent(item.itemId)}`);
         }
       });
+    }
+
+    async function toggleSummary() {
+      const el = document.getElementById('cardSummary');
+      if (el.style.display === 'none') {
+        el.style.display = 'block';
+        refreshSummary();
+      } else {
+        el.style.display = 'none';
+      }
+    }
+
+    async function refreshSummary() {
+      try {
+        const sum = await fetch('/api/batch-probe/summary').then(r => r.json());
+        const statsEl = document.getElementById('summaryStats'), tbody = document.getElementById('summaryTableBody');
+        statsEl.innerHTML = `总文件数: <b>${sum.totalFiles}</b> | 原生已测: <b>${sum.stats.nativeTested}</b> (PASS: <b style="color:#34d399">${sum.stats.nativePass}</b>, FAIL: <b style="color:#f87171">${sum.stats.nativeFail}</b>, 未测: <b style="color:#fbbf24">${sum.stats.untested}</b>) | 生产放行: <b>${sum.stats.productionAllowed}</b> (实机验证通过: <b style="color:#34d399">${sum.stats.productionVerified}</b>)`;
+
+        tbody.innerHTML = (sum.items || []).map(it => `
+          <tr>
+            <td style="max-width:180px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${it.neutralId}">${it.neutralId.split('/').pop()}</td>
+            <td><span class="badge badge-info">${it.cohort}</span></td>
+            <td>${it.candidateState === 'ALREADY_ADMITTED' ? '<span class="badge badge-ok">ADMITTED</span>' : '<span class="badge badge-err">DENIED</span>'}</td>
+            <td>${it.physicalVerdict === 'NATIVE_SAMPLE_PASS' ? '<span class="badge badge-ok">PASS</span>' : (it.physicalVerdict === 'NOT_TESTED' ? '<span class="badge badge-pending">NOT_TESTED</span>' : `<span class="badge badge-err">${it.physicalVerdict}</span>`)}</td>
+            <td>${it.productionPlayerVerified ? '<span class="badge badge-ok">VERIFIED</span>' : (it.productionGateStatus === 'ALLOWED' ? '<span class="badge badge-warn">ALLOWED</span>' : '<span class="badge badge-err">DENIED</span>')}</td>
+          </tr>
+        `).join('');
+      } catch (err) {
+        logTrace(`获取全库对账失败: ${err.message}`, 'err');
+      }
     }
 
     document.addEventListener('visibilitychange', () => {

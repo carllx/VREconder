@@ -16,9 +16,15 @@ import {
   generateSessionToken,
   validateCheckpointIntegrity,
   getActivePairingPin,
-  verifyPairingPin
+  verifyPairingPin,
+  syncActiveCohortToCheckpoint,
+  switchBatchCohort
 } from './batch-probe-store.mjs';
-import { buildBatchCandidateQueue, serializePublicBatchQueue } from './batch-probe-queue.mjs';
+import {
+  buildBatchCandidateQueue,
+  serializePublicBatchQueue,
+  build90FileReconciliationMatrix
+} from './batch-probe-queue.mjs';
 import { getMediaFingerprint } from '../normalization/fingerprint.mjs';
 import { streamVideo } from '../media/video-streamer.mjs';
 import { resolveHealthMediaPath } from './media-health-router.mjs';
@@ -46,19 +52,14 @@ function isSessionAuthorized(req, cp) {
 }
 
 function ensureActiveSession(cp) {
-  if (!cp.runId) {
-    cp.runId = `run_${Date.now()}`;
-  }
-  if (!cp.sessionToken) {
-    cp.sessionToken = generateSessionToken();
-  }
+  if (!cp.runId) cp.runId = `run_${Date.now()}`;
+  if (!cp.sessionToken) cp.sessionToken = generateSessionToken();
   return cp;
 }
 
 function getCachedInventory(baseDir, activeRoot) {
   const inv = inventoryCacheByDir.get(baseDir);
-  if (inv && inv.targetDir === activeRoot) return inv;
-  return null;
+  return (inv && inv.targetDir === activeRoot) ? inv : null;
 }
 
 function setCachedInventory(baseDir, inv) {
@@ -201,6 +202,50 @@ export function handleBatchProbeRoutes(req, res, pathname, options = {}) {
     return true;
   }
 
+  // Cohort Selection: POST /api/batch-probe/cohort
+  if (pathname === '/api/batch-probe/cohort' && req.method === 'POST') {
+    let body = '';
+    req.on('data', chunk => { body += chunk; });
+    req.on('end', async () => {
+      try {
+        let cp = loadBatchCheckpoint(baseDir);
+        ensureActiveSession(cp);
+        if (!isSessionAuthorized(req, cp)) {
+          res.writeHead(401, { 'Content-Type': 'application/json; charset=utf-8' });
+          res.end(JSON.stringify({ error: 'Unauthorized: session pairing required' }));
+          return;
+        }
+
+        const payload = body ? JSON.parse(body) : {};
+        const targetCohort = payload.cohort || 'denied';
+        if (!['denied', 'admitted', 'derivatives', 'all'].includes(targetCohort)) {
+          res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' });
+          res.end(JSON.stringify({ error: `Invalid cohort: ${targetCohort}` }));
+          return;
+        }
+
+        const inv = await buildBatchCandidateQueue({ prototypeDir: baseDir, cohort: targetCohort });
+        setCachedInventory(baseDir, inv);
+
+        cp = switchBatchCohort(cp, targetCohort, inv.queue.length, inv.candidatesHash, baseDir);
+
+        res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+        res.end(JSON.stringify({
+          ok: true,
+          activeCohort: cp.activeCohort,
+          checkpoint: cp,
+          total: inv.queue.length,
+          counts: inv.counts,
+          queue: serializePublicBatchQueue(inv.queue)
+        }));
+      } catch (err) {
+        res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' });
+        res.end(JSON.stringify({ error: err.message }));
+      }
+    });
+    return true;
+  }
+
   // 5. Candidate Queue: GET /api/batch-probe/queue
   if (pathname === '/api/batch-probe/queue' && req.method === 'GET') {
     let cp = loadBatchCheckpoint(baseDir);
@@ -212,6 +257,7 @@ export function handleBatchProbeRoutes(req, res, pathname, options = {}) {
     }
 
     const refresh = urlObj.searchParams.get('refresh') === '1';
+    const reqCohort = urlObj.searchParams.get('cohort') || cp.activeCohort || 'denied';
 
     const respondWithInventory = (inventory) => {
       const integrity = validateCheckpointIntegrity(cp, inventory.targetDir, inventory.candidatesHash);
@@ -229,11 +275,14 @@ export function handleBatchProbeRoutes(req, res, pathname, options = {}) {
       cp.rootPath = inventory.targetDir;
       cp.candidatesHash = inventory.candidatesHash;
       cp.totalQueue = inventory.queue.length;
+      cp.activeCohort = inventory.cohort;
+      syncActiveCohortToCheckpoint(cp);
       saveBatchCheckpoint(cp, baseDir);
 
       res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
       res.end(JSON.stringify({
         runId: cp.runId,
+        activeCohort: cp.activeCohort,
         cursor: cp.cursor,
         total: inventory.queue.length,
         counts: inventory.counts,
@@ -243,13 +292,13 @@ export function handleBatchProbeRoutes(req, res, pathname, options = {}) {
 
     const activeRoot = getActiveMediaRoot();
     const cachedInv = getCachedInventory(baseDir, activeRoot);
-    if (cachedInv && !refresh) {
+    if (cachedInv && !refresh && cachedInv.cohort === reqCohort) {
       respondWithInventory(cachedInv);
       return true;
     }
 
     scanInProgress = true;
-    buildBatchCandidateQueue({ prototypeDir: baseDir, runId: cp.runId }).then(inventory => {
+    buildBatchCandidateQueue({ prototypeDir: baseDir, runId: cp.runId, cohort: reqCohort }).then(inventory => {
       setCachedInventory(baseDir, inventory);
       scanInProgress = false;
       respondWithInventory(inventory);
@@ -277,23 +326,36 @@ export function handleBatchProbeRoutes(req, res, pathname, options = {}) {
       return true;
     }
 
+    const serveVideo = (inv) => {
+      const item = inv.itemMap.get(itemId) || inv.allItemMap?.get(itemId);
+      if (!item) {
+        res.writeHead(404, { 'Content-Type': 'application/json; charset=utf-8' });
+        res.end(JSON.stringify({ error: 'Candidate item not found in batch inventory' }));
+        return;
+      }
+      const targetFile = resolveHealthMediaPath(item.filePath);
+      if (!targetFile) {
+        res.writeHead(404, { 'Content-Type': 'application/json; charset=utf-8' });
+        res.end(JSON.stringify({ error: 'Media file missing or outside authoritative roots' }));
+        return;
+      }
+      streamVideo(req, res, targetFile);
+    };
+
     const activeRoot = getActiveMediaRoot();
-    let cachedInv = getCachedInventory(baseDir, activeRoot);
-    if (!cachedInv || !cachedInv.itemMap.has(itemId)) {
-      res.writeHead(404, { 'Content-Type': 'application/json; charset=utf-8' });
-      res.end(JSON.stringify({ error: 'Candidate item not found in active batch queue' }));
+    const cachedInv = getCachedInventory(baseDir, activeRoot);
+    if (cachedInv) {
+      serveVideo(cachedInv);
       return true;
     }
 
-    const item = cachedInv.itemMap.get(itemId);
-    const targetFile = resolveHealthMediaPath(item.filePath);
-    if (!targetFile) {
-      res.writeHead(404, { 'Content-Type': 'application/json; charset=utf-8' });
-      res.end(JSON.stringify({ error: 'Media file missing or outside authoritative roots' }));
-      return true;
-    }
-
-    streamVideo(req, res, targetFile);
+    buildBatchCandidateQueue({ prototypeDir: baseDir, cohort: 'all' }).then(inv => {
+      setCachedInventory(baseDir, inv);
+      serveVideo(inv);
+    }).catch(err => {
+      res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8' });
+      res.end(JSON.stringify({ error: err.message }));
+    });
     return true;
   }
 
@@ -313,24 +375,13 @@ export function handleBatchProbeRoutes(req, res, pathname, options = {}) {
         const payload = body ? JSON.parse(body) : {};
         const action = payload.action;
 
-        if (action === 'start') {
+        if (action === 'start' || action === 'resume') {
           cp.status = 'RUNNING';
           ensureActiveSession(cp);
         } else if (action === 'pause') {
           cp.status = 'PAUSED';
-        } else if (action === 'resume') {
-          cp.status = 'RUNNING';
-          ensureActiveSession(cp);
         } else if (action === 'reset') {
-          cp.status = 'IDLE';
-          cp.runId = `run_${Date.now()}`;
-          cp.sessionToken = generateSessionToken();
-          cp.cursor = 0;
-          cp.completedCount = 0;
-          cp.passCount = 0;
-          cp.failCount = 0;
-          cp.inconclusiveCount = 0;
-          cp.lastTestedItem = null;
+          Object.assign(cp, { status: 'IDLE', runId: `run_${Date.now()}`, sessionToken: generateSessionToken(), cursor: 0, completedCount: 0, passCount: 0, failCount: 0, inconclusiveCount: 0, lastTestedItem: null });
           res.setHeader('Set-Cookie', `batch_probe_session=${cp.sessionToken}; Path=/; Secure; HttpOnly; SameSite=Strict`);
         }
 
@@ -397,8 +448,8 @@ export function handleBatchProbeRoutes(req, res, pathname, options = {}) {
         }
 
         let cachedInv = getCachedInventory(baseDir, activeRoot);
-        if (!cachedInv) {
-          cachedInv = await buildBatchCandidateQueue({ prototypeDir: baseDir, runId: cp.runId });
+        if (!cachedInv || cachedInv.cohort !== (cp.activeCohort || 'denied')) {
+          cachedInv = await buildBatchCandidateQueue({ prototypeDir: baseDir, runId: cp.runId, cohort: cp.activeCohort || 'denied' });
           setCachedInventory(baseDir, cachedInv);
         }
 
@@ -454,8 +505,11 @@ export function handleBatchProbeRoutes(req, res, pathname, options = {}) {
           generation: payload.generation,
           neutralId: expectedItem.neutralId,
           fingerprintId: expectedItem.fingerprintId,
+          cohort: payload.cohort || expectedItem.cohort || 'denied',
           candidateState: expectedItem.state,
           verdict,
+          productionGateStatus: payload.productionGateStatus || null,
+          productionPlayerVerified: payload.productionPlayerVerified ?? null,
           videoWidth: payload.videoWidth || 0,
           videoHeight: payload.videoHeight || 0,
           rvfcCount: payload.rvfcCount || 0,
@@ -496,6 +550,7 @@ export function handleBatchProbeRoutes(req, res, pathname, options = {}) {
           verdict
         };
 
+        syncActiveCohortToCheckpoint(cp);
         saveBatchCheckpoint(cp, baseDir);
 
         res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
@@ -508,28 +563,22 @@ export function handleBatchProbeRoutes(req, res, pathname, options = {}) {
     return true;
   }
 
-  // 9. Sanitized Summary: GET /api/batch-probe/summary
+  // 9. 90-File Audit Summary: GET /api/batch-probe/summary
   if (pathname === '/api/batch-probe/summary' && req.method === 'GET') {
     const cp = loadBatchCheckpoint(baseDir);
     if (!isSessionAuthorized(req, cp)) {
       res.writeHead(401, { 'Content-Type': 'application/json; charset=utf-8' });
-      res.end(JSON.stringify({ error: 'Unauthorized: session pairing required to view summary records' }));
+      res.end(JSON.stringify({ error: 'Unauthorized: session pairing required' }));
       return true;
     }
 
-    const registry = loadBatchRegistry(baseDir);
-    const sanitizedRecords = [];
-    for (const rec of registry.values()) {
-      sanitizedRecords.push(sanitizeBatchProbeRecord(rec));
-    }
-
-    res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
-    res.end(JSON.stringify({
-      policyVersion: BATCH_PROBE_POLICY_VERSION,
-      checkpoint: cp,
-      totalTested: sanitizedRecords.length,
-      records: sanitizedRecords
-    }, null, 2));
+    build90FileReconciliationMatrix(baseDir, cp).then(summary => {
+      res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+      res.end(JSON.stringify(summary, null, 2));
+    }).catch(err => {
+      res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8' });
+      res.end(JSON.stringify({ error: err.message }));
+    });
     return true;
   }
 
