@@ -287,11 +287,12 @@ export async function build90FileReconciliationMatrix(prototypeDir = PROTOTYPE_D
     let productionGateStatus = 'NOT_TESTED';
     let productionPlayerVerified = null;
 
+    const isPass = physicalVerdict === BatchProbeVerdict.NATIVE_SAMPLE_PASS || physicalVerdict === BatchProbeVerdict.PRODUCTION_STREAM_NATIVE_PASS;
     if (item.cohort === 'admitted') {
       productionGateStatus = 'ALLOWED';
       if (rec && rec.productionPlayerVerified !== undefined && rec.productionPlayerVerified !== null) {
         productionPlayerVerified = rec.productionPlayerVerified;
-      } else if (rec && rec.verdict === BatchProbeVerdict.NATIVE_SAMPLE_PASS) {
+      } else if (rec && isPass) {
         productionPlayerVerified = true;
       }
     } else {
@@ -305,7 +306,7 @@ export async function build90FileReconciliationMatrix(prototypeDir = PROTOTYPE_D
 
     if (physicalTested) {
       stats.nativeTested++;
-      if (physicalVerdict === BatchProbeVerdict.NATIVE_SAMPLE_PASS) stats.nativePass++;
+      if (isPass) stats.nativePass++;
       else stats.nativeFail++;
     } else {
       stats.untested++;

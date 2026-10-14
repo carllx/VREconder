@@ -484,7 +484,8 @@ export function handleBatchProbeRoutes(req, res, pathname, options = {}) {
 
         let verdict = payload.verdict;
         const obs = payload.observationEvidence || {};
-        if (verdict === BatchProbeVerdict.NATIVE_SAMPLE_PASS) {
+        const isPassClaim = verdict === BatchProbeVerdict.NATIVE_SAMPLE_PASS || verdict === BatchProbeVerdict.PRODUCTION_STREAM_NATIVE_PASS;
+        if (isPassClaim) {
           const hasDimensions = payload.videoWidth > 0 && payload.videoHeight > 0;
           const hasW1 = typeof obs.window1Frames === 'number' && obs.window1Frames >= 12 && typeof obs.window1MediaDelta === 'number' && obs.window1MediaDelta >= 0.4;
           const hasSeek = Boolean(payload.seekSuccess);
@@ -535,7 +536,7 @@ export function handleBatchProbeRoutes(req, res, pathname, options = {}) {
         cp.cursor = cp.cursor + 1;
         cp.completedCount = (cp.completedCount || 0) + 1;
 
-        if (verdict === BatchProbeVerdict.NATIVE_SAMPLE_PASS) {
+        if (verdict === BatchProbeVerdict.NATIVE_SAMPLE_PASS || verdict === BatchProbeVerdict.PRODUCTION_STREAM_NATIVE_PASS) {
           cp.passCount = (cp.passCount || 0) + 1;
         } else if (verdict === BatchProbeVerdict.TIMEOUT_INCONCLUSIVE) {
           cp.inconclusiveCount = (cp.inconclusiveCount || 0) + 1;

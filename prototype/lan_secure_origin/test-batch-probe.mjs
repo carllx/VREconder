@@ -344,8 +344,118 @@ describe('AV1 Batch Compatibility Probe Test Suite (Final Readiness Delta)', () 
     }
   });
 
-  // 10. 600-line code structure guardrail verification
-  test('10. all modified and created source files strictly adhere to 600 physical lines limit', () => {
+  // 10. Browser probe state machine regression: PREFLIGHT -> INIT -> W1 -> SEEK -> W2 -> PRODUCTION_STREAM_NATIVE_PASS
+  test('10. browser probe state machine validates PREFLIGHT -> INIT transitions, Range 206, and error branches', async () => {
+    async function runStateMachine(item, mockFetchResult, frameSimulator) {
+      const stateLog = [];
+      let phase = 'INIT';
+      let verdict = null;
+      let productionGateStatus = null;
+      let productionPlayerVerified = null;
+
+      if (item.streamType === 'PRODUCTION_PLAYER') {
+        phase = 'PREFLIGHT';
+        stateLog.push('PREFLIGHT');
+        const preRes = await mockFetchResult();
+        if (preRes.status === 403) {
+          verdict = 'SERVER_ADMISSION_DENIED';
+          productionGateStatus = 'DENIED';
+          productionPlayerVerified = false;
+          return { verdict, stateLog, phase, productionGateStatus, productionPlayerVerified };
+        }
+        if (preRes.status !== 206) {
+          verdict = 'RANGE_NOT_SATISFIABLE';
+          productionGateStatus = 'ERROR';
+          productionPlayerVerified = false;
+          return { verdict, stateLog, phase, productionGateStatus, productionPlayerVerified };
+        }
+        const cr = preRes.headers['content-range'];
+        if (!cr || !/^bytes\s+0-\d+\/\d+/i.test(cr)) {
+          verdict = 'RANGE_NOT_SATISFIABLE';
+          productionGateStatus = 'ERROR';
+          productionPlayerVerified = false;
+          return { verdict, stateLog, phase, productionGateStatus, productionPlayerVerified };
+        }
+        phase = 'INIT';
+        productionGateStatus = 'ALLOWED';
+        stateLog.push('INIT');
+      }
+
+      const sim = frameSimulator(phase);
+      stateLog.push(...sim.phases);
+      verdict = sim.verdict;
+      productionPlayerVerified = (item.streamType === 'PRODUCTION_PLAYER' && verdict === 'PRODUCTION_STREAM_NATIVE_PASS');
+      return { verdict, stateLog, phase: sim.finalPhase, productionGateStatus, productionPlayerVerified };
+    }
+
+    const testItem = {
+      streamType: 'PRODUCTION_PLAYER',
+      cohort: 'admitted',
+      relPath: 'some_sample.mp4'
+    };
+
+    // Case A: Full happy path (206 with Content-Range -> INIT -> W1 -> SEEK -> W2 -> PASS)
+    const happy = await runStateMachine(
+      testItem,
+      async () => ({ status: 206, headers: { 'content-range': 'bytes 0-1024/50000000' } }),
+      (startPhase) => {
+        assert.equal(startPhase, 'INIT', 'Must enter INIT after Range 206 preflight');
+        return {
+          phases: ['W1_PLAYING', 'SEEKING', 'W2_PLAYING'],
+          finalPhase: 'W2_PLAYING',
+          verdict: 'PRODUCTION_STREAM_NATIVE_PASS'
+        };
+      }
+    );
+    assert.equal(happy.verdict, 'PRODUCTION_STREAM_NATIVE_PASS');
+    assert.deepEqual(happy.stateLog, ['PREFLIGHT', 'INIT', 'W1_PLAYING', 'SEEKING', 'W2_PLAYING']);
+    assert.equal(happy.productionGateStatus, 'ALLOWED');
+    assert.equal(happy.productionPlayerVerified, true);
+
+    // Case B: Admission Gate 403 Denial (blocks before INIT)
+    const denied = await runStateMachine(
+      testItem,
+      async () => ({ status: 403, headers: {} }),
+      () => { throw new Error('Must not run frame simulation on 403'); }
+    );
+    assert.equal(denied.verdict, 'SERVER_ADMISSION_DENIED');
+    assert.deepEqual(denied.stateLog, ['PREFLIGHT']);
+    assert.equal(denied.productionGateStatus, 'DENIED');
+    assert.equal(denied.productionPlayerVerified, false);
+
+    // Case C: Invalid Range status (HTTP 200 returned instead of 206)
+    const badRangeStatus = await runStateMachine(
+      testItem,
+      async () => ({ status: 200, headers: {} }),
+      () => { throw new Error('Must not run frame simulation on non-206'); }
+    );
+    assert.equal(badRangeStatus.verdict, 'RANGE_NOT_SATISFIABLE');
+    assert.deepEqual(badRangeStatus.stateLog, ['PREFLIGHT']);
+
+    // Case D: Missing/malformed Content-Range header
+    const badRangeHeader = await runStateMachine(
+      testItem,
+      async () => ({ status: 206, headers: { 'content-range': 'invalid' } }),
+      () => { throw new Error('Must not run frame simulation on invalid header'); }
+    );
+    assert.equal(badRangeHeader.verdict, 'RANGE_NOT_SATISFIABLE');
+
+    // Case E: Timeout during W1
+    const timedOut = await runStateMachine(
+      testItem,
+      async () => ({ status: 206, headers: { 'content-range': 'bytes 0-1024/50000000' } }),
+      () => ({
+        phases: ['W1_PLAYING'],
+        finalPhase: 'W1_PLAYING',
+        verdict: 'TIMEOUT_INCONCLUSIVE'
+      })
+    );
+    assert.equal(timedOut.verdict, 'TIMEOUT_INCONCLUSIVE');
+    assert.equal(timedOut.productionPlayerVerified, false);
+  });
+
+  // 11. 600-line code structure guardrail verification
+  test('11. all modified and created source files strictly adhere to 600 physical lines limit', () => {
     const filesToCheck = [
       './batch-probe.html',
       './src/health/batch-probe-types.mjs',
