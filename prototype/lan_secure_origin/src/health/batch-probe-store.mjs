@@ -24,6 +24,28 @@ export function generateSessionToken() {
   return crypto.randomBytes(16).toString('hex');
 }
 
+let activePairingPin = null;
+let pairingPinExpiresAt = 0;
+
+export function generatePairingPin() {
+  activePairingPin = String(Math.floor(100000 + Math.random() * 900000));
+  pairingPinExpiresAt = Date.now() + 15 * 60 * 1000;
+  return { pin: activePairingPin, expiresAt: pairingPinExpiresAt };
+}
+
+export function getActivePairingPin() {
+  if (activePairingPin && Date.now() < pairingPinExpiresAt) {
+    return { pin: activePairingPin, expiresAt: pairingPinExpiresAt };
+  }
+  return generatePairingPin();
+}
+
+export function verifyPairingPin(inputPin) {
+  if (!inputPin || typeof inputPin !== 'string') return false;
+  if (!activePairingPin || Date.now() >= pairingPinExpiresAt) return false;
+  return inputPin.trim() === activePairingPin;
+}
+
 /**
  * Loads all records from batch_probe_registry.jsonl.
  * Returns map keyed by fingerprintId.

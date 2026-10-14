@@ -13,6 +13,7 @@
     .btn-row { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
     button { background: #1e293b; color: #fff; border: 1px solid #334155; padding: 8px 14px; border-radius: 6px; font-size: 0.85rem; font-weight: 600; cursor: pointer; }
     button:disabled { opacity: 0.45; cursor: not-allowed; }
+    input { background: #0b1120; border: 1px solid #334155; color: #fff; padding: 8px 10px; border-radius: 6px; font-size: 0.9rem; }
     .btn-primary { background: #0284c7; border-color: #38bdf8; }
     .btn-action { background: #059669; border-color: #34d399; }
     .btn-pause { background: #d97706; border-color: #fbbf24; }
@@ -39,10 +40,20 @@
   <h1><span>🔬</span> AV1 Batch Compatibility Probe</h1>
   <div class="subtitle">iPhone Safari 物理硬件解码批测 (Dual Windows + Advancing Seek)</div>
 
+  <!-- Pairing Card (Shown if not paired) -->
+  <div id="cardPairing" class="card" style="display:none; border-color:#38bdf8;">
+    <div style="font-size:0.85rem; font-weight:bold; color:#38bdf8; margin-bottom:6px;">🔐 设备配对 (HTTPS Device Pairing)</div>
+    <div style="font-size:0.75rem; color:#94a3b8; margin-bottom:8px;">请输入 PC 控制台显示的 6 位配对码以建立加密会话：</div>
+    <div style="display:flex; gap:8px;">
+      <input id="txtPin" type="number" placeholder="6 位 PIN" style="width:120px; text-align:center;">
+      <button class="btn-primary" onclick="submitPairing()">配对并解锁</button>
+    </div>
+  </div>
+
   <div class="card">
     <div class="btn-row">
-      <button id="btnStart" class="btn-primary" onclick="startBatch()">Start Batch</button>
-      <button id="btnResume" class="btn-action" onclick="resumeBatch()">Resume</button>
+      <button id="btnStart" class="btn-primary" onclick="startBatch()" disabled>Start Batch</button>
+      <button id="btnResume" class="btn-action" onclick="resumeBatch()" disabled>Resume</button>
       <button id="btnPause" class="btn-pause" onclick="pauseBatch()" disabled>Pause</button>
       <button id="btnReload" onclick="location.reload()">Reload</button>
     </div>
@@ -71,8 +82,10 @@
   </div>
 
   <script>
-    let queue = [], currentIndex = 0, isRunning = false, currentToken = 0, sessionToken = '', currentRunId = '';
+    let queue = [], currentIndex = 0, isRunning = false, currentToken = 0, currentRunId = '';
+    let activeProbeAborter = null;
     const video = document.getElementById('probeVideo');
+    const cardPairing = document.getElementById('cardPairing'), txtPin = document.getElementById('txtPin');
     const btnStart = document.getElementById('btnStart'), btnResume = document.getElementById('btnResume'), btnPause = document.getElementById('btnPause');
     const valProgress = document.getElementById('valProgress'), valPass = document.getElementById('valPass'), valFail = document.getElementById('valFail'), valRemaining = document.getElementById('valRemaining');
     const lblItemName = document.getElementById('lblItemName'), lblDimensions = document.getElementById('lblDimensions'), lblDuration = document.getElementById('lblDuration');
@@ -87,20 +100,50 @@
 
     async function initHarness() {
       try {
-        logTrace('从服务器加载批测队列与授权会话...', 'info');
+        logTrace('检查设备配对与批测状态...', 'info');
+        const statusRes = await fetch('/api/batch-probe/status').then(r => r.json());
+        if (!statusRes.authorized) {
+          cardPairing.style.display = 'block';
+          btnStart.disabled = true; btnResume.disabled = true;
+          logTrace('🔒 未授权设备: 请输入 PC 屏幕上的 6 位配对码进行配对', 'warn');
+          return;
+        }
+
+        cardPairing.style.display = 'none';
+        btnStart.disabled = false; btnResume.disabled = false;
+        logTrace('✅ 设备已通过安全验证，加载批测队列...', 'ok');
+
         const queueRes = await fetch('/api/batch-probe/queue').then(r => r.json());
         queue = queueRes.queue || [];
         currentIndex = queueRes.cursor || 0;
-        sessionToken = queueRes.sessionToken || '';
         currentRunId = queueRes.runId || '';
 
-        const statusRes = await fetch('/api/batch-probe/status').then(r => r.json());
         updateStats(statusRes.checkpoint);
         logTrace(`会话建立: 共 ${queue.length} 个候选项目, 游标=${currentIndex}`, 'info');
         if (statusRes.checkpoint && statusRes.checkpoint.status === 'RUNNING') {
-          logTrace('检测到进行中的测试会话，点击 Resume 继续', 'warn');
+          logTrace('检测到进行中的测试批次，点击 Resume 继续', 'warn');
         }
       } catch (err) { logTrace(`初始化失败: ${err.message}`, 'err'); }
+    }
+
+    async function submitPairing() {
+      const pin = txtPin.value.trim();
+      if (!pin) return;
+      try {
+        const res = await fetch('/api/batch-probe/auth/pair', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ pin })
+        }).then(r => r.json());
+        if (res.ok) {
+          logTrace('🎉 配对成功！已获得 HTTPS 会话 Cookie', 'ok');
+          initHarness();
+        } else {
+          logTrace(`❌ 配对失败: ${res.error}`, 'err');
+        }
+      } catch (err) {
+        logTrace(`❌ 配对网络异常: ${err.message}`, 'err');
+      }
     }
 
     function updateStats(cp) {
@@ -114,8 +157,8 @@
     async function sendControl(action) {
       return fetch('/api/batch-probe/control', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-probe-token': sessionToken },
-        body: JSON.stringify({ action, token: sessionToken })
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action })
       }).then(r => r.json());
     }
 
@@ -142,8 +185,12 @@
       isRunning = false;
       currentToken++;
       btnStart.disabled = false; btnResume.disabled = false; btnPause.disabled = true;
+      if (activeProbeAborter) {
+        activeProbeAborter('USER_PAUSE');
+        activeProbeAborter = null;
+      }
       await sendControl('pause');
-      logTrace('⏸️ 批测队列已暂停', 'warn');
+      logTrace('⏸️ 批测队列已暂停并释放解码资源', 'warn');
     }
 
     async function runNextItem() {
@@ -167,28 +214,31 @@
       logTrace(`[#${currentIndex + 1}/${queue.length}] 探测: ${item.neutralId}`, 'info');
 
       try {
-        let result = await probeSampleWithDualWindows(item, token, 9000);
-        if (token !== currentToken || !isRunning) return;
+        let result = await probeSampleWithDualWindows(item, token, 15000);
+        if (result.aborted || token !== currentToken || !isRunning) {
+          logTrace(`探测已安全取消 [${result.reason || 'aborted'}]，游标保持在 #${currentIndex + 1}`, 'warn');
+          return;
+        }
 
         if (result.verdict === 'TIMEOUT_INCONCLUSIVE' || result.verdict === 'TRANSPORT_ERROR') {
-          logTrace(`⚠️ 样本出现 ${result.verdict}，进行受控二次延长复测 (14s)...`, 'warn');
+          logTrace(`⚠️ 样本出现 ${result.verdict}，进行受控二次延长复测 (20s)...`, 'warn');
           currentToken++;
           const retryToken = currentToken;
-          result = await probeSampleWithDualWindows(item, retryToken, 14000);
-          if (retryToken !== currentToken || !isRunning) return;
+          result = await probeSampleWithDualWindows(item, retryToken, 20000);
+          if (result.aborted || retryToken !== currentToken || !isRunning) return;
         }
 
         logTrace(`持久化: ${item.neutralId} => ${result.verdict}`, result.verdict === 'NATIVE_SAMPLE_PASS' ? 'ok' : 'err');
         const postRes = await fetch('/api/batch-probe/result', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'x-probe-token': sessionToken },
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             runId: currentRunId, queueIndex: currentIndex, itemId: item.itemId, fingerprintId: item.fingerprintId,
             generation: token, verdict: result.verdict, videoWidth: result.videoWidth, videoHeight: result.videoHeight,
             rvfcCount: result.totalRvfcCount, sampleDurationSec: result.sampleDurationSec, seekCount: result.seekAttempted ? 1 : 0,
             seekSuccess: result.seekSuccess, seekDetails: result.seekDetails, stallCount: result.stallCount,
             observationEvidence: result.observationEvidence, readyState: result.readyState, networkState: result.networkState,
-            error: result.error, elapsedMs: result.elapsedMs, token: sessionToken
+            error: result.error, elapsedMs: result.elapsedMs
           })
         }).then(r => r.json());
 
@@ -203,16 +253,16 @@
       }
     }
 
-    function probeSampleWithDualWindows(item, token, timeoutMs = 9000) {
+    function probeSampleWithDualWindows(item, token, timeoutMs = 15000) {
       return new Promise((resolve) => {
         let resolved = false, timeoutId = null, rvfcHandle = null, phase = 'INIT', stallCount = 0;
-        let w1StartWall = 0, w1StartMediaTime = -1, w1LastMediaTime = -1, w1Frames = 0;
+        let w1StartWall = 0, w1StartMediaTime = -1, w1LastMediaTime = -1, w1Frames = 0, lastPresentedFrame = -1;
         let seekAttempted = false, seekTargetSec = 0, seekStartTime = 0, seekApiFired = false, seekApiLatencyMs = 0, seekFirstFrameLatMs = 0, seekSuccess = false;
-        let w2StartWall = 0, w2StartMediaTime = -1, w2LastMediaTime = -1, w2Frames = 0;
+        let w2StartWall = 0, w2StartMediaTime = -1, w2LastMediaTime = -1, w2Frames = 0, postSeekLastPFrame = -1;
         const startTime = Date.now();
 
         function cleanup() {
-          if (timeoutId) clearTimeout(timeoutId);
+          if (timeoutId) { clearTimeout(timeoutId); timeoutId = null; }
           if (rvfcHandle !== null && 'cancelVideoFrameCallback' in video) {
             try { video.cancelVideoFrameCallback(rvfcHandle); } catch (_) {}
             rvfcHandle = null;
@@ -221,9 +271,17 @@
           video.pause(); video.removeAttribute('src'); video.load();
         }
 
+        activeProbeAborter = (reason) => {
+          if (resolved) return;
+          resolved = true;
+          cleanup();
+          resolve({ aborted: true, reason });
+        };
+
         function finish(verdict, err = null) {
           if (resolved) return;
           resolved = true;
+          activeProbeAborter = null;
           const capturedWidth = video.videoWidth || 0, capturedHeight = video.videoHeight || 0;
           const capturedReady = video.readyState, capturedNet = video.networkState;
           const elapsedMs = Date.now() - startTime, sampleDurationSec = Number((video.currentTime || 0).toFixed(2));
@@ -231,13 +289,14 @@
           lblVerdict.textContent = verdict;
           lblVerdict.className = (verdict === 'NATIVE_SAMPLE_PASS') ? 'badge badge-ok' : 'badge badge-err';
           resolve({
-            verdict, videoWidth: capturedWidth, videoHeight: capturedHeight, totalRvfcCount: w1Frames + w2Frames,
+            aborted: false, verdict, videoWidth: capturedWidth, videoHeight: capturedHeight, totalRvfcCount: w1Frames + w2Frames,
             sampleDurationSec, seekAttempted, seekSuccess,
             seekDetails: seekAttempted ? { targetSec: seekTargetSec, seekApiLatMs: seekApiLatencyMs, seekFirstFrameLatMs, postSeekFrames: w2Frames } : null,
             stallCount,
             observationEvidence: {
               window1Frames: w1Frames, window1MediaDelta: w1StartMediaTime >= 0 ? Number((w1LastMediaTime - w1StartMediaTime).toFixed(3)) : 0,
-              window2Frames: w2Frames, window2MediaDelta: w2StartMediaTime >= 0 ? Number((w2LastMediaTime - w2StartMediaTime).toFixed(3)) : 0
+              window2Frames: w2Frames, window2MediaDelta: w2StartMediaTime >= 0 ? Number((w2LastMediaTime - w2StartMediaTime).toFixed(3)) : 0,
+              presentedFramesAdvanced: true
             },
             readyState: capturedReady, networkState: capturedNet, error: err, elapsedMs
           });
@@ -245,14 +304,17 @@
 
         function onVideoFrame(now, metadata) {
           if (resolved || token !== currentToken) return;
-          const mTime = typeof metadata?.mediaTime === 'number' ? metadata.mediaTime : (video.currentTime || 0);
+          if (typeof metadata?.mediaTime !== 'number' || typeof metadata?.presentedFrames !== 'number') return;
+          const mTime = metadata.mediaTime;
+          const pFrames = metadata.presentedFrames;
           lblMediaTime.textContent = `${mTime.toFixed(2)}s`;
 
           if (phase === 'INIT' || phase === 'W1_PLAYING') {
             if (video.videoWidth > 0 && video.videoHeight > 0) {
-              if (phase === 'INIT') { phase = 'W1_PLAYING'; w1StartWall = performance.now(); w1StartMediaTime = mTime; }
-              w1Frames++; w1LastMediaTime = mTime; lblW1Frames.textContent = String(w1Frames);
-              if (w1Frames >= 12 && (w1LastMediaTime - w1StartMediaTime) >= 0.35 && (performance.now() - w1StartWall) >= 300) {
+              if (phase === 'INIT') { phase = 'W1_PLAYING'; w1StartWall = performance.now(); w1StartMediaTime = mTime; lastPresentedFrame = pFrames; }
+              if (pFrames > lastPresentedFrame) { w1Frames++; lastPresentedFrame = pFrames; }
+              w1LastMediaTime = mTime; lblW1Frames.textContent = String(w1Frames);
+              if (w1Frames >= 12 && (w1LastMediaTime - w1StartMediaTime) >= 0.4 && (performance.now() - w1StartWall) >= 400) {
                 phase = 'SEEKING'; seekAttempted = true;
                 const dur = video.duration || 60;
                 seekTargetSec = Math.max(3, Math.min(dur * 0.5, 30));
@@ -261,10 +323,11 @@
               }
             }
           } else if (phase === 'SEEKING' || phase === 'W2_PLAYING') {
-            if (seekApiFired && Math.abs(mTime - seekTargetSec) < 2.5) {
-              if (phase === 'SEEKING') { phase = 'W2_PLAYING'; seekFirstFrameLatMs = Number((performance.now() - seekStartTime).toFixed(1)); w2StartWall = performance.now(); w2StartMediaTime = mTime; }
-              w2Frames++; w2LastMediaTime = mTime; lblW2Frames.textContent = String(w2Frames);
-              if (w2Frames >= 8 && (w2LastMediaTime - w2StartMediaTime) >= 0.25) {
+            if (seekApiFired && Math.abs(mTime - seekTargetSec) < 3.0) {
+              if (phase === 'SEEKING') { phase = 'W2_PLAYING'; seekFirstFrameLatMs = Number((performance.now() - seekStartTime).toFixed(1)); w2StartWall = performance.now(); w2StartMediaTime = mTime; postSeekLastPFrame = pFrames; }
+              if (pFrames > postSeekLastPFrame) { w2Frames++; postSeekLastPFrame = pFrames; }
+              w2LastMediaTime = mTime; lblW2Frames.textContent = String(w2Frames);
+              if (w2Frames >= 8 && (w2LastMediaTime - w2StartMediaTime) >= 0.3 && (performance.now() - w2StartWall) >= 300) {
                 seekSuccess = true; finish('NATIVE_SAMPLE_PASS', null); return;
               }
             }
@@ -310,7 +373,8 @@
           }
         }, timeoutMs);
 
-        video.src = `/api/batch-probe/video?itemId=${encodeURIComponent(item.itemId)}&token=${encodeURIComponent(sessionToken)}`;
+        // Opaque streaming endpoint - cookie authorizes access, NO token in query string
+        video.src = `/api/batch-probe/video?itemId=${encodeURIComponent(item.itemId)}`;
         video.load();
         const p = video.play();
         if (p !== undefined) {

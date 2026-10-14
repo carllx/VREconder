@@ -14,13 +14,15 @@ import {
   loadBatchRegistry,
   recordBatchResult,
   generateSessionToken,
-  validateCheckpointIntegrity
+  validateCheckpointIntegrity,
+  getActivePairingPin,
+  verifyPairingPin
 } from './batch-probe-store.mjs';
 import { buildBatchCandidateQueue, serializePublicBatchQueue } from './batch-probe-queue.mjs';
 import { getMediaFingerprint } from '../normalization/fingerprint.mjs';
 import { streamVideo } from '../media/video-streamer.mjs';
 import { resolveHealthMediaPath } from './media-health-router.mjs';
-import { isLoopbackIp } from '../server/cert-helper.mjs';
+import { isLoopbackIp, getActiveMediaRoot } from '../server/cert-helper.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -29,12 +31,18 @@ const PROTOTYPE_DIR = path.resolve(__dirname, '..', '..');
 let cachedCandidateInventory = null;
 let scanInProgress = false;
 
-function extractToken(req, urlObj, bodyPayload = null) {
-  const headerToken = req.headers['x-probe-token'];
-  if (headerToken) return headerToken;
-  if (bodyPayload && bodyPayload.token) return bodyPayload.token;
-  if (urlObj && urlObj.searchParams.get('token')) return urlObj.searchParams.get('token');
-  return null;
+function getSessionCookie(req) {
+  const cookieHeader = req.headers.cookie;
+  if (!cookieHeader) return null;
+  const match = cookieHeader.match(/(?:^|;\s*)batch_probe_session=([^;]*)/);
+  return match ? decodeURIComponent(match[1]) : null;
+}
+
+function isSessionAuthorized(req, cp) {
+  if (isLoopbackIp(req.socket.remoteAddress)) return true;
+  const cookie = getSessionCookie(req);
+  if (cookie && cp.sessionToken && cookie === cp.sessionToken) return true;
+  return false;
 }
 
 function ensureActiveSession(cp) {
@@ -53,14 +61,16 @@ function ensureActiveSession(cp) {
  * @param {import('node:http').IncomingMessage} req
  * @param {import('node:http').ServerResponse} res
  * @param {string} pathname
+ * @param {object} [options]
  * @returns {boolean}
  */
-export function handleBatchProbeRoutes(req, res, pathname) {
+export function handleBatchProbeRoutes(req, res, pathname, options = {}) {
   const urlObj = new URL(req.url, 'http://localhost');
+  const baseDir = options.prototypeDir || PROTOTYPE_DIR;
 
   // 1. Diagnostic Page: /batch-probe
   if (pathname === '/batch-probe' || pathname === '/batch-probe.html') {
-    const htmlPath = path.join(PROTOTYPE_DIR, 'batch-probe.html');
+    const htmlPath = path.join(baseDir, 'batch-probe.html');
     if (fs.existsSync(htmlPath)) {
       res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
@@ -69,20 +79,95 @@ export function handleBatchProbeRoutes(req, res, pathname) {
     }
   }
 
-  // 2. Status & Checkpoint: GET /api/batch-probe/status
-  if (pathname === '/api/batch-probe/status' && req.method === 'GET') {
-    let cp = loadBatchCheckpoint(PROTOTYPE_DIR);
-    ensureActiveSession(cp);
-    saveBatchCheckpoint(cp, PROTOTYPE_DIR);
+  // 2. Pairing PIN retrieval (Loopback only): GET /api/batch-probe/auth/pin
+  if (pathname === '/api/batch-probe/auth/pin' && req.method === 'GET') {
+    if (!isLoopbackIp(req.socket.remoteAddress)) {
+      res.writeHead(403, { 'Content-Type': 'application/json; charset=utf-8' });
+      res.end(JSON.stringify({ error: 'Pairing PIN is only viewable from PC local console' }));
+      return true;
+    }
+    const pinData = getActivePairingPin();
+    res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+    res.end(JSON.stringify({ ok: true, pin: pinData.pin, expiresAt: pinData.expiresAt }));
+    return true;
+  }
 
-    const registry = loadBatchRegistry(PROTOTYPE_DIR);
+  // 3. Pairing PIN exchange: POST /api/batch-probe/auth/pair
+  if (pathname === '/api/batch-probe/auth/pair' && req.method === 'POST') {
+    let body = '';
+    req.on('data', chunk => { body += chunk; });
+    req.on('end', () => {
+      try {
+        const isLoopback = isLoopbackIp(req.socket.remoteAddress);
+        const isHttps = Boolean(req.socket.encrypted || req.headers['x-forwarded-proto'] === 'https');
+        if (!isHttps && !isLoopback) {
+          res.writeHead(403, { 'Content-Type': 'application/json; charset=utf-8' });
+          res.end(JSON.stringify({ error: 'Pairing credentials forbidden over plain HTTP. Connect via HTTPS.' }));
+          return;
+        }
+
+        const payload = body ? JSON.parse(body) : {};
+        const isPinValid = verifyPairingPin(payload.pin);
+        if (!isLoopback && !isPinValid) {
+          res.writeHead(401, { 'Content-Type': 'application/json; charset=utf-8' });
+          res.end(JSON.stringify({ error: 'Invalid or expired pairing PIN' }));
+          return;
+        }
+
+        let cp = loadBatchCheckpoint(baseDir);
+        ensureActiveSession(cp);
+        saveBatchCheckpoint(cp, baseDir);
+
+        res.setHeader('Set-Cookie', `batch_probe_session=${cp.sessionToken}; Path=/; Secure; HttpOnly; SameSite=Strict`);
+        res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+        res.end(JSON.stringify({ ok: true, authorized: true }));
+      } catch (err) {
+        res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' });
+        res.end(JSON.stringify({ error: err.message }));
+      }
+    });
+    return true;
+  }
+
+  // 4. Status: GET /api/batch-probe/status
+  if (pathname === '/api/batch-probe/status' && req.method === 'GET') {
+    let cp = loadBatchCheckpoint(baseDir);
+    ensureActiveSession(cp);
+    saveBatchCheckpoint(cp, baseDir);
+
+    const authorized = isSessionAuthorized(req, cp);
+    const registry = loadBatchRegistry(baseDir);
+
+    if (!authorized) {
+      res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+      res.end(JSON.stringify({
+        policyVersion: BATCH_PROBE_POLICY_VERSION,
+        authorized: false,
+        status: cp.status,
+        runId: cp.runId,
+        cursor: cp.cursor,
+        totalQueue: cp.totalQueue
+      }));
+      return true;
+    }
 
     res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
     res.end(JSON.stringify({
       policyVersion: BATCH_PROBE_POLICY_VERSION,
+      authorized: true,
       scanInProgress,
-      checkpoint: cp,
-      sessionToken: cp.sessionToken,
+      checkpoint: {
+        runId: cp.runId,
+        status: cp.status,
+        cursor: cp.cursor,
+        totalQueue: cp.totalQueue,
+        completedCount: cp.completedCount,
+        passCount: cp.passCount,
+        failCount: cp.failCount,
+        inconclusiveCount: cp.inconclusiveCount,
+        lastUpdated: cp.lastUpdated,
+        lastTestedItem: cp.lastTestedItem
+      },
       testedCount: registry.size,
       hasCachedInventory: Boolean(cachedCandidateInventory),
       totalCandidates: cachedCandidateInventory ? cachedCandidateInventory.queue.length : null
@@ -90,15 +175,19 @@ export function handleBatchProbeRoutes(req, res, pathname) {
     return true;
   }
 
-  // 3. Candidate Queue: GET /api/batch-probe/queue
+  // 5. Candidate Queue: GET /api/batch-probe/queue
   if (pathname === '/api/batch-probe/queue' && req.method === 'GET') {
+    let cp = loadBatchCheckpoint(baseDir);
+    ensureActiveSession(cp);
+    if (!isSessionAuthorized(req, cp)) {
+      res.writeHead(401, { 'Content-Type': 'application/json; charset=utf-8' });
+      res.end(JSON.stringify({ error: 'Unauthorized: batch probe session pairing required' }));
+      return true;
+    }
+
     const refresh = urlObj.searchParams.get('refresh') === '1';
 
     const respondWithInventory = (inventory) => {
-      let cp = loadBatchCheckpoint(PROTOTYPE_DIR);
-      ensureActiveSession(cp);
-
-      // Validate integrity against active root and candidate inventory
       const integrity = validateCheckpointIntegrity(cp, inventory.targetDir, inventory.candidatesHash);
       if (!integrity.valid && cp.rootPath) {
         console.warn(`[BatchProbe] Checkpoint integrity mismatch (${integrity.reason}). Re-anchoring run.`);
@@ -114,7 +203,7 @@ export function handleBatchProbeRoutes(req, res, pathname) {
       cp.rootPath = inventory.targetDir;
       cp.candidatesHash = inventory.candidatesHash;
       cp.totalQueue = inventory.queue.length;
-      saveBatchCheckpoint(cp, PROTOTYPE_DIR);
+      saveBatchCheckpoint(cp, baseDir);
 
       res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
       res.end(JSON.stringify({
@@ -122,18 +211,18 @@ export function handleBatchProbeRoutes(req, res, pathname) {
         cursor: cp.cursor,
         total: inventory.queue.length,
         counts: inventory.counts,
-        sessionToken: cp.sessionToken,
         queue: serializePublicBatchQueue(inventory.queue)
       }));
     };
 
-    if (cachedCandidateInventory && !refresh) {
+    const activeRoot = getActiveMediaRoot();
+    if (cachedCandidateInventory && !refresh && cachedCandidateInventory.targetDir === activeRoot) {
       respondWithInventory(cachedCandidateInventory);
       return true;
     }
 
     scanInProgress = true;
-    buildBatchCandidateQueue({ prototypeDir: PROTOTYPE_DIR }).then(inventory => {
+    buildBatchCandidateQueue({ prototypeDir: baseDir }).then(inventory => {
       cachedCandidateInventory = inventory;
       scanInProgress = false;
       respondWithInventory(inventory);
@@ -145,15 +234,19 @@ export function handleBatchProbeRoutes(req, res, pathname) {
     return true;
   }
 
-  // 4. Batch Probe Video Streaming: GET /api/batch-probe/video
+  // 6. Video Streaming: GET /api/batch-probe/video
   if (pathname === '/api/batch-probe/video' && req.method === 'GET') {
-    const itemId = urlObj.searchParams.get('itemId');
-    const token = extractToken(req, urlObj);
-
-    const cp = loadBatchCheckpoint(PROTOTYPE_DIR);
-    if (!token || token !== cp.sessionToken) {
+    const cp = loadBatchCheckpoint(baseDir);
+    if (!isSessionAuthorized(req, cp)) {
       res.writeHead(401, { 'Content-Type': 'application/json; charset=utf-8' });
-      res.end(JSON.stringify({ error: 'Unauthorized: missing or invalid session token' }));
+      res.end(JSON.stringify({ error: 'Unauthorized: valid HTTPS session cookie required' }));
+      return true;
+    }
+
+    const itemId = urlObj.searchParams.get('itemId');
+    if (!itemId) {
+      res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' });
+      res.end(JSON.stringify({ error: 'Missing itemId parameter' }));
       return true;
     }
 
@@ -175,24 +268,21 @@ export function handleBatchProbeRoutes(req, res, pathname) {
     return true;
   }
 
-  // 5. Control Checkpoint: POST /api/batch-probe/control
+  // 7. Control: POST /api/batch-probe/control
   if (pathname === '/api/batch-probe/control' && req.method === 'POST') {
     let body = '';
     req.on('data', chunk => { body += chunk; });
     req.on('end', () => {
       try {
-        const payload = JSON.parse(body);
-        const token = extractToken(req, urlObj, payload);
-        const cp = loadBatchCheckpoint(PROTOTYPE_DIR);
-
-        const isLoopback = isLoopbackIp(req.socket.remoteAddress);
-        if (!isLoopback && (!token || token !== cp.sessionToken)) {
+        const cp = loadBatchCheckpoint(baseDir);
+        if (!isSessionAuthorized(req, cp)) {
           res.writeHead(401, { 'Content-Type': 'application/json; charset=utf-8' });
-          res.end(JSON.stringify({ error: 'Unauthorized: invalid batch probe control token' }));
+          res.end(JSON.stringify({ error: 'Unauthorized: session pairing required for batch control' }));
           return;
         }
 
-        const action = payload.action; // 'start', 'pause', 'resume', 'reset'
+        const payload = body ? JSON.parse(body) : {};
+        const action = payload.action;
 
         if (action === 'start') {
           cp.status = 'RUNNING';
@@ -212,9 +302,10 @@ export function handleBatchProbeRoutes(req, res, pathname) {
           cp.failCount = 0;
           cp.inconclusiveCount = 0;
           cp.lastTestedItem = null;
+          res.setHeader('Set-Cookie', `batch_probe_session=${cp.sessionToken}; Path=/; Secure; HttpOnly; SameSite=Strict`);
         }
 
-        saveBatchCheckpoint(cp, PROTOTYPE_DIR);
+        saveBatchCheckpoint(cp, baseDir);
         res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
         res.end(JSON.stringify({ ok: true, checkpoint: cp }));
       } catch (err) {
@@ -225,31 +316,34 @@ export function handleBatchProbeRoutes(req, res, pathname) {
     return true;
   }
 
-  // 6. Record Physical Probe Result: POST /api/batch-probe/result
+  // 8. Physical Probe Result: POST /api/batch-probe/result
   if (pathname === '/api/batch-probe/result' && req.method === 'POST') {
     let body = '';
     req.on('data', chunk => { body += chunk; });
     req.on('end', async () => {
       try {
-        const payload = JSON.parse(body);
-        const token = extractToken(req, urlObj, payload);
-        const cp = loadBatchCheckpoint(PROTOTYPE_DIR);
-
-        // Security Check 1: Authorization
-        if (!token || token !== cp.sessionToken) {
+        const cp = loadBatchCheckpoint(baseDir);
+        if (!isSessionAuthorized(req, cp)) {
           res.writeHead(401, { 'Content-Type': 'application/json; charset=utf-8' });
-          res.end(JSON.stringify({ error: 'Unauthorized: missing or invalid session token' }));
+          res.end(JSON.stringify({ error: 'Unauthorized: valid HTTPS session cookie required' }));
           return;
         }
 
-        // Security Check 2: Active Run ID binding
+        const payload = JSON.parse(body);
+
+        const activeRoot = getActiveMediaRoot();
+        if (cp.rootPath && activeRoot && path.normalize(activeRoot).toLowerCase() !== path.normalize(cp.rootPath).toLowerCase()) {
+          res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' });
+          res.end(JSON.stringify({ error: `Media root changed: expected ${cp.rootPath}, active is ${activeRoot}` }));
+          return;
+        }
+
         if (!payload.runId || payload.runId !== cp.runId) {
           res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' });
           res.end(JSON.stringify({ error: `Run ID mismatch: expected ${cp.runId}, got ${payload.runId}` }));
           return;
         }
 
-        // Security Check 3: Checkpoint cursor and sequential progression
         if (typeof payload.queueIndex !== 'number') {
           res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' });
           res.end(JSON.stringify({ error: 'Missing queueIndex' }));
@@ -257,7 +351,7 @@ export function handleBatchProbeRoutes(req, res, pathname) {
         }
         if (payload.queueIndex < cp.cursor) {
           res.writeHead(409, { 'Content-Type': 'application/json; charset=utf-8' });
-          res.end(JSON.stringify({ error: `Duplicate or obsolete submission for queueIndex ${payload.queueIndex} (current cursor: ${cp.cursor})` }));
+          res.end(JSON.stringify({ error: `Duplicate submission for queueIndex ${payload.queueIndex} (current cursor: ${cp.cursor})` }));
           return;
         }
         if (payload.queueIndex > cp.cursor) {
@@ -266,12 +360,10 @@ export function handleBatchProbeRoutes(req, res, pathname) {
           return;
         }
 
-        // Ensure inventory is loaded
-        if (!cachedCandidateInventory) {
-          cachedCandidateInventory = await buildBatchCandidateQueue({ prototypeDir: PROTOTYPE_DIR });
+        if (!cachedCandidateInventory || cachedCandidateInventory.targetDir !== activeRoot) {
+          cachedCandidateInventory = await buildBatchCandidateQueue({ prototypeDir: baseDir });
         }
 
-        // Security Check 4: Item identity binding
         const expectedItem = cachedCandidateInventory.queue[cp.cursor];
         if (!expectedItem) {
           res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' });
@@ -289,7 +381,6 @@ export function handleBatchProbeRoutes(req, res, pathname) {
           return;
         }
 
-        // Security Check 5: Live disk fingerprint verification
         if (!fs.existsSync(expectedItem.filePath)) {
           res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' });
           res.end(JSON.stringify({ error: `Target file missing on disk: ${expectedItem.neutralId}` }));
@@ -302,18 +393,18 @@ export function handleBatchProbeRoutes(req, res, pathname) {
           return;
         }
 
-        // Evidence-to-verdict enforcement (Delta B)
         let verdict = payload.verdict;
         const obs = payload.observationEvidence || {};
         if (verdict === BatchProbeVerdict.NATIVE_SAMPLE_PASS) {
           const hasDimensions = payload.videoWidth > 0 && payload.videoHeight > 0;
-          const hasWindow1 = (typeof obs.window1Frames === 'number' ? obs.window1Frames >= 5 : payload.rvfcCount >= 5);
+          const hasW1 = typeof obs.window1Frames === 'number' && obs.window1Frames >= 12 && typeof obs.window1MediaDelta === 'number' && obs.window1MediaDelta >= 0.4;
           const hasSeek = Boolean(payload.seekSuccess);
-          const hasWindow2 = (typeof obs.window2Frames === 'number' ? obs.window2Frames >= 5 : true);
+          const hasW2 = typeof obs.window2Frames === 'number' && obs.window2Frames >= 8 && typeof obs.window2MediaDelta === 'number' && obs.window2MediaDelta >= 0.3;
+          const hasFrameProgression = obs.presentedFramesAdvanced === true;
 
-          if (!hasDimensions || !hasWindow1) {
+          if (!hasDimensions || !hasW1 || !hasFrameProgression) {
             verdict = BatchProbeVerdict.PLAYBACK_STALLED;
-          } else if (!hasSeek || !hasWindow2) {
+          } else if (!hasSeek || !hasW2) {
             verdict = BatchProbeVerdict.SEEK_FAILED;
           }
         }
@@ -347,10 +438,8 @@ export function handleBatchProbeRoutes(req, res, pathname) {
           testedAt: new Date().toISOString()
         };
 
-        // Durable append to batch registry
-        recordBatchResult(record, PROTOTYPE_DIR);
+        recordBatchResult(record, baseDir);
 
-        // Advance checkpoint cursor strictly on verified persistence
         cp.cursor = cp.cursor + 1;
         cp.completedCount = (cp.completedCount || 0) + 1;
 
@@ -369,7 +458,7 @@ export function handleBatchProbeRoutes(req, res, pathname) {
           verdict
         };
 
-        saveBatchCheckpoint(cp, PROTOTYPE_DIR);
+        saveBatchCheckpoint(cp, baseDir);
 
         res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
         res.end(JSON.stringify({ ok: true, verdict, checkpoint: cp }));
@@ -381,11 +470,16 @@ export function handleBatchProbeRoutes(req, res, pathname) {
     return true;
   }
 
-  // 7. Public Sanitized Summary: GET /api/batch-probe/summary
+  // 9. Sanitized Summary: GET /api/batch-probe/summary
   if (pathname === '/api/batch-probe/summary' && req.method === 'GET') {
-    const cp = loadBatchCheckpoint(PROTOTYPE_DIR);
-    const registry = loadBatchRegistry(PROTOTYPE_DIR);
+    const cp = loadBatchCheckpoint(baseDir);
+    if (!isSessionAuthorized(req, cp)) {
+      res.writeHead(401, { 'Content-Type': 'application/json; charset=utf-8' });
+      res.end(JSON.stringify({ error: 'Unauthorized: session pairing required to view summary records' }));
+      return true;
+    }
 
+    const registry = loadBatchRegistry(baseDir);
     const sanitizedRecords = [];
     for (const rec of registry.values()) {
       sanitizedRecords.push(sanitizeBatchProbeRecord(rec));
