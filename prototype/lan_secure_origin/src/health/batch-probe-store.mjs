@@ -26,9 +26,17 @@ export function generateSessionToken() {
 
 let activePairingPin = null;
 let pairingPinExpiresAt = 0;
+const failedAttemptsMap = new Map();
+const MAX_FAILED_ATTEMPTS = 5;
+const LOCKOUT_MS = 60 * 1000;
 
+/**
+ * Generates a cryptographically secure 6-digit pairing PIN with 15-minute TTL.
+ *
+ * @returns {{ pin: string, expiresAt: number }}
+ */
 export function generatePairingPin() {
-  activePairingPin = String(Math.floor(100000 + Math.random() * 900000));
+  activePairingPin = String(crypto.randomInt(100000, 1000000));
   pairingPinExpiresAt = Date.now() + 15 * 60 * 1000;
   return { pin: activePairingPin, expiresAt: pairingPinExpiresAt };
 }
@@ -40,22 +48,82 @@ export function getActivePairingPin() {
   return generatePairingPin();
 }
 
-export function verifyPairingPin(inputPin) {
-  if (!inputPin || typeof inputPin !== 'string') return false;
-  if (!activePairingPin || Date.now() >= pairingPinExpiresAt) return false;
-  return inputPin.trim() === activePairingPin;
+export function checkPairingRateLimit(clientIp = 'default') {
+  const now = Date.now();
+  const entry = failedAttemptsMap.get(clientIp);
+  if (!entry) return { allowed: true };
+  if (entry.lockedUntil > now) {
+    const retryAfterSec = Math.ceil((entry.lockedUntil - now) / 1000);
+    return { allowed: false, retryAfterSec };
+  }
+  return { allowed: true };
+}
+
+export function recordPairingFailure(clientIp = 'default') {
+  const now = Date.now();
+  const entry = failedAttemptsMap.get(clientIp) || { count: 0, lockedUntil: 0 };
+  entry.count++;
+  if (entry.count >= MAX_FAILED_ATTEMPTS) {
+    entry.lockedUntil = now + LOCKOUT_MS;
+    entry.count = 0;
+  }
+  failedAttemptsMap.set(clientIp, entry);
+  return entry;
+}
+
+export function recordPairingSuccess(clientIp = 'default') {
+  failedAttemptsMap.delete(clientIp);
 }
 
 /**
- * Loads all records from batch_probe_registry.jsonl.
- * Returns map keyed by fingerprintId.
+ * Verifies pairing PIN with rate limiting and single-use redemption semantics.
+ *
+ * @param {string} inputPin
+ * @param {string} [clientIp]
+ * @returns {{ valid: boolean, reason?: string, retryAfterSec?: number }}
+ */
+export function verifyPairingPin(inputPin, clientIp = 'default') {
+  if (!inputPin || typeof inputPin !== 'string') {
+    return { valid: false, reason: 'INVALID_INPUT' };
+  }
+  const rateLimit = checkPairingRateLimit(clientIp);
+  if (!rateLimit.allowed) {
+    return { valid: false, reason: 'RATE_LIMITED', retryAfterSec: rateLimit.retryAfterSec };
+  }
+
+  if (!activePairingPin || Date.now() >= pairingPinExpiresAt) {
+    const failureEntry = recordPairingFailure(clientIp);
+    if (failureEntry.lockedUntil > Date.now()) {
+      const retryAfterSec = Math.ceil((failureEntry.lockedUntil - Date.now()) / 1000);
+      return { valid: false, reason: 'RATE_LIMITED', retryAfterSec };
+    }
+    return { valid: false, reason: 'PIN_EXPIRED_OR_ABSENT' };
+  }
+
+  if (inputPin.trim() === activePairingPin) {
+    activePairingPin = null; // single-use: invalidated immediately upon redemption
+    pairingPinExpiresAt = 0;
+    recordPairingSuccess(clientIp);
+    return { valid: true };
+  } else {
+    const failureEntry = recordPairingFailure(clientIp);
+    if (failureEntry.lockedUntil > Date.now()) {
+      const retryAfterSec = Math.ceil((failureEntry.lockedUntil - Date.now()) / 1000);
+      return { valid: false, reason: 'RATE_LIMITED', retryAfterSec };
+    }
+    return { valid: false, reason: 'PIN_MISMATCH' };
+  }
+}
+
+/**
+ * Loads all array records from batch_probe_registry.jsonl.
  *
  * @param {string} [baseDir]
- * @returns {Map<string, object>}
+ * @returns {Array<object>}
  */
-export function loadBatchRegistry(baseDir = DEFAULT_DIR) {
+export function loadBatchRegistryRecords(baseDir = DEFAULT_DIR) {
   const { registry } = getBatchProbeFilePaths(baseDir);
-  const records = new Map();
+  const records = [];
   if (!fs.existsSync(registry)) return records;
 
   try {
@@ -63,15 +131,43 @@ export function loadBatchRegistry(baseDir = DEFAULT_DIR) {
     for (const line of lines) {
       try {
         const item = JSON.parse(line);
-        if (item && item.fingerprintId) {
-          records.set(item.fingerprintId, item);
-        }
+        if (item) records.push(item);
       } catch (_) {}
     }
   } catch (err) {
     console.warn('[BatchProbeStore] Failed reading registry:', err.message);
   }
   return records;
+}
+
+/**
+ * Loads all records from batch_probe_registry.jsonl mapped by fingerprintId.
+ *
+ * @param {string} [baseDir]
+ * @returns {Map<string, object>}
+ */
+export function loadBatchRegistry(baseDir = DEFAULT_DIR) {
+  const records = loadBatchRegistryRecords(baseDir);
+  const map = new Map();
+  for (const item of records) {
+    if (item && item.fingerprintId) {
+      map.set(item.fingerprintId, item);
+    }
+  }
+  return map;
+}
+
+/**
+ * Loads records filtered by specific runId for run-scoped accounting.
+ *
+ * @param {string} runId
+ * @param {string} [baseDir]
+ * @returns {Array<object>}
+ */
+export function loadBatchRegistryForRun(runId, baseDir = DEFAULT_DIR) {
+  const records = loadBatchRegistryRecords(baseDir);
+  if (!runId) return records;
+  return records.filter(r => r.runId === runId);
 }
 
 /**
@@ -133,7 +229,7 @@ export function loadBatchCheckpoint(baseDir = DEFAULT_DIR) {
       rootPath: null,
       candidatesHash: null,
       sessionToken: null,
-      status: 'IDLE', // IDLE, RUNNING, PAUSED, COMPLETED, INVALID_STALE_ROOT
+      status: 'IDLE',
       cursor: 0,
       totalQueue: 0,
       completedCount: 0,

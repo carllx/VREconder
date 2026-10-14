@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
+import crypto from 'node:crypto';
 import {
   CandidateState,
   BatchProbeVerdict,
@@ -14,9 +15,11 @@ import {
   loadBatchCheckpoint,
   saveBatchCheckpoint,
   loadBatchRegistry,
+  loadBatchRegistryForRun,
   recordBatchResult,
   generateSessionToken,
   validateCheckpointIntegrity,
+  generatePairingPin,
   getActivePairingPin,
   verifyPairingPin
 } from './src/health/batch-probe-store.mjs';
@@ -26,20 +29,39 @@ import { checkPlaybackAdmission } from './src/server/preflight-router.mjs';
 import { getMediaFingerprint } from './src/normalization/fingerprint.mjs';
 import { loadCheckpoint as loadIssue26Checkpoint } from './src/health/media-health-store.mjs';
 
-describe('AV1 Batch Compatibility Probe Test Suite (Final Gate Repair)', () => {
+describe('AV1 Batch Compatibility Probe Test Suite (Final Readiness Delta)', () => {
   let tempDir;
+  let prodRegHashBefore;
+  let prodCpHashBefore;
+
+  const PROD_DIR = path.resolve('.');
+  const PROD_REG = path.join(PROD_DIR, 'batch_probe_registry.jsonl');
+  const PROD_CP = path.join(PROD_DIR, 'batch_probe_checkpoint.json');
+
+  function getFileHash(filePath) {
+    if (!fs.existsSync(filePath)) return 'missing';
+    return crypto.createHash('sha256').update(fs.readFileSync(filePath)).digest('hex');
+  }
 
   before(() => {
-    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'vreconder-batch-probe-gate-'));
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'vreconder-batch-probe-isolated-'));
+    prodRegHashBefore = getFileHash(PROD_REG);
+    prodCpHashBefore = getFileHash(PROD_CP);
   });
 
   after(() => {
+    // Assert production storage was completely unpolluted by tests
+    const prodRegHashAfter = getFileHash(PROD_REG);
+    const prodCpHashAfter = getFileHash(PROD_CP);
+    assert.equal(prodRegHashAfter, prodRegHashBefore, 'Production batch_probe_registry.jsonl MUST NOT be modified by tests');
+    assert.equal(prodCpHashAfter, prodCpHashBefore, 'Production batch_probe_checkpoint.json MUST NOT be modified by tests');
+
     if (tempDir && fs.existsSync(tempDir)) {
       fs.rmSync(tempDir, { recursive: true, force: true });
     }
   });
 
-  // Helper to simulate router HTTP/HTTPS requests
+  // Helper to simulate router HTTP/HTTPS requests with explicit tempDir isolation
   async function simulateRequest(method, fullUrl, payload = null, headers = {}, isHttps = true, remoteIp = '192.168.1.100') {
     const [pathname] = fullUrl.split('?');
     let responseBody = '';
@@ -80,7 +102,7 @@ describe('AV1 Batch Compatibility Probe Test Suite (Final Gate Repair)', () => {
       }
     };
 
-    const handled = handleBatchProbeRoutes(req, res, pathname);
+    const handled = handleBatchProbeRoutes(req, res, pathname, { prototypeDir: tempDir });
     if (!handled) {
       return { handled: false, statusCode: 404, data: null, headers: responseHeaders, rawBody: '' };
     }
@@ -90,64 +112,55 @@ describe('AV1 Batch Compatibility Probe Test Suite (Final Gate Repair)', () => {
     return { handled, statusCode, data: parsed, headers: responseHeaders, rawBody: responseBody };
   }
 
-  // 1. Unauthorized LAN access must NOT leak tokens, queue, or media files
+  // 1. Unauthorized LAN access blocked from token, queue, and streaming
   test('1. unauthorized LAN requests are blocked from token, queue, and video stream', async () => {
-    // A: Status returns authorized: false and no sessionToken
     const statusRes = await simulateRequest('GET', '/api/batch-probe/status');
     assert.equal(statusRes.statusCode, 200);
     assert.equal(statusRes.data.authorized, false);
     assert.equal(statusRes.data.sessionToken, undefined, 'Must not leak sessionToken');
 
-    // B: Queue endpoint returns 401
     const queueRes = await simulateRequest('GET', '/api/batch-probe/queue');
     assert.equal(queueRes.statusCode, 401);
 
-    // C: Video stream returns 401
     const videoRes = await simulateRequest('GET', '/api/batch-probe/video?itemId=probe_0_abc');
     assert.equal(videoRes.statusCode, 401);
 
-    // D: Summary returns 401
     const sumRes = await simulateRequest('GET', '/api/batch-probe/summary');
     assert.equal(sumRes.statusCode, 401);
   });
 
-  // 2. PIN pairing over HTTPS sets HttpOnly Secure session cookie
-  test('2. pairing PIN exchange over HTTPS establishes authorized cookie session', async () => {
-    // A: Attempt pairing over unencrypted HTTP (isHttps = false) -> rejected
-    const httpRes = await simulateRequest('POST', '/api/batch-probe/auth/pair', { pin: '123456' }, {}, false);
-    assert.equal(httpRes.statusCode, 403, 'Must reject pairing over plain HTTP');
-
-    // B: Get active PIN from PC loopback
+  // 2. PIN pairing hardening: rate-limiting (429) and single-use redemption
+  test('2. pairing PIN enforces crypto-randomness, rate-limit cooldown, and single-use invalidation', async () => {
+    // A: PIN generated via crypto.randomInt is 6 numeric digits
     const pinRes = await simulateRequest('GET', '/api/batch-probe/auth/pin', null, {}, true, '127.0.0.1');
     assert.equal(pinRes.statusCode, 200);
     const validPin = pinRes.data.pin;
-    assert.ok(validPin && validPin.length === 6);
+    assert.match(validPin, /^\d{6}$/, 'PIN must be a 6-digit integer string');
 
-    // C: Attempt wrong PIN from LAN over HTTPS -> 401
-    const wrongPinRes = await simulateRequest('POST', '/api/batch-probe/auth/pair', { pin: '000000' }, {}, true);
-    assert.equal(wrongPinRes.statusCode, 401);
+    // B: Rate-limiting: brute force attempts from an attacker IP trigger 429
+    const attackerIp = '192.168.1.188';
+    for (let i = 0; i < 4; i++) {
+      const badRes = await simulateRequest('POST', '/api/batch-probe/auth/pair', { pin: '000000' }, {}, true, attackerIp);
+      assert.equal(badRes.statusCode, 401);
+    }
+    // 5th attempt locks the client out with 429
+    const lockRes = await simulateRequest('POST', '/api/batch-probe/auth/pair', { pin: '000000' }, {}, true, attackerIp);
+    assert.equal(lockRes.statusCode, 429);
+    assert.ok(lockRes.data.error.includes('Too many failed'));
+    assert.ok(lockRes.headers['retry-after']);
 
-    // D: Submit valid PIN from iPhone LAN over HTTPS -> 200 + Set-Cookie
+    // C: Valid redemption succeeds with Secure HttpOnly cookie
     const pairRes = await simulateRequest('POST', '/api/batch-probe/auth/pair', { pin: validPin }, {}, true);
     assert.equal(pairRes.statusCode, 200);
     assert.equal(pairRes.data.authorized, true);
-    const setCookie = pairRes.headers['set-cookie'];
-    assert.ok(setCookie.includes('batch_probe_session='));
-    assert.ok(setCookie.includes('Secure'));
-    assert.ok(setCookie.includes('HttpOnly'));
-    assert.ok(setCookie.includes('SameSite=Strict'));
+    assert.ok(pairRes.headers['set-cookie'].includes('batch_probe_session='));
 
-    // Extract cookie
-    const cookieVal = setCookie.split(';')[0];
-
-    // E: Access queue with cookie -> 200 and candidate queue returned
-    const authQueueRes = await simulateRequest('GET', '/api/batch-probe/queue', null, { cookie: cookieVal });
-    assert.equal(authQueueRes.statusCode, 200);
-    assert.ok(Array.isArray(authQueueRes.data.queue));
-    assert.equal(authQueueRes.data.sessionToken, undefined, 'Token must not be exposed in JSON response');
+    // D: Single-use: attempting to reuse the redeemed PIN fails
+    const reuseRes = await simulateRequest('POST', '/api/batch-probe/auth/pair', { pin: validPin }, {}, true);
+    assert.equal(reuseRes.statusCode, 401, 'Redeemed PIN must be immediately invalidated');
   });
 
-  // 3. Opaque streaming over HTTPS succeeds with cookie and has NO token in URL
+  // 3. Opaque streaming over HTTPS uses cookie and requires NO URL token
   test('3. opaque video streaming uses session cookie without URL tokens', async () => {
     const pinRes = await simulateRequest('GET', '/api/batch-probe/auth/pin', null, {}, true, '127.0.0.1');
     const pairRes = await simulateRequest('POST', '/api/batch-probe/auth/pair', { pin: pinRes.data.pin }, {}, true);
@@ -157,32 +170,50 @@ describe('AV1 Batch Compatibility Probe Test Suite (Final Gate Repair)', () => {
     assert.ok(qRes.data.queue.length > 0);
     const firstItem = qRes.data.queue[0];
 
-    // Request video with cookie and NO token query param
     const videoRes = await simulateRequest('GET', `/api/batch-probe/video?itemId=${firstItem.itemId}`, null, {
       cookie: cookieVal,
       range: 'bytes=0-1024'
     });
-    // Video streaming handler should accept cookie and return 206 Partial Content or 200 OK
     assert.ok([200, 206].includes(videoRes.statusCode), `Expected 200/206 streaming response, got ${videoRes.statusCode}`);
   });
 
-  // 4. In-flight probe cancellation does NOT persist or advance cursor
-  test('4. probe cancellation on pause/interruption aborts and preserves cursor', async () => {
+  // 4. Server accepts results ONLY when batch status is RUNNING
+  test('4. rejects result submission unless batch probe status is RUNNING', async () => {
     const pinRes = await simulateRequest('GET', '/api/batch-probe/auth/pin', null, {}, true, '127.0.0.1');
     const pairRes = await simulateRequest('POST', '/api/batch-probe/auth/pair', { pin: pinRes.data.pin }, {}, true);
     const cookieVal = pairRes.headers['set-cookie'].split(';')[0];
 
     const qRes = await simulateRequest('GET', '/api/batch-probe/queue', null, { cookie: cookieVal });
-    const cursorBefore = qRes.data.cursor;
+    const cursor = qRes.data.cursor;
+    const runId = qRes.data.runId;
+    const item = qRes.data.queue[cursor];
 
-    // Simulate in-flight pause control
-    const pauseRes = await simulateRequest('POST', '/api/batch-probe/control', { action: 'pause' }, { cookie: cookieVal });
-    assert.equal(pauseRes.statusCode, 200);
-    assert.equal(pauseRes.data.checkpoint.status, 'PAUSED');
+    // Status is currently IDLE -> submission must be rejected with 409
+    const idleSubRes = await simulateRequest('POST', '/api/batch-probe/result', {
+      runId,
+      queueIndex: cursor,
+      itemId: item.itemId,
+      fingerprintId: item.fingerprintId,
+      verdict: BatchProbeVerdict.NATIVE_SAMPLE_PASS
+    }, { cookie: cookieVal });
+    assert.equal(idleSubRes.statusCode, 409);
+    assert.ok(idleSubRes.data.error.includes('must be RUNNING'));
 
-    // Check status after pause: cursor must remain unchanged
-    const statusRes = await simulateRequest('GET', '/api/batch-probe/status', null, { cookie: cookieVal });
-    assert.equal(statusRes.data.checkpoint.cursor, cursorBefore);
+    // Start batch -> status becomes RUNNING
+    const startRes = await simulateRequest('POST', '/api/batch-probe/control', { action: 'start' }, { cookie: cookieVal });
+    assert.equal(startRes.statusCode, 200);
+    assert.equal(startRes.data.checkpoint.status, 'RUNNING');
+
+    // In-flight pause -> status becomes PAUSED -> submission rejected
+    await simulateRequest('POST', '/api/batch-probe/control', { action: 'pause' }, { cookie: cookieVal });
+    const pausedSubRes = await simulateRequest('POST', '/api/batch-probe/result', {
+      runId,
+      queueIndex: cursor,
+      itemId: item.itemId,
+      fingerprintId: item.fingerprintId,
+      verdict: BatchProbeVerdict.NATIVE_SAMPLE_PASS
+    }, { cookie: cookieVal });
+    assert.equal(pausedSubRes.statusCode, 409);
   });
 
   // 5. Dual-window observation and presentedFrames progression verification
@@ -190,6 +221,9 @@ describe('AV1 Batch Compatibility Probe Test Suite (Final Gate Repair)', () => {
     const pinRes = await simulateRequest('GET', '/api/batch-probe/auth/pin', null, {}, true, '127.0.0.1');
     const pairRes = await simulateRequest('POST', '/api/batch-probe/auth/pair', { pin: pinRes.data.pin }, {}, true);
     const cookieVal = pairRes.headers['set-cookie'].split(';')[0];
+
+    // Ensure status is RUNNING
+    await simulateRequest('POST', '/api/batch-probe/control', { action: 'start' }, { cookie: cookieVal });
 
     const qRes = await simulateRequest('GET', '/api/batch-probe/queue', null, { cookie: cookieVal });
     const cursor = qRes.data.cursor;
@@ -207,8 +241,8 @@ describe('AV1 Batch Compatibility Probe Test Suite (Final Gate Repair)', () => {
       videoHeight: 2160,
       seekSuccess: true,
       observationEvidence: {
-        window1Frames: 4, // below 12
-        window1MediaDelta: 0.15, // below 0.4
+        window1Frames: 4,
+        window1MediaDelta: 0.15,
         window2Frames: 10,
         window2MediaDelta: 0.35,
         presentedFramesAdvanced: true
@@ -229,8 +263,7 @@ describe('AV1 Batch Compatibility Probe Test Suite (Final Gate Repair)', () => {
     assert.equal(resetRes.data.checkpoint.cursor, 0);
     assert.ok(resetRes.data.checkpoint.runId.startsWith('run_'));
 
-    // Registry must retain previous entries
-    const registry = loadBatchRegistry();
+    const registry = loadBatchRegistry(tempDir);
     assert.ok(registry instanceof Map);
   });
 

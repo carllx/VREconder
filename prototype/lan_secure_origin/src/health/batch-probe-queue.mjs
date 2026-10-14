@@ -14,7 +14,7 @@ import {
   computeCandidatesHash,
   BATCH_PROBE_POLICY_VERSION
 } from './batch-probe-types.mjs';
-import { loadBatchRegistry } from './batch-probe-store.mjs';
+import { loadBatchRegistryForRun, loadBatchCheckpoint } from './batch-probe-store.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -26,6 +26,7 @@ const PROTOTYPE_DIR = path.resolve(__dirname, '..', '..');
  * @param {object} [options]
  * @param {string} [options.targetDir] Custom directory (defaults to active media root)
  * @param {string} [options.prototypeDir]
+ * @param {string} [options.runId]
  * @returns {Promise<object>}
  */
 export async function buildBatchCandidateQueue(options = {}) {
@@ -44,7 +45,16 @@ export async function buildBatchCandidateQueue(options = {}) {
   const factsMap = loadExistingFactsMap();
   const storeFile = options.provisionalStorePath || (options.prototypeDir ? path.join(options.prototypeDir, 'provisional_playback_admissions.json') : undefined);
   const provisionalStore = getProvisionalAdmissionStore(storeFile);
-  const deviceTestedRecords = loadBatchRegistry(prototypeDir);
+  const activeCp = loadBatchCheckpoint(prototypeDir);
+  const activeRunId = options.runId || activeCp.runId;
+  const currentRunRecords = loadBatchRegistryForRun(activeRunId, prototypeDir);
+  const runRecordsMap = new Map();
+  for (const r of currentRunRecords) {
+    if (r && r.fingerprintId) {
+      runRecordsMap.set(`${r.queueIndex}_${r.fingerprintId}`, r);
+      runRecordsMap.set(r.fingerprintId, r);
+    }
+  }
 
   const inventory = {
     targetDir,
@@ -127,8 +137,8 @@ export async function buildBatchCandidateQueue(options = {}) {
     }
 
     // Policy denied candidate (e.g. UNSUPPORTED_UNKNOWN_FIX)
-    const previousResult = deviceTestedRecords.get(fp.fingerprintId);
-    const isTested = Boolean(previousResult);
+    const previousResult = runRecordsMap.get(`${queueIndex}_${fp.fingerprintId}`) || runRecordsMap.get(fp.fingerprintId);
+    const isTested = Boolean(previousResult && (!activeRunId || previousResult.runId === activeRunId));
     if (isTested) {
       inventory.counts.DEVICE_TESTED++;
     }

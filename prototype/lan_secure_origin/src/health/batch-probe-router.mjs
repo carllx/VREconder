@@ -28,7 +28,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const PROTOTYPE_DIR = path.resolve(__dirname, '..', '..');
 
-let cachedCandidateInventory = null;
+const inventoryCacheByDir = new Map();
 let scanInProgress = false;
 
 function getSessionCookie(req) {
@@ -53,6 +53,16 @@ function ensureActiveSession(cp) {
     cp.sessionToken = generateSessionToken();
   }
   return cp;
+}
+
+function getCachedInventory(baseDir, activeRoot) {
+  const inv = inventoryCacheByDir.get(baseDir);
+  if (inv && inv.targetDir === activeRoot) return inv;
+  return null;
+}
+
+function setCachedInventory(baseDir, inv) {
+  inventoryCacheByDir.set(baseDir, inv);
 }
 
 /**
@@ -107,10 +117,25 @@ export function handleBatchProbeRoutes(req, res, pathname, options = {}) {
         }
 
         const payload = body ? JSON.parse(body) : {};
-        const isPinValid = verifyPairingPin(payload.pin);
-        if (!isLoopback && !isPinValid) {
+        const clientIp = req.socket.remoteAddress || 'unknown';
+        const verifyResult = verifyPairingPin(payload.pin, clientIp);
+
+        if (!isLoopback && !verifyResult.valid) {
+          if (verifyResult.reason === 'RATE_LIMITED') {
+            res.writeHead(429, {
+              'Content-Type': 'application/json; charset=utf-8',
+              'Retry-After': String(verifyResult.retryAfterSec || 60)
+            });
+            res.end(JSON.stringify({
+              error: 'Too many failed pairing attempts. Please wait before retrying.',
+              retryAfterSec: verifyResult.retryAfterSec
+            }));
+            return;
+          }
           res.writeHead(401, { 'Content-Type': 'application/json; charset=utf-8' });
-          res.end(JSON.stringify({ error: 'Invalid or expired pairing PIN' }));
+          res.end(JSON.stringify({
+            error: verifyResult.reason === 'PIN_EXPIRED_OR_ABSENT' ? 'Pairing PIN expired or not generated' : 'Invalid pairing PIN'
+          }));
           return;
         }
 
@@ -151,6 +176,7 @@ export function handleBatchProbeRoutes(req, res, pathname, options = {}) {
       return true;
     }
 
+    const cachedInv = getCachedInventory(baseDir, getActiveMediaRoot());
     res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
     res.end(JSON.stringify({
       policyVersion: BATCH_PROBE_POLICY_VERSION,
@@ -169,8 +195,8 @@ export function handleBatchProbeRoutes(req, res, pathname, options = {}) {
         lastTestedItem: cp.lastTestedItem
       },
       testedCount: registry.size,
-      hasCachedInventory: Boolean(cachedCandidateInventory),
-      totalCandidates: cachedCandidateInventory ? cachedCandidateInventory.queue.length : null
+      hasCachedInventory: Boolean(cachedInv),
+      totalCandidates: cachedInv ? cachedInv.queue.length : null
     }));
     return true;
   }
@@ -216,14 +242,15 @@ export function handleBatchProbeRoutes(req, res, pathname, options = {}) {
     };
 
     const activeRoot = getActiveMediaRoot();
-    if (cachedCandidateInventory && !refresh && cachedCandidateInventory.targetDir === activeRoot) {
-      respondWithInventory(cachedCandidateInventory);
+    const cachedInv = getCachedInventory(baseDir, activeRoot);
+    if (cachedInv && !refresh) {
+      respondWithInventory(cachedInv);
       return true;
     }
 
     scanInProgress = true;
-    buildBatchCandidateQueue({ prototypeDir: baseDir }).then(inventory => {
-      cachedCandidateInventory = inventory;
+    buildBatchCandidateQueue({ prototypeDir: baseDir, runId: cp.runId }).then(inventory => {
+      setCachedInventory(baseDir, inventory);
       scanInProgress = false;
       respondWithInventory(inventory);
     }).catch(err => {
@@ -250,13 +277,15 @@ export function handleBatchProbeRoutes(req, res, pathname, options = {}) {
       return true;
     }
 
-    if (!cachedCandidateInventory || !cachedCandidateInventory.itemMap.has(itemId)) {
+    const activeRoot = getActiveMediaRoot();
+    let cachedInv = getCachedInventory(baseDir, activeRoot);
+    if (!cachedInv || !cachedInv.itemMap.has(itemId)) {
       res.writeHead(404, { 'Content-Type': 'application/json; charset=utf-8' });
       res.end(JSON.stringify({ error: 'Candidate item not found in active batch queue' }));
       return true;
     }
 
-    const item = cachedCandidateInventory.itemMap.get(itemId);
+    const item = cachedInv.itemMap.get(itemId);
     const targetFile = resolveHealthMediaPath(item.filePath);
     if (!targetFile) {
       res.writeHead(404, { 'Content-Type': 'application/json; charset=utf-8' });
@@ -329,6 +358,13 @@ export function handleBatchProbeRoutes(req, res, pathname, options = {}) {
           return;
         }
 
+        // Batch Status Check: must be RUNNING
+        if (cp.status !== 'RUNNING') {
+          res.writeHead(409, { 'Content-Type': 'application/json; charset=utf-8' });
+          res.end(JSON.stringify({ error: `Cannot record result: batch status is ${cp.status}, must be RUNNING` }));
+          return;
+        }
+
         const payload = JSON.parse(body);
 
         const activeRoot = getActiveMediaRoot();
@@ -360,11 +396,13 @@ export function handleBatchProbeRoutes(req, res, pathname, options = {}) {
           return;
         }
 
-        if (!cachedCandidateInventory || cachedCandidateInventory.targetDir !== activeRoot) {
-          cachedCandidateInventory = await buildBatchCandidateQueue({ prototypeDir: baseDir });
+        let cachedInv = getCachedInventory(baseDir, activeRoot);
+        if (!cachedInv) {
+          cachedInv = await buildBatchCandidateQueue({ prototypeDir: baseDir, runId: cp.runId });
+          setCachedInventory(baseDir, cachedInv);
         }
 
-        const expectedItem = cachedCandidateInventory.queue[cp.cursor];
+        const expectedItem = cachedInv.queue[cp.cursor];
         if (!expectedItem) {
           res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' });
           res.end(JSON.stringify({ error: `No candidate found at queue index ${cp.cursor}` }));
