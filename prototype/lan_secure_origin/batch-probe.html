@@ -286,7 +286,8 @@
           if (result.aborted || retryToken !== currentToken || !isRunning) return;
         }
 
-        logTrace(`持久化: ${item.neutralId} => ${result.verdict}`, result.verdict === 'NATIVE_SAMPLE_PASS' ? 'ok' : 'err');
+        const isPassVerdict = result.verdict === 'NATIVE_SAMPLE_PASS' || result.verdict === 'PRODUCTION_STREAM_NATIVE_PASS';
+        logTrace(`持久化: ${item.neutralId} => ${result.verdict}`, isPassVerdict ? 'ok' : 'err');
         const postRes = await fetch('/api/batch-probe/result', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
