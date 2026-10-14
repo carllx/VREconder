@@ -17,6 +17,7 @@ import { handlePreflightRoutes, getEngineInstance, notifyPlaybackChange, checkPl
 import { handleProfileRoutes } from './src/server/profile-router.mjs';
 import { recordIncident } from './src/telemetry/incident-store.mjs';
 import { handleMediaHealthRoutes } from './src/health/media-health-router.mjs';
+import { handleBatchProbeRoutes } from './src/health/batch-probe-router.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -141,6 +142,11 @@ function handleRequest(req, res, isHttps) {
 
   // Media Health modular routes (Issue #26)
   if (handleMediaHealthRoutes(req, res, pathname)) {
+    return;
+  }
+
+  // Batch Probe modular routes (AV1 compatibility probe)
+  if (handleBatchProbeRoutes(req, res, pathname)) {
     return;
   }
 

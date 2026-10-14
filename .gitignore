@@ -79,3 +79,9 @@ canonical_repair_probe_results.jsonl
 prototype/lan_secure_origin/canonical_exact_file_authorization.json
 canonical_exact_file_authorization.json
 *exact_file_authorization*.json
+batch_probe_registry.jsonl
+batch_probe_checkpoint.json
+prototype/lan_secure_origin/batch_probe_registry.jsonl
+prototype/lan_secure_origin/batch_probe_checkpoint.json
+batch_probe_*.json*
+prototype/lan_secure_origin/batch_probe_*.json*
