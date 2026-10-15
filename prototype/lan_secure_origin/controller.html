@@ -71,10 +71,12 @@
     <div class="card">
       <h1>
         <span>🎛️ VREconder PC Calibration Controller</span>
-        <div style="display:flex; gap:6px; flex-wrap:wrap;">
+        <div style="display:flex; gap:6px; flex-wrap:wrap; align-items:center;">
           <span class="badge badge-green" id="badgeServerConnection">🟢 Server: Connected</span>
           <span class="badge badge-slate" id="badgeIphoneConnection">⚪ iPhone: Offline</span>
           <span class="badge badge-amber" id="badgeArmStatus">🟡 iPhone Unarmed</span>
+          <span class="badge badge-slate" id="badgePairingPin" style="cursor:pointer;" onclick="window.fetchPairingPin?.()" title="Click to refresh pairing PIN">🔑 PIN: ------</span>
+          <button class="action-btn" onclick="window.revokeAllDeviceSessions?.()" style="padding:2px 6px; font-size:0.7rem; background:#b91c1c;" title="Revoke all paired sessions">Revoke All</button>
         </div>
       </h1>
       <div class="subtitle">Authoritative Calibration & Verification Gate (Issue #13 SSOT Control Surface)</div>

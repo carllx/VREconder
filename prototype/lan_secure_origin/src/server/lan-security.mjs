@@ -3,14 +3,14 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { isLoopbackIp, getActiveMediaRoot } from './cert-helper.mjs';
-import { loadBatchCheckpoint } from '../health/batch-probe-store.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const PROTOTYPE_DIR = path.resolve(__dirname, '..', '..');
 
-const trustedClientIps = new Set();
-let activeDeviceToken = null;
+// ============================================================
+// 1. Media Root & Path Resolution Guardrails (Boundary Closure)
+// ============================================================
 
 export function getAllowedRoots() {
   const primary = getActiveMediaRoot();
@@ -65,97 +65,185 @@ export function resolveSecureMediaPath(relParam) {
   return null;
 }
 
-/**
- * Gets or initializes the active device pairing / session token.
- *
- * @param {string} [prototypeDir]
- * @returns {string}
- */
-export function getActiveDeviceToken(prototypeDir = PROTOTYPE_DIR) {
-  if (!activeDeviceToken) {
-    try {
-      const cp = loadBatchCheckpoint(prototypeDir);
-      if (cp && cp.sessionToken) activeDeviceToken = cp.sessionToken;
-    } catch (_) {}
-    if (!activeDeviceToken) {
-      activeDeviceToken = crypto.randomBytes(16).toString('hex');
-    }
+// ============================================================
+// 2. Dedicated Device Authentication & Session Store (P0 / P2)
+// ============================================================
+
+let activeDeviceSecret = crypto.randomBytes(32).toString('hex');
+const activeSessions = new Map(); // sessionToken -> { createdAt: number, clientIp: string }
+let activePairingPin = null;
+let pairingPinExpiresAt = 0;
+const pinFailedAttempts = new Map(); // clientIp -> { count: number, lockedUntil: number }
+const MAX_FAILED_ATTEMPTS = 5;
+const LOCKOUT_MS = 60 * 1000;
+
+export function generatePlayerPairingPin() {
+  activePairingPin = String(crypto.randomInt(100000, 1000000));
+  pairingPinExpiresAt = Date.now() + 15 * 60 * 1000;
+  return { pin: activePairingPin, expiresAt: pairingPinExpiresAt };
+}
+
+export function getActivePairingPin() {
+  if (activePairingPin && Date.now() < pairingPinExpiresAt) {
+    return { pin: activePairingPin, expiresAt: pairingPinExpiresAt };
   }
-  return activeDeviceToken;
+  return generatePlayerPairingPin();
 }
 
-export function trustClientIp(ip) {
-  if (ip) trustedClientIps.add(ip);
+export function verifyDevicePin(inputPin, clientIp = 'default') {
+  if (!inputPin || typeof inputPin !== 'string') {
+    return { valid: false, reason: 'INVALID_INPUT' };
+  }
+  const now = Date.now();
+  const failureEntry = pinFailedAttempts.get(clientIp) || { count: 0, lockedUntil: 0 };
+  if (failureEntry.lockedUntil > now) {
+    const retryAfterSec = Math.ceil((failureEntry.lockedUntil - now) / 1000);
+    return { valid: false, reason: 'RATE_LIMITED', retryAfterSec };
+  }
+
+  if (!activePairingPin || now >= pairingPinExpiresAt) {
+    failureEntry.count++;
+    if (failureEntry.count >= MAX_FAILED_ATTEMPTS) failureEntry.lockedUntil = now + LOCKOUT_MS;
+    pinFailedAttempts.set(clientIp, failureEntry);
+    return { valid: false, reason: 'PIN_EXPIRED_OR_ABSENT' };
+  }
+
+  if (inputPin.trim() === activePairingPin) {
+    activePairingPin = null; // Single-use invalidation
+    pairingPinExpiresAt = 0;
+    pinFailedAttempts.delete(clientIp);
+    const sessionToken = crypto.randomBytes(24).toString('hex');
+    activeSessions.set(sessionToken, { createdAt: now, clientIp });
+    return { valid: true, sessionToken };
+  } else {
+    failureEntry.count++;
+    if (failureEntry.count >= MAX_FAILED_ATTEMPTS) failureEntry.lockedUntil = now + LOCKOUT_MS;
+    pinFailedAttempts.set(clientIp, failureEntry);
+    return { valid: false, reason: 'PIN_MISMATCH' };
+  }
 }
 
-export function revokeTrustedClientIp(ip) {
-  trustedClientIps.delete(ip);
+export function createAuthorizedSession(clientIp = 'loopback') {
+  const sessionToken = crypto.randomBytes(24).toString('hex');
+  activeSessions.set(sessionToken, { createdAt: Date.now(), clientIp });
+  return sessionToken;
 }
 
-export function clearTrustedClientIps() {
-  trustedClientIps.clear();
+export function revokeAllDeviceSessions() {
+  activeSessions.clear();
+  activeDeviceSecret = crypto.randomBytes(32).toString('hex');
+  activePairingPin = null;
+  pairingPinExpiresAt = 0;
+  pinFailedAttempts.clear();
 }
 
-/**
- * Validates whether the incoming HTTP/HTTPS request originates from an authorized device:
- * 1. PC loopback (127.0.0.1, ::1) is always authorized.
- * 2. Paired/trusted client IP.
- * 3. Valid device session cookie (batch_probe_session or vreconder_device_session).
- * 4. Valid Authorization / X-Device-Token header.
- * 5. Valid URL query token (?token=...).
- *
- * @param {import('node:http').IncomingMessage} req
- * @param {string} [prototypeDir]
- * @returns {boolean}
- */
-export function isDeviceAuthorized(req, prototypeDir = PROTOTYPE_DIR) {
-  const remoteIp = req.socket?.remoteAddress || '';
-  if (isLoopbackIp(remoteIp)) return true;
-  if (trustedClientIps.has(remoteIp)) return true;
-
-  const token = getActiveDeviceToken(prototypeDir);
+export function getDeviceSessionToken(req) {
   const cookieHeader = req.headers?.cookie;
   if (cookieHeader) {
-    const match = cookieHeader.match(/(?:^|;\s*)(?:batch_probe_session|vreconder_device_session)=([^;]*)/);
-    if (match && decodeURIComponent(match[1]) === token) {
-      if (remoteIp) trustedClientIps.add(remoteIp);
-      return true;
-    }
+    const match = cookieHeader.match(/(?:^|;\s*)vreconder_device_session=([^;]*)/);
+    if (match) return decodeURIComponent(match[1]);
   }
-
-  const authHeader = req.headers?.['x-device-token'] || req.headers?.authorization;
+  const authHeader = req.headers?.['x-device-session'] || req.headers?.authorization;
   if (authHeader) {
-    const candidate = authHeader.replace(/^Bearer\s+/i, '').trim();
-    if (candidate === token) {
-      if (remoteIp) trustedClientIps.add(remoteIp);
-      return true;
-    }
+    return authHeader.replace(/^Bearer\s+/i, '').trim();
   }
+  return null;
+}
 
-  try {
-    const urlObj = new URL(req.url, 'http://localhost');
-    const qToken = urlObj.searchParams.get('token');
-    if (qToken && qToken === token) {
-      if (remoteIp) trustedClientIps.add(remoteIp);
-      return true;
-    }
-  } catch (_) {}
+/**
+ * Validates device authorization:
+ * 1. PC loopback is always authorized.
+ * 2. Paired session token from secure cookie/header present in activeSessions.
+ * IP address alone is NEVER used as authorization!
+ *
+ * @param {import('node:http').IncomingMessage} req
+ * @returns {boolean}
+ */
+export function isDeviceAuthorized(req) {
+  const remoteIp = req.socket?.remoteAddress || '';
+  if (isLoopbackIp(remoteIp)) return true;
+
+  const token = getDeviceSessionToken(req);
+  if (token && activeSessions.has(token)) {
+    return true;
+  }
 
   return false;
 }
 
+// ============================================================
+// 3. Static Asset Whitelist Enforcement (P0 / P1)
+// ============================================================
+
 /**
- * Handles loopback-only device trust requests from PC controller.
+ * Checks if a requested pathname is on the explicit public static asset whitelist.
+ * Strictly blocks all .json, .jsonl, .log, .key, .crt, .mjs, and private configs.
  *
- * @param {import('node:http').IncomingMessage} req
- * @param {import('node:http').ServerResponse} res
- * @param {object} [latestTelemetry]
+ * @param {string} pathname
+ * @param {boolean} isLoopback
  * @returns {boolean}
  */
-export function handleDeviceTrustRoute(req, res, latestTelemetry = null) {
+export function isAllowedPublicStaticAsset(pathname, isLoopback = false) {
+  if (!pathname || typeof pathname !== 'string') return false;
+  // Disallow path traversal, backslashes, hidden files, or null bytes
+  if (pathname.includes('..') || pathname.includes('\\') || pathname.includes('\0')) return false;
+
+  const lower = pathname.toLowerCase();
+
+  // Explicit forbidden file extensions (NEVER serve statically)
+  const forbiddenExts = ['.json', '.jsonl', '.log', '.key', '.crt', '.mjs', '.md', '.txt', '.py', '.sh', '.ps1', '.bat'];
+  for (const ext of forbiddenExts) {
+    if (lower.endsWith(ext)) return false;
+  }
+
+  // Controller UI is restricted strictly to PC loopback
+  if (pathname === '/controller' || pathname === '/controller.html') {
+    return isLoopback;
+  }
+
+  // Allowed HTML pages
+  const allowedHtml = ['/index.html', '/', '/native-video-diag.html', '/webgl-upload-diag.html'];
+  if (allowedHtml.includes(pathname)) return true;
+
+  // Frontend JS modules (strictly inside /src/)
+  if (pathname.startsWith('/src/') && lower.endsWith('.js')) {
+    return true;
+  }
+
+  // Frontend CSS
+  if (pathname === '/styles.css') return true;
+
+  // Frontend static image/icon assets
+  if (/\.(png|svg|ico)$/i.test(pathname)) {
+    if (pathname.startsWith('/icons/') || pathname.startsWith('/assets/') || pathname === '/favicon.ico') {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+// ============================================================
+// 4. Loopback & Pairing Route Handlers (P2)
+// ============================================================
+
+export function handleDevicePinRoute(req, res) {
   if (!isLoopbackIp(req.socket?.remoteAddress)) {
-    res.writeHead(403, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ error: 'Device trust endpoint is only callable from PC loopback' }));
+    res.writeHead(403, { 'Content-Type': 'application/json; charset=utf-8' });
+    res.end(JSON.stringify({ error: 'Pairing PIN is only viewable from PC local console' }));
+    return true;
+  }
+  const pinData = getActivePairingPin();
+  res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+  res.end(JSON.stringify({ ok: true, pin: pinData.pin, expiresAt: pinData.expiresAt }));
+  return true;
+}
+
+export function handleDevicePairRoute(req, res, isHttps) {
+  const isLoopback = isLoopbackIp(req.socket?.remoteAddress);
+  if (!isHttps && !isLoopback) {
+    res.writeHead(403, { 'Content-Type': 'application/json; charset=utf-8' });
+    res.end(JSON.stringify({ error: 'Pairing requires secure HTTPS connection', code: 'HTTPS_REQUIRED' }));
     return true;
   }
 
@@ -163,20 +251,53 @@ export function handleDeviceTrustRoute(req, res, latestTelemetry = null) {
   req.on('data', chunk => { body += chunk; });
   req.on('end', () => {
     try {
-      const payload = JSON.parse(body || '{}');
-      const targetIp = payload.ip || (latestTelemetry && latestTelemetry.clientIp);
-      if (targetIp) {
-        trustClientIp(targetIp);
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ ok: true, trustedIp: targetIp }));
-      } else {
-        res.writeHead(400, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ error: 'No target IP specified or active' }));
+      const payload = body ? JSON.parse(body) : {};
+      const clientIp = req.socket?.remoteAddress || 'unknown';
+      const result = verifyDevicePin(payload.pin, clientIp);
+
+      if (!result.valid) {
+        if (result.reason === 'RATE_LIMITED') {
+          res.writeHead(429, { 'Content-Type': 'application/json; charset=utf-8', 'Retry-After': String(result.retryAfterSec || 60) });
+          res.end(JSON.stringify({ error: 'Too many failed pairing attempts. Please wait.', retryAfterSec: result.retryAfterSec }));
+          return;
+        }
+        res.writeHead(401, { 'Content-Type': 'application/json; charset=utf-8' });
+        res.end(JSON.stringify({ error: result.reason === 'PIN_EXPIRED_OR_ABSENT' ? 'PIN expired or not generated' : 'Invalid pairing PIN' }));
+        return;
       }
+
+      // Issue long-lived secure HttpOnly session cookie
+      res.setHeader('Set-Cookie', `vreconder_device_session=${result.sessionToken}; Path=/; Secure; HttpOnly; SameSite=Strict; Max-Age=31536000`);
+      res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+      res.end(JSON.stringify({ ok: true, authorized: true }));
     } catch (err) {
-      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' });
       res.end(JSON.stringify({ error: err.message }));
     }
   });
+  return true;
+}
+
+export function handleDeviceApproveRoute(req, res) {
+  if (!isLoopbackIp(req.socket?.remoteAddress)) {
+    res.writeHead(403, { 'Content-Type': 'application/json; charset=utf-8' });
+    res.end(JSON.stringify({ error: 'Device approval endpoint is only callable from PC loopback' }));
+    return true;
+  }
+  const sessionToken = createAuthorizedSession('loopback_approved');
+  res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+  res.end(JSON.stringify({ ok: true, sessionToken }));
+  return true;
+}
+
+export function handleDeviceRevokeRoute(req, res) {
+  if (!isLoopbackIp(req.socket?.remoteAddress)) {
+    res.writeHead(403, { 'Content-Type': 'application/json; charset=utf-8' });
+    res.end(JSON.stringify({ error: 'Device revocation is only callable from PC loopback' }));
+    return true;
+  }
+  revokeAllDeviceSessions();
+  res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+  res.end(JSON.stringify({ ok: true, revoked: true, message: 'All active device sessions revoked' }));
   return true;
 }

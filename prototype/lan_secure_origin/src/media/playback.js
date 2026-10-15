@@ -367,6 +367,13 @@ export class MediaController {
   async refreshVideoList() {
     try {
       const res = await fetch('/api/videos');
+      if (res.status === 403) {
+        const errJson = await res.json().catch(() => ({}));
+        if (errJson.code === 'DEVICE_UNAUTHORIZED' && typeof window !== 'undefined' && window.showDevicePairingModal) {
+          window.showDevicePairingModal(() => { this.refreshVideoList(); });
+          return;
+        }
+      }
       const data = await res.json();
       if (data.videos && Array.isArray(data.videos)) {
         state.videoList = data.videos;
@@ -393,6 +400,13 @@ export class MediaController {
     try {
       state.firstFrameTimings.mediaListRequestAt = performance.now();
       const res = await fetch('/api/videos');
+      if (res.status === 403) {
+        const errJson = await res.json().catch(() => ({}));
+        if (errJson.code === 'DEVICE_UNAUTHORIZED' && typeof window !== 'undefined' && window.showDevicePairingModal) {
+          window.showDevicePairingModal(() => { this.loadVideoList(); });
+          return;
+        }
+      }
       const data = await res.json();
       state.firstFrameTimings.mediaListReadyAt = performance.now();
       if (data.videos && data.videos.length > 0) {

@@ -381,6 +381,32 @@ export function exportCanarySessionSummary() {
   }
 }
 
+export async function fetchPairingPin() {
+  try {
+    const res = await fetch('/api/device/pin');
+    const data = await res.json();
+    const badge = document.getElementById('badgePairingPin');
+    if (badge && data.pin) {
+      badge.textContent = `🔑 PIN: ${data.pin}`;
+      badge.className = 'badge badge-green';
+    }
+  } catch (e) {
+    console.warn('Failed to fetch pairing PIN:', e);
+  }
+}
+
+export async function revokeAllDeviceSessions() {
+  if (!confirm('Revoke all paired device sessions? iPhone will need to re-pair.')) return;
+  try {
+    const res = await fetch('/api/device/revoke', { method: 'POST' });
+    const data = await res.json();
+    alert(data.message || 'All device sessions revoked');
+    fetchPairingPin();
+  } catch (e) {
+    alert('Failed to revoke sessions: ' + e.message);
+  }
+}
+
 // Global attachment for HTML event handlers
 window.selectCanary = selectCanary;
 window.selectTopRiskCanary = selectTopRiskCanary;
@@ -388,10 +414,13 @@ window.advanceNextCanary = advanceNextCanary;
 window.refreshCanaryAdmissions = refreshCanaryAdmissions;
 window.exportCanarySessionSummary = exportCanarySessionSummary;
 window.handleCanaryTelemetry = handleCanaryTelemetry;
+window.fetchPairingPin = fetchPairingPin;
+window.revokeAllDeviceSessions = revokeAllDeviceSessions;
 
 // Bootstrap
 loadCanaryQueue();
 refreshCanaryAdmissions();
+fetchPairingPin();
 const timer = setInterval(() => {
   refreshCanaryAdmissions();
 }, 4000);

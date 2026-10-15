@@ -22,12 +22,12 @@ import { handleBatchProbeRoutes } from './src/health/batch-probe-router.mjs';
 import {
   getAllowedRoots,
   resolveSecureMediaPath,
-  getActiveDeviceToken,
-  trustClientIp,
-  revokeTrustedClientIp,
-  clearTrustedClientIps,
   isDeviceAuthorized,
-  handleDeviceTrustRoute
+  isAllowedPublicStaticAsset,
+  handleDevicePinRoute,
+  handleDevicePairRoute,
+  handleDeviceApproveRoute,
+  handleDeviceRevokeRoute
 } from './src/server/lan-security.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -64,16 +64,25 @@ let lastIphoneTelemetryAt = 0;
 function handleRequest(req, res, isHttps) {
   const urlObj = new URL(req.url, `http://${req.headers.host}`);
   const pathname = urlObj.pathname;
+  const isLoopback = isLoopbackIp(req.socket?.remoteAddress);
 
   if (pathname !== '/api/calibration/events' && pathname !== '/api/telemetry') {
-    console.log(`[REQ] ${req.method} ${pathname} (${req.socket.remoteAddress})`);
+    console.log(`[REQ] ${req.method} ${pathname} (${req.socket?.remoteAddress})`);
   }
 
-  // Disallow unencrypted media streaming and library browsing over plain HTTP 8080
-  if (!isHttps && (pathname === '/video' || pathname === '/sample.mp4' || pathname === '/api/videos')) {
+  // Disallow unencrypted media, APIs, and arbitrary files over plain HTTP 8080
+  if (!isHttps) {
+    if (pathname === '/' || pathname === '/index.html') {
+      renderOnboardingPage(res);
+      return;
+    }
+    if (pathname === '/ca.crt' || pathname === '/download-ca') {
+      serveCaCertificate(res);
+      return;
+    }
     res.writeHead(403, { 'Content-Type': 'application/json; charset=utf-8' });
     res.end(JSON.stringify({
-      error: 'Unencrypted media access is prohibited over HTTP 8080. Connect via secure HTTPS.',
+      error: 'Unencrypted access is prohibited over HTTP 8080. Connect via secure HTTPS.',
       code: 'HTTPS_REQUIRED'
     }));
     return;
@@ -83,10 +92,17 @@ function handleRequest(req, res, isHttps) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, HEAD, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Range');
+  res.setHeader('Access-Control-Allow-Credentials', 'true');
 
   if (req.method === 'OPTIONS') {
     res.writeHead(204);
     res.end();
+    return;
+  }
+
+  // CA certificate download endpoint
+  if (pathname === '/ca.crt' || pathname === '/download-ca') {
+    serveCaCertificate(res);
     return;
   }
 
@@ -100,19 +116,43 @@ function handleRequest(req, res, isHttps) {
     }
   }
 
-  // CA certificate download endpoint
-  if (pathname === '/ca.crt' || pathname === '/download-ca') {
-    const caFile = path.join(CERTS_DIR, 'ca.crt');
-    if (fs.existsSync(caFile)) {
-      res.writeHead(200, {
-        'Content-Type': 'application/x-x509-ca-cert',
-        'Content-Disposition': 'attachment; filename="vreconder-ca.crt"'
-      });
-      fs.createReadStream(caFile).pipe(res);
+  // Device pairing & session management endpoints
+  if (pathname === '/api/device/pair' && req.method === 'POST') {
+    handleDevicePairRoute(req, res, isHttps);
+    return;
+  }
+  if (pathname === '/api/device/pin') {
+    handleDevicePinRoute(req, res);
+    return;
+  }
+  if (pathname === '/api/device/approve' && req.method === 'POST') {
+    handleDeviceApproveRoute(req, res);
+    return;
+  }
+  if (pathname === '/api/device/revoke' && req.method === 'POST') {
+    handleDeviceRevokeRoute(req, res);
+    return;
+  }
+
+  // PC Controller route is loopback only
+  if (pathname === '/controller' || pathname === '/controller.html') {
+    if (!isLoopback) {
+      res.writeHead(403, { 'Content-Type': 'text/plain; charset=utf-8' });
+      res.end('PC Controller is only accessible from PC loopback (127.0.0.1)');
       return;
-    } else {
-      res.writeHead(404, { 'Content-Type': 'text/plain' });
-      res.end('CA certificate not generated yet');
+    }
+  }
+
+  // Protected API & Media Gate: require authorized device session or loopback
+  const isProtected = pathname === '/video' || pathname === '/sample.mp4' || pathname.startsWith('/api/');
+  if (isProtected) {
+    if (!isDeviceAuthorized(req, __dirname)) {
+      console.warn(`[Security] Unauthorized LAN client denied ${pathname}: ${req.socket?.remoteAddress}`);
+      res.writeHead(403, { 'Content-Type': 'application/json; charset=utf-8' });
+      res.end(JSON.stringify({
+        error: 'Device access denied: untrusted LAN client. Pairing or trusted session required.',
+        code: 'DEVICE_UNAUTHORIZED'
+      }));
       return;
     }
   }
@@ -134,12 +174,6 @@ function handleRequest(req, res, isHttps) {
 
   // Batch Probe modular routes (AV1 compatibility probe)
   if (handleBatchProbeRoutes(req, res, pathname)) {
-    return;
-  }
-
-  // Device trust endpoint (PC loopback only)
-  if (pathname === '/api/device/trust' && req.method === 'POST') {
-    handleDeviceTrustRoute(req, res, latestTelemetry);
     return;
   }
 
@@ -425,16 +459,6 @@ function handleRequest(req, res, isHttps) {
 
   // Index HTML / Static page
   if (pathname === '/' || pathname === '/index.html') {
-    if (!isHttps) {
-      renderOnboardingPage(res);
-      return;
-    }
-    const token = getActiveDeviceToken(__dirname);
-    const queryToken = urlObj.searchParams.get('token');
-    if (queryToken && queryToken === token) {
-      trustClientIp(req.socket.remoteAddress);
-      res.setHeader('Set-Cookie', `vreconder_device_session=${token}; Path=/; Secure; HttpOnly; SameSite=Strict`);
-    }
     const indexPath = path.join(__dirname, 'index.html');
     if (fs.existsSync(indexPath)) {
       res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
@@ -444,7 +468,13 @@ function handleRequest(req, res, isHttps) {
     }
   }
 
-  // Static assets (.html, .js, .mjs, .css, .json, .png, .svg)
+  // Static assets whitelist enforcement (P0/P1)
+  if (!isAllowedPublicStaticAsset(pathname, isLoopback)) {
+    res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
+    res.end('404 Not Found');
+    return;
+  }
+
   let safePath = path.normalize(path.join(__dirname, pathname));
   if (pathname === '/controller') safePath = path.join(__dirname, 'controller.html');
   if (pathname === '/native-diag' || pathname === '/native-diag.html') safePath = path.join(__dirname, 'native-video-diag.html');
@@ -459,7 +489,8 @@ function handleRequest(req, res, isHttps) {
       '.css': 'text/css; charset=utf-8',
       '.json': 'application/json; charset=utf-8',
       '.png': 'image/png',
-      '.svg': 'image/svg+xml'
+      '.svg': 'image/svg+xml',
+      '.ico': 'image/x-icon'
     };
     if (mimeTypes[ext]) {
       res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
@@ -473,12 +504,25 @@ function handleRequest(req, res, isHttps) {
   res.end('404 Not Found');
 }
 
+function serveCaCertificate(res) {
+  const caFile = path.join(CERTS_DIR, 'ca.crt');
+  if (fs.existsSync(caFile)) {
+    res.writeHead(200, {
+      'Content-Type': 'application/x-x509-ca-cert',
+      'Content-Disposition': 'attachment; filename="vreconder-ca.crt"'
+    });
+    fs.createReadStream(caFile).pipe(res);
+  } else {
+    res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
+    res.end('CA certificate not generated yet');
+  }
+}
+
 function renderOnboardingPage(res) {
   res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
   const localIps = getLocalIPs();
   const primaryIp = localIps.find(ip => ip.startsWith('192.168.')) || localIps[0] || '127.0.0.1';
-  const token = getActiveDeviceToken(__dirname);
-  res.end(`<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>VREconder CA Onboarding</title><style>body{font-family:-apple-system,sans-serif;padding:20px;line-height:1.6;background:#0f172a;color:#f8fafc;margin:0;}.card{background:#1e293b;border-radius:12px;padding:16px;margin-bottom:16px;border:1px solid #334155;}.btn{display:inline-block;background:#2563eb;color:white;padding:12px 18px;border-radius:8px;text-decoration:none;font-weight:bold;margin:8px 0;}.btn-green{background:#16a34a;}code{background:#334155;padding:2px 6px;border-radius:4px;font-size:0.9em;color:#38bdf8;}ol{padding-left:20px;}li{margin-bottom:8px;}.badge{display:inline-block;padding:3px 8px;border-radius:4px;font-size:0.8em;font-weight:bold;background:#0284c7;}</style></head><body><h2>🔒 VREconder Local HTTPS CA Setup</h2><div class="card"><span class="badge">Step 1</span><h3>Download & Install Root CA Profile</h3><p>Tap below in iPhone Safari to download the root certificate:</p><a class="btn" href="/ca.crt">📥 Download Root CA Profile</a><ol><li>Tap <b>Allow</b> when Safari asks to download profile.</li><li>Open iPhone <b>Settings</b> &rarr; tap <b>Profile Downloaded</b> &rarr; tap <b>Install</b>.</li></ol></div><div class="card"><span class="badge">Step 2</span><h3>Enable Full Trust for Root CA</h3><ol><li>In iPhone <b>Settings</b>, go to: <code>General &gt; About &gt; Certificate Trust Settings</code>.</li><li>Turn ON <b>VREconder LAN Root CA</b> &rarr; tap <b>Continue</b>.</li></ol></div><div class="card"><span class="badge">Step 3</span><h3>Open Secure VR Player</h3><a class="btn btn-green" href="https://${primaryIp}:${HTTPS_PORT}/?token=${token}">🚀 Open HTTPS VR Player (https://${primaryIp}:${HTTPS_PORT})</a></div></body></html>`);
+  res.end(`<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>VREconder CA Onboarding</title><style>body{font-family:-apple-system,sans-serif;padding:20px;line-height:1.6;background:#0f172a;color:#f8fafc;margin:0;}.card{background:#1e293b;border-radius:12px;padding:16px;margin-bottom:16px;border:1px solid #334155;}.btn{display:inline-block;background:#2563eb;color:white;padding:12px 18px;border-radius:8px;text-decoration:none;font-weight:bold;margin:8px 0;}.btn-green{background:#16a34a;}code{background:#334155;padding:2px 6px;border-radius:4px;font-size:0.9em;color:#38bdf8;}ol{padding-left:20px;}li{margin-bottom:8px;}.badge{display:inline-block;padding:3px 8px;border-radius:4px;font-size:0.8em;font-weight:bold;background:#0284c7;}</style></head><body><h2>🔒 VREconder Local HTTPS CA Setup</h2><div class="card"><span class="badge">Step 1</span><h3>Download & Install Root CA Profile</h3><p>Tap below in iPhone Safari to download the root certificate:</p><a class="btn" href="/ca.crt">📥 Download Root CA Profile</a><ol><li>Tap <b>Allow</b> when Safari asks to download profile.</li><li>Open iPhone <b>Settings</b> &rarr; tap <b>Profile Downloaded</b> &rarr; tap <b>Install</b>.</li></ol></div><div class="card"><span class="badge">Step 2</span><h3>Enable Full Trust for Root CA</h3><ol><li>In iPhone <b>Settings</b>, go to: <code>General &gt; About &gt; Certificate Trust Settings</code>.</li><li>Turn ON <b>VREconder LAN Root CA</b> &rarr; tap <b>Continue</b>.</li></ol></div><div class="card"><span class="badge">Step 3</span><h3>Open Secure VR Player</h3><a class="btn btn-green" href="https://${primaryIp}:${HTTPS_PORT}/">🚀 Open HTTPS VR Player (https://${primaryIp}:${HTTPS_PORT})</a></div></body></html>`);
 }
 
 const isDirectRun = process.argv[1] && (path.resolve(process.argv[1]) === __filename || process.argv[1].endsWith('server.mjs'));
@@ -493,7 +537,6 @@ if (isDirectRun) {
 
   const localIps = getLocalIPs();
   const primaryIp = localIps.find(ip => ip.startsWith('192.168.')) || localIps[0] || '127.0.0.1';
-  const token = getActiveDeviceToken(__dirname);
 
   // HTTP Server
   httpServer = http.createServer((req, res) => handleRequest(req, res, false));
@@ -517,7 +560,7 @@ if (isDirectRun) {
     console.log(`💻 [PC Controller / 电脑控制台]:`);
     console.log(`   👉 https://127.0.0.1:${HTTPS_PORT}/controller.html`);
     console.log(`📱 [iPhone VR Headset / 手机VR头显]:`);
-    console.log(`   👉 https://${primaryIp}:${HTTPS_PORT}/?token=${token}`);
+    console.log(`   👉 https://${primaryIp}:${HTTPS_PORT}/`);
     console.log(`============================================================\n`);
   });
 
@@ -530,6 +573,7 @@ if (isDirectRun) {
 export {
   handleRequest,
   renderOnboardingPage,
+  serveCaCertificate,
   httpServer,
   httpsServer
 };

@@ -30,7 +30,66 @@ export class CalibrationUI {
     this.activeViewerProfile = this.storage.activeViewerProfile;
 
     this.initDOM();
+    this.initPairingModal();
     this.initSSEBridge();
+  }
+
+  initPairingModal() {
+    if (typeof document === 'undefined') return;
+    const modal = document.getElementById('pairingModal');
+    const inp = document.getElementById('inpPairPin');
+    const btn = document.getElementById('btnSubmitPair');
+    const errDiv = document.getElementById('pairingError');
+    if (!modal || !btn || !inp) return;
+
+    window.showDevicePairingModal = (onSuccess) => {
+      modal.style.display = 'flex';
+      if (errDiv) errDiv.style.display = 'none';
+      inp.value = '';
+      inp.focus();
+      this.onPairSuccess = onSuccess;
+    };
+
+    btn.onclick = async () => {
+      const pin = inp.value.trim();
+      if (pin.length !== 6) {
+        if (errDiv) {
+          errDiv.textContent = '请输入 6 位数字配对码';
+          errDiv.style.display = 'block';
+        }
+        return;
+      }
+      btn.disabled = true;
+      btn.textContent = '配对中...';
+      try {
+        const resp = await fetch('/api/device/pair', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ pin })
+        });
+        const data = await resp.json();
+        if (resp.ok && data.ok) {
+          modal.style.display = 'none';
+          this.initSSEBridge();
+          if (typeof this.onPairSuccess === 'function') {
+            this.onPairSuccess();
+          }
+        } else {
+          if (errDiv) {
+            errDiv.textContent = data.error || '配对失败，请重试';
+            errDiv.style.display = 'block';
+          }
+        }
+      } catch (e) {
+        if (errDiv) {
+          errDiv.textContent = '网络错误: ' + e.message;
+          errDiv.style.display = 'block';
+        }
+      } finally {
+        btn.disabled = false;
+        btn.textContent = '确认配对 (Pair & Connect)';
+      }
+    };
   }
 
   initDOM() {
@@ -41,7 +100,11 @@ export class CalibrationUI {
 
   initSSEBridge() {
     try {
+      if (this.eventSource) {
+        this.eventSource.close();
+      }
       const es = new EventSource('/api/calibration/events');
+      this.eventSource = es;
       es.onopen = () => { state.pcConnected = true; };
       es.onerror = () => { state.pcConnected = false; };
       es.onmessage = (e) => {
