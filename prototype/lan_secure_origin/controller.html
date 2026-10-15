@@ -350,6 +350,28 @@
       </div>
     </div>
 
+    <!-- Targeted Canary & High-Risk Direct VR Testing (Issue #28 Zero-Search Queue) -->
+    <div class="card" id="cardCanaryTesting">
+      <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
+        <div>
+          <div style="font-size:0.8rem; font-weight:700; color:var(--muted); text-transform:uppercase;">🎯 Canary &amp; High-Risk Direct VR Testing</div>
+          <div class="subtitle" style="font-size:0.72rem; color:var(--muted);">Zero-Search queue for verified AV1 restoration — Remote push to iPhone VR Player</div>
+        </div>
+        <div style="display:flex; gap:6px; align-items:center; flex-wrap:wrap;">
+          <span class="badge badge-slate" id="canaryStageBadge">⚪ IDLE: No Target</span>
+          <button class="action-btn" onclick="selectTopRiskCanary()" style="background:#0284c7; font-weight:bold; padding:3px 8px; font-size:0.72rem;" title="1-Click Select Highest Risk Candidate">⚡ 1-Click Top Risk</button>
+          <button class="action-btn" onclick="advanceNextCanary()" style="padding:3px 8px; font-size:0.72rem;" title="Advance to Next Canary Candidate">⏭ Next Canary</button>
+          <button class="action-btn" onclick="exportCanarySessionSummary()" style="padding:3px 8px; font-size:0.72rem;" title="Copy Structured Test Evidence">📋 Copy Summary</button>
+        </div>
+      </div>
+      <div id="canaryLiveMetrics" style="margin-top:6px; padding:6px 10px; background:rgba(0,0,0,0.3); border-radius:6px; font-family:monospace; font-size:0.72rem; color:#cbd5e1;">
+        No active Canary test. Click [⚡ 1-Click Top Risk] or [▶ Select] below to push candidate to iPhone.
+      </div>
+      <div id="canaryItemsList" style="display:flex; flex-direction:column; gap:6px; margin-top:8px;">
+        <!-- Populated dynamically by canary-test-controller.js -->
+      </div>
+    </div>
+
     <!-- iPhone Telemetry & Measured Timings -->
     <div class="card" id="cardPerfTelemetry">
       <div style="display:flex; justify-content:space-between; align-items:center;">
@@ -421,5 +443,6 @@
   </div>
 
   <script type="module" src="./src/controls/controller-app.js?v=20260824_v3"></script>
+  <script type="module" src="./src/controls/canary-test-controller.js"></script>
 </body>
 </html>

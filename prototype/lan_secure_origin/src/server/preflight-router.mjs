@@ -7,6 +7,10 @@ import { preflightIncomingMedia } from '../preflight/intake-preflight.mjs';
 import { getMediaFingerprint } from '../normalization/fingerprint.mjs';
 import { recordIncident } from '../telemetry/incident-store.mjs';
 import { getProvisionalAdmissionStore } from '../preflight/provisional-admission-store.mjs';
+import { fileURLToPath } from 'node:url';
+
+const __filename = fileURLToPath(import.meta.url);
+const MODULE_DIR = path.dirname(__filename);
 
 const probeCache = new DeviceProbeCache();
 const provisionalStore = getProvisionalAdmissionStore();
@@ -395,6 +399,68 @@ export function handlePreflightRoutes(req, res, pathname, __dirname, allowedRoot
     });
     return true;
     }
+  }
+
+  // 10. Loopback-only Canary & High-Risk Dynamic Queue (Issue #28 Zero-Search Queue)
+  if (pathname === '/api/canary-queue') {
+    const remoteAddress = req.socket.remoteAddress || '';
+    const cleaned = remoteAddress.replace(/^::ffff:/, '');
+    const isLoopback = cleaned === '127.0.0.1' || cleaned === '::1' || cleaned === 'localhost';
+    if (!isLoopback) {
+      res.writeHead(403, { 'Content-Type': 'application/json; charset=utf-8' });
+      res.end(JSON.stringify({ error: 'Canary queue is only accessible from PC loopback (127.0.0.1)' }));
+      return true;
+    }
+
+    const baseDir = (typeof __dirname === 'string' && __dirname) ? __dirname : path.resolve(MODULE_DIR, '..', '..');
+    const regPath = path.join(baseDir, 'batch_probe_registry.jsonl');
+    let items = [];
+    if (fs.existsSync(regPath)) {
+      try {
+        const raw = fs.readFileSync(regPath, 'utf8').trim().split('\n').filter(Boolean);
+        const records = raw.map(l => JSON.parse(l));
+        const denied = records.filter(r => r.candidateState === 'POLICY_DENIED_CANDIDATE');
+        denied.sort((a, b) => {
+          const sB = b.stallCount ?? 0, sA = a.stallCount ?? 0;
+          if (sB !== sA) return sB - sA;
+          const ffb = b.seekDetails?.seekFirstFrameLatMs ?? 0, ffa = a.seekDetails?.seekFirstFrameLatMs ?? 0;
+          if (ffb !== ffa) return ffb - ffa;
+          const apb = b.seekDetails?.seekApiLatMs ?? 0, apa = a.seekDetails?.seekApiLatMs ?? 0;
+          return apb - apa;
+        });
+
+        items = denied.map((r, idx) => {
+          const baseName = r.neutralId ? path.basename(r.neutralId) : (r.file || r.name);
+          return {
+            id: `canary_${String(idx + 1).padStart(2, '0')}`,
+            rank: idx + 1,
+            fingerprintId: r.fingerprintId,
+            relPath: baseName,
+            fileName: baseName,
+            videoWidth: r.videoWidth || 0,
+            videoHeight: r.videoHeight || 0,
+            evidence: {
+              stalls: r.stallCount ?? 0,
+              seekFirstFrameLatMs: r.seekDetails?.seekFirstFrameLatMs ?? 0,
+              seekApiLatMs: r.seekDetails?.seekApiLatMs ?? 0,
+              presentationOverheadMs: (r.seekDetails?.seekFirstFrameLatMs ?? 0) - (r.seekDetails?.seekApiLatMs ?? 0),
+              w1Frames: r.observationEvidence?.window1Frames ?? 0,
+              w2Frames: r.observationEvidence?.window2Frames ?? 0,
+              rvfcCount: r.rvfcCount ?? 0
+            }
+          };
+        });
+      } catch (e) {
+        items = [];
+      }
+    }
+
+    res.writeHead(200, {
+      'Content-Type': 'application/json; charset=utf-8',
+      'Cache-Control': 'no-cache, no-store'
+    });
+    res.end(JSON.stringify({ count: items.length, topRiskCandidates: items.slice(0, 10), candidates: items }, null, 2));
+    return true;
   }
 
   return false;

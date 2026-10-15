@@ -548,12 +548,12 @@ export function updateTelemetryUI(data) {
       }
       if (evtEl && ci.lastEvent) evtEl.textContent = `${ci.lastEvent.type}: ${JSON.stringify(ci.lastEvent.data || {})}`;
     }
+    if (window.handleCanaryTelemetry) window.handleCanaryTelemetry(data);
   } catch (e) {}
 }
 
 export function onPerformanceModeChange(mode) { sendControl({ action: 'set_performance_mode', mode }); }
 export function onRenderScaleChange(scaleVal) { sendControl({ action: 'set_render_scale', scale: parseFloat(scaleVal) || 1.0 }); }
-
 // Window Globals for inline HTML event handlers
 Object.assign(window, {
   setStage, setViewerVisualMode, toggleO4FittingMode, setO4FittingActive,
