@@ -2,6 +2,7 @@ import http from 'node:http';
 import https from 'node:https';
 import fs from 'node:fs';
 import path from 'node:path';
+import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import {
   getLocalIPs,
@@ -18,6 +19,16 @@ import { handleProfileRoutes } from './src/server/profile-router.mjs';
 import { recordIncident } from './src/telemetry/incident-store.mjs';
 import { handleMediaHealthRoutes } from './src/health/media-health-router.mjs';
 import { handleBatchProbeRoutes } from './src/health/batch-probe-router.mjs';
+import {
+  getAllowedRoots,
+  resolveSecureMediaPath,
+  getActiveDeviceToken,
+  trustClientIp,
+  revokeTrustedClientIp,
+  clearTrustedClientIps,
+  isDeviceAuthorized,
+  handleDeviceTrustRoute
+} from './src/server/lan-security.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -50,46 +61,22 @@ let latestTelemetry = null;
 let lastLoggedPerfWindowSeq = -1;
 let lastIphoneTelemetryAt = 0;
 
-function getAllowedRoots() {
-  const primary = getActiveMediaRoot();
-  const roots = [primary];
-  const renderRoot = 'G:\\Media\\VR\\Render';
-  if (fs.existsSync(renderRoot)) roots.push(renderRoot);
-  return roots;
-}
-
-function resolveSecureMediaPath(relParam) {
-  if (!relParam) return null;
-  const roots = getAllowedRoots();
-
-  // Try direct resolution or root relative resolution
-  for (const root of roots) {
-    const resolved = path.resolve(root, relParam);
-    const relToRoot = path.relative(root, resolved);
-    if (!relToRoot.startsWith('..') && !path.isAbsolute(relToRoot) && fs.existsSync(resolved)) {
-      return resolved;
-    }
-  }
-
-  // Handle case where relParam is prefixed with 'Render/' or folder name
-  for (const root of roots) {
-    const parentDir = path.dirname(root);
-    const resolved = path.resolve(parentDir, relParam);
-    const relToParent = path.relative(parentDir, resolved);
-    if (!relToParent.startsWith('..') && !path.isAbsolute(relToParent) && fs.existsSync(resolved)) {
-      return resolved;
-    }
-  }
-
-  return null;
-}
-
 function handleRequest(req, res, isHttps) {
   const urlObj = new URL(req.url, `http://${req.headers.host}`);
   const pathname = urlObj.pathname;
 
   if (pathname !== '/api/calibration/events' && pathname !== '/api/telemetry') {
     console.log(`[REQ] ${req.method} ${pathname} (${req.socket.remoteAddress})`);
+  }
+
+  // Disallow unencrypted media streaming and library browsing over plain HTTP 8080
+  if (!isHttps && (pathname === '/video' || pathname === '/sample.mp4' || pathname === '/api/videos')) {
+    res.writeHead(403, { 'Content-Type': 'application/json; charset=utf-8' });
+    res.end(JSON.stringify({
+      error: 'Unencrypted media access is prohibited over HTTP 8080. Connect via secure HTTPS.',
+      code: 'HTTPS_REQUIRED'
+    }));
+    return;
   }
 
   // CORS headers
@@ -147,6 +134,12 @@ function handleRequest(req, res, isHttps) {
 
   // Batch Probe modular routes (AV1 compatibility probe)
   if (handleBatchProbeRoutes(req, res, pathname)) {
+    return;
+  }
+
+  // Device trust endpoint (PC loopback only)
+  if (pathname === '/api/device/trust' && req.method === 'POST') {
+    handleDeviceTrustRoute(req, res, latestTelemetry);
     return;
   }
 
@@ -358,6 +351,15 @@ function handleRequest(req, res, isHttps) {
 
   // Video list from real media folder (instant cached)
   if (pathname === '/api/videos') {
+    if (!isDeviceAuthorized(req, __dirname)) {
+      console.warn(`[Security] Unauthorized LAN client denied /api/videos: ${req.socket.remoteAddress}`);
+      res.writeHead(403, { 'Content-Type': 'application/json; charset=utf-8' });
+      res.end(JSON.stringify({
+        error: 'Device access denied: untrusted LAN client. Pairing or trusted session required.',
+        code: 'DEVICE_UNAUTHORIZED'
+      }));
+      return;
+    }
     const activeRoot = getActiveMediaRoot();
     let videos = getCachedVideos();
     if (videos.length === 0) videos = scanRealVRVideos();
@@ -368,6 +370,15 @@ function handleRequest(req, res, isHttps) {
 
   // Video streaming endpoint (supports ?path=... or default first video)
   if (pathname === '/video' || pathname === '/sample.mp4') {
+    if (!isDeviceAuthorized(req, __dirname)) {
+      console.warn(`[Security] Unauthorized LAN client denied /video: ${req.socket.remoteAddress}`);
+      res.writeHead(403, { 'Content-Type': 'application/json; charset=utf-8' });
+      res.end(JSON.stringify({
+        error: 'Device access denied: untrusted LAN client. Pairing or trusted session required.',
+        code: 'DEVICE_UNAUTHORIZED'
+      }));
+      return;
+    }
     const relParam = urlObj.searchParams.get('path');
     let targetPath = null;
 
@@ -418,6 +429,12 @@ function handleRequest(req, res, isHttps) {
       renderOnboardingPage(res);
       return;
     }
+    const token = getActiveDeviceToken(__dirname);
+    const queryToken = urlObj.searchParams.get('token');
+    if (queryToken && queryToken === token) {
+      trustClientIp(req.socket.remoteAddress);
+      res.setHeader('Set-Cookie', `vreconder_device_session=${token}; Path=/; Secure; HttpOnly; SameSite=Strict`);
+    }
     const indexPath = path.join(__dirname, 'index.html');
     if (fs.existsSync(indexPath)) {
       res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
@@ -460,43 +477,59 @@ function renderOnboardingPage(res) {
   res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
   const localIps = getLocalIPs();
   const primaryIp = localIps.find(ip => ip.startsWith('192.168.')) || localIps[0] || '127.0.0.1';
-  res.end(`<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>VREconder CA Onboarding</title><style>body{font-family:-apple-system,sans-serif;padding:20px;line-height:1.6;background:#0f172a;color:#f8fafc;margin:0;}.card{background:#1e293b;border-radius:12px;padding:16px;margin-bottom:16px;border:1px solid #334155;}.btn{display:inline-block;background:#2563eb;color:white;padding:12px 18px;border-radius:8px;text-decoration:none;font-weight:bold;margin:8px 0;}.btn-green{background:#16a34a;}code{background:#334155;padding:2px 6px;border-radius:4px;font-size:0.9em;color:#38bdf8;}ol{padding-left:20px;}li{margin-bottom:8px;}.badge{display:inline-block;padding:3px 8px;border-radius:4px;font-size:0.8em;font-weight:bold;background:#0284c7;}</style></head><body><h2>🔒 VREconder Local HTTPS CA Setup</h2><div class="card"><span class="badge">Step 1</span><h3>Download & Install Root CA Profile</h3><p>Tap below in iPhone Safari to download the root certificate:</p><a class="btn" href="/ca.crt">📥 Download Root CA Profile</a><ol><li>Tap <b>Allow</b> when Safari asks to download profile.</li><li>Open iPhone <b>Settings</b> &rarr; tap <b>Profile Downloaded</b> &rarr; tap <b>Install</b>.</li></ol></div><div class="card"><span class="badge">Step 2</span><h3>Enable Full Trust for Root CA</h3><ol><li>In iPhone <b>Settings</b>, go to: <code>General &gt; About &gt; Certificate Trust Settings</code>.</li><li>Turn ON <b>VREconder LAN Root CA</b> &rarr; tap <b>Continue</b>.</li></ol></div><div class="card"><span class="badge">Step 3</span><h3>Open Secure VR Player</h3><a class="btn btn-green" href="https://${primaryIp}:${HTTPS_PORT}/">🚀 Open HTTPS VR Player (https://${primaryIp}:${HTTPS_PORT})</a></div></body></html>`);
+  const token = getActiveDeviceToken(__dirname);
+  res.end(`<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>VREconder CA Onboarding</title><style>body{font-family:-apple-system,sans-serif;padding:20px;line-height:1.6;background:#0f172a;color:#f8fafc;margin:0;}.card{background:#1e293b;border-radius:12px;padding:16px;margin-bottom:16px;border:1px solid #334155;}.btn{display:inline-block;background:#2563eb;color:white;padding:12px 18px;border-radius:8px;text-decoration:none;font-weight:bold;margin:8px 0;}.btn-green{background:#16a34a;}code{background:#334155;padding:2px 6px;border-radius:4px;font-size:0.9em;color:#38bdf8;}ol{padding-left:20px;}li{margin-bottom:8px;}.badge{display:inline-block;padding:3px 8px;border-radius:4px;font-size:0.8em;font-weight:bold;background:#0284c7;}</style></head><body><h2>🔒 VREconder Local HTTPS CA Setup</h2><div class="card"><span class="badge">Step 1</span><h3>Download & Install Root CA Profile</h3><p>Tap below in iPhone Safari to download the root certificate:</p><a class="btn" href="/ca.crt">📥 Download Root CA Profile</a><ol><li>Tap <b>Allow</b> when Safari asks to download profile.</li><li>Open iPhone <b>Settings</b> &rarr; tap <b>Profile Downloaded</b> &rarr; tap <b>Install</b>.</li></ol></div><div class="card"><span class="badge">Step 2</span><h3>Enable Full Trust for Root CA</h3><ol><li>In iPhone <b>Settings</b>, go to: <code>General &gt; About &gt; Certificate Trust Settings</code>.</li><li>Turn ON <b>VREconder LAN Root CA</b> &rarr; tap <b>Continue</b>.</li></ol></div><div class="card"><span class="badge">Step 3</span><h3>Open Secure VR Player</h3><a class="btn btn-green" href="https://${primaryIp}:${HTTPS_PORT}/?token=${token}">🚀 Open HTTPS VR Player (https://${primaryIp}:${HTTPS_PORT})</a></div></body></html>`);
 }
 
-// Start Servers
-ensureCertificates(CERTS_DIR);
-scanRealVRVideos();
+const isDirectRun = process.argv[1] && (path.resolve(process.argv[1]) === __filename || process.argv[1].endsWith('server.mjs'));
 
-const localIps = getLocalIPs();
-const primaryIp = localIps.find(ip => ip.startsWith('192.168.')) || localIps[0] || '127.0.0.1';
+let httpServer = null;
+let httpsServer = null;
 
-// HTTP Server
-const httpServer = http.createServer((req, res) => handleRequest(req, res, false));
-httpServer.listen(HTTP_PORT, '0.0.0.0', () => {
-  console.log(`[HTTP Server]  Running on http://${primaryIp}:${HTTP_PORT} (for CA download / onboarding)`);
-});
+if (isDirectRun) {
+  // Start Servers
+  ensureCertificates(CERTS_DIR);
+  scanRealVRVideos();
 
-// HTTPS Server
-const httpsOptions = {
-  key: fs.readFileSync(path.join(CERTS_DIR, 'server.key')),
-  cert: fs.readFileSync(path.join(CERTS_DIR, 'server.crt'))
+  const localIps = getLocalIPs();
+  const primaryIp = localIps.find(ip => ip.startsWith('192.168.')) || localIps[0] || '127.0.0.1';
+  const token = getActiveDeviceToken(__dirname);
+
+  // HTTP Server
+  httpServer = http.createServer((req, res) => handleRequest(req, res, false));
+  httpServer.listen(HTTP_PORT, '0.0.0.0', () => {
+    console.log(`[HTTP Server]  Running on http://${primaryIp}:${HTTP_PORT} (for CA download / onboarding)`);
+  });
+
+  // HTTPS Server
+  const httpsOptions = {
+    key: fs.readFileSync(path.join(CERTS_DIR, 'server.key')),
+    cert: fs.readFileSync(path.join(CERTS_DIR, 'server.crt'))
+  };
+
+  httpsServer = https.createServer(httpsOptions, (req, res) => handleRequest(req, res, true));
+  httpsServer.listen(HTTPS_PORT, '0.0.0.0', () => {
+    console.log(`[HTTPS Server] Running on https://${primaryIp}:${HTTPS_PORT} (Secure VR Player)`);
+    console.log(`[Media Root]   Streaming VR videos from: ${getActiveMediaRoot()}`);
+    console.log(`\n============================================================`);
+    console.log(`⚡ [Automated Safari Preflight / 兼容性因果测试]:`);
+    console.log(`   👉 https://${primaryIp}:${HTTPS_PORT}/compat-preflight`);
+    console.log(`💻 [PC Controller / 电脑控制台]:`);
+    console.log(`   👉 https://127.0.0.1:${HTTPS_PORT}/controller.html`);
+    console.log(`📱 [iPhone VR Headset / 手机VR头显]:`);
+    console.log(`   👉 https://${primaryIp}:${HTTPS_PORT}/?token=${token}`);
+    console.log(`============================================================\n`);
+  });
+
+  // Periodic SSE keepalive heartbeat
+  setInterval(() => {
+    broadcastCalibrationEvent({ type: 'heartbeat', timestamp: Date.now() });
+  }, 3000);
+}
+
+export {
+  handleRequest,
+  renderOnboardingPage,
+  httpServer,
+  httpsServer
 };
-
-const httpsServer = https.createServer(httpsOptions, (req, res) => handleRequest(req, res, true));
-httpsServer.listen(HTTPS_PORT, '0.0.0.0', () => {
-  console.log(`[HTTPS Server] Running on https://${primaryIp}:${HTTPS_PORT} (Secure VR Player)`);
-  console.log(`[Media Root]   Streaming VR videos from: ${getActiveMediaRoot()}`);
-  console.log(`\n============================================================`);
-  console.log(`⚡ [Automated Safari Preflight / 兼容性因果测试]:`);
-  console.log(`   👉 https://${primaryIp}:${HTTPS_PORT}/compat-preflight`);
-  console.log(`💻 [PC Controller / 电脑控制台]:`);
-  console.log(`   👉 https://127.0.0.1:${HTTPS_PORT}/controller.html`);
-  console.log(`📱 [iPhone VR Headset / 手机VR头显]:`);
-  console.log(`   👉 https://${primaryIp}:${HTTPS_PORT}/`);
-  console.log(`============================================================\n`);
-});
-
-// Periodic SSE keepalive heartbeat
-setInterval(() => {
-  broadcastCalibrationEvent({ type: 'heartbeat', timestamp: Date.now() });
-}, 3000);

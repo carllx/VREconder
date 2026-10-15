@@ -325,7 +325,7 @@ export function renderCanaryUI() {
     const isAdmitted = activeAdmissions.has(c.fingerprintId);
     const isSelected = currentTargetCandidate?.id === c.id;
     const gateBadge = isAdmitted
-      ? `<span class="badge badge-green" style="font-size:0.68rem;">🟢 Provisional Certified</span>`
+      ? `<span class="badge badge-green" style="font-size:0.68rem;">🟢 User Authorized Trial</span>`
       : `<span class="badge badge-amber" style="font-size:0.68rem;">🟡 Unverified (Trial Allowed)</span>`;
     
     return `

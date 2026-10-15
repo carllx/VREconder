@@ -145,7 +145,8 @@ console.log('Suite 1: Server Admission Authority & Caching');
 
   if (fs.existsSync(hunvr029Path)) {
     const resB = await checkPlaybackAdmission(hunvr029Path);
-    check('HUNVR029 Code-4 original denied by policy', resB.allowed === false);
+    check('HUNVR029 Code-4 original uncertified by policy', resB.certified === false);
+    check('HUNVR029 direct playback allowed for user-owned trial', resB.allowed === true);
     check('HUNVR029 classified as NORMALIZATION_CANDIDATE_CERTIFIED', resB.classification === 'NORMALIZATION_CANDIDATE_CERTIFIED');
     check('HUNVR029 matches certified Envelope A', resB.matchedEnvelopeId === 'NEW_ENVELOPE_A_4320x2160_2997_50_MAIN_L180_MOOV_FIRST');
   } else {
@@ -349,7 +350,8 @@ console.log('\nSuite 5: HTTP Server Route & Defense-In-Depth Gating');
     await new Promise(r => setTimeout(r, 20));
     check('HUNVR029 route returns HTTP 200', hunvrCode === 200);
     const hunvrJson = JSON.parse(hunvrBody);
-    check('HUNVR029 route reports allowed: false', hunvrJson.allowed === false);
+    check('HUNVR029 route reports certified: false', hunvrJson.certified === false);
+    check('HUNVR029 route reports allowed: true', hunvrJson.allowed === true);
     check('HUNVR029 route reports NORMALIZATION_CANDIDATE_CERTIFIED', hunvrJson.classification === 'NORMALIZATION_CANDIDATE_CERTIFIED');
   }
 }
