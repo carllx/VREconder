@@ -110,13 +110,19 @@ try {
 
   // Test 4: Regression Case A - Unadmitted file cannot pass (fail-closed)
   console.log('\nTest 4: Regression Case A - Unadmitted file blocked (Fail-Closed)');
+  canaryCtrl.activeAdmissions.clear(); // Ensure not admitted
+  canaryCtrl.selectTopRiskCanary();
   canaryCtrl.handleCanaryTelemetry({
     mediaPath: canaryCtrl.currentTargetCandidate.fileName,
-    mediaStatus: 'POLICY_BLOCKED',
-    perf: { playback: { networkState: 3 } }
+    currentTime: 1.0,
+    inVR: true,
+    perf: {
+      cadence: { videoUploadsPerSec: 60, rvfcPerSec: 60 },
+      playback: { readyState: 4, paused: false, quality: { totalVideoFrames: 100 } }
+    }
   }, { state: 'active', ageMs: 100 });
-  assert.equal(canaryCtrl.currentVerificationStage, stages.BLOCKED_FAIL_CLOSED);
-  console.log('  ✅ [PASS] Unadmitted video correctly blocked in BLOCKED_FAIL_CLOSED');
+  assert.equal(canaryCtrl.currentVerificationStage, stages.BLOCKED_FAIL_CLOSED, 'Unadmitted candidate must be BLOCKED_FAIL_CLOSED even if telemetry attempts playback');
+  console.log('  ✅ [PASS] Unadmitted video strictly blocked in BLOCKED_FAIL_CLOSED (Fail-Closed enforced)');
 
   // Test 5: Regression Case B - No actual decoded frames cannot pass
   console.log('\nTest 5: Regression Case B - No decoded frames cannot advance past BUFFER_ATTACHED');
@@ -142,30 +148,30 @@ try {
   canaryCtrl.selectTopRiskCanary(); // re-selects candidate #1, resets baseline
   assert.equal(canaryCtrl.currentVerificationStage, stages.TARGET_SELECTED);
 
-  // iPhone arrives with stale frame count of 5000 from previous video, but 0 new uploads
+  // iPhone arrives with stale frame count of 5000 from previous video, and rate metric videoUploadsPerSec: 60 alone is insufficient
   canaryCtrl.handleCanaryTelemetry({
     mediaPath: canaryCtrl.currentTargetCandidate.fileName,
     currentTime: 0.0,
     timings: { firstRenderAt: 1000, selectedAt: 900 },
     perf: {
-      cadence: { videoUploadsPerSec: 0, rvfcPerSec: 0 },
+      cadence: { videoUploadsPerSec: 60, rvfcPerSec: 60 },
       playback: { readyState: 2, quality: { totalVideoFrames: 5000 } }
     }
   }, { state: 'active', ageMs: 100 });
   // Baseline captures totalVideoFrames: 5000, firstRenderAt: 1000
-  // Second telemetry still has totalVideoFrames: 5000 and firstRenderAt: 1000
+  // Second telemetry still has totalVideoFrames: 5000 and firstRenderAt: 1000 (no new frame delta)
   canaryCtrl.handleCanaryTelemetry({
     mediaPath: canaryCtrl.currentTargetCandidate.fileName,
     currentTime: 0.0,
     timings: { firstRenderAt: 1000, selectedAt: 900 },
     perf: {
-      cadence: { videoUploadsPerSec: 0, rvfcPerSec: 0 },
+      cadence: { videoUploadsPerSec: 60, rvfcPerSec: 60 },
       playback: { readyState: 2, quality: { totalVideoFrames: 5000 } }
     }
   }, { state: 'active', ageMs: 100 });
-  assert.equal(canaryCtrl.currentVerificationStage, stages.BUFFER_ATTACHED, 'Old 5000 frames must NOT trigger FIRST_FRAME_PRESENTED');
+  assert.equal(canaryCtrl.currentVerificationStage, stages.BUFFER_ATTACHED, 'Old 5000 frames + rate metric alone must NOT trigger FIRST_FRAME_PRESENTED');
 
-  // When actual new frame is delivered (totalVideoFrames: 5001 or videoUploadsPerSec > 0):
+  // When actual new frame is delivered (totalVideoFrames: 5001 or fresh firstRenderAt):
   canaryCtrl.handleCanaryTelemetry({
     mediaPath: canaryCtrl.currentTargetCandidate.fileName,
     currentTime: 0.05,
@@ -202,6 +208,21 @@ try {
   assert.equal(canaryCtrl.currentVerificationStage, stages.TEXTURE_UPLOAD_STALLED);
   console.log('  ✅ [PASS] Time advancing without GPU texture upload correctly halts at TEXTURE_UPLOAD_STALLED');
 
+  // Test 7b: Counterexample - rvfcPerSec > 0 while videoUploadsPerSec = 0 must trigger TEXTURE_UPLOAD_STALLED
+  console.log('\nTest 7b: Counterexample - rVFC advancing while GPU texture uploads = 0 halts at TEXTURE_UPLOAD_STALLED');
+  canaryCtrl.handleCanaryTelemetry({
+    mediaPath: canaryCtrl.currentTargetCandidate.fileName,
+    currentTime: 2.5,
+    inVR: true,
+    perf: {
+      cadence: { videoUploadsPerSec: 0, rvfcPerSec: 60 }, // rVFC running in browser, but WebGL upload stalled!
+      playback: { paused: false, readyState: 4 },
+      webgl: { glError: 'NO_ERROR', contextLostCount: 0 }
+    }
+  }, { state: 'active', ageMs: 100 });
+  assert.equal(canaryCtrl.currentVerificationStage, stages.TEXTURE_UPLOAD_STALLED, 'rVFC alone without videoUploads must remain TEXTURE_UPLOAD_STALLED');
+  console.log('  ✅ [PASS] Counterexample (rvfc=60, uploads=0) correctly halts at TEXTURE_UPLOAD_STALLED');
+
   // When videoUploads > 0, rvfc > 0, but inVR is false:
   canaryCtrl.handleCanaryTelemetry({
     mediaPath: canaryCtrl.currentTargetCandidate.fileName,
@@ -216,7 +237,7 @@ try {
   assert.equal(canaryCtrl.currentVerificationStage, stages.FLAT_PLAYBACK_ACTIVE);
   console.log('  ✅ [PASS] Rendering frames in 2D mode identified as FLAT_PLAYBACK_ACTIVE (not false VR Pass)');
 
-  // When inVR is true and rendering:
+  // When inVR is true and rendering with BOTH rvfc > 0 and videoUploads > 0:
   canaryCtrl.handleCanaryTelemetry({
     mediaPath: canaryCtrl.currentTargetCandidate.fileName,
     currentTime: 4.0,

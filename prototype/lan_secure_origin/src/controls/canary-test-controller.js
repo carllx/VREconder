@@ -166,7 +166,15 @@ export function handleCanaryTelemetry(telemetry, iphoneStatus = null) {
   const isAdmitted = activeAdmissions.has(currentTargetCandidate.fingerprintId);
 
   // 4. Policy Block & Unadmitted Detection (Fail-Closed)
-  if (!isAdmitted && (telemetry.mediaStatus === 'POLICY_BLOCKED' || pb.networkState === 3 || pb.error || telemetry.error)) {
+  // Candidate must have active provisional admission. If denied/unadmitted, fail closed immediately.
+  if (!isAdmitted) {
+    recordStageTransition(VerificationStage.BLOCKED_FAIL_CLOSED);
+    updateVerificationBadge();
+    return;
+  }
+
+  // Also check if mediaStatus reported an explicit policy block or network load failure
+  if (telemetry.mediaStatus === 'POLICY_BLOCKED' || pb.networkState === 3 || pb.error || telemetry.error) {
     recordStageTransition(VerificationStage.BLOCKED_FAIL_CLOSED);
     updateVerificationBadge();
     return;
@@ -179,13 +187,15 @@ export function handleCanaryTelemetry(telemetry, iphoneStatus = null) {
     }
   }
 
-  // 6. First Frame Presented (Only from Fresh Post-Selection Frame Evidence)
+  // 6. First Frame Presented (Only from Fresh Post-Selection Frame Evidence Attributable to Current Media)
+  // Note: videoUploadsPerSec alone is a rate metric and CANNOT prove new media first frame without frame delta/render timestamp
   const currentTotalFrames = pb.quality?.totalVideoFrames ?? 0;
   const currentFirstRender = telemetry.timings?.firstRenderAt ?? 0;
   const videoUploads = telemetry.perf?.cadence?.videoUploadsPerSec ?? 0;
+  const rvfc = telemetry.perf?.cadence?.rvfcPerSec ?? 0;
+
   const hasFreshFrameEvidence = (currentFirstRender > selectionBaseline.firstRenderAt) ||
-    (currentTotalFrames > selectionBaseline.totalVideoFrames) ||
-    (videoUploads > 0);
+    (currentTotalFrames > selectionBaseline.totalVideoFrames);
 
   if ((currentVerificationStage === VerificationStage.BUFFER_ATTACHED) && hasFreshFrameEvidence) {
     recordStageTransition(VerificationStage.FIRST_FRAME_PRESENTED);
@@ -193,7 +203,6 @@ export function handleCanaryTelemetry(telemetry, iphoneStatus = null) {
 
   // 7. Video Progress, WebGL & VR Stereo Render Verification
   const curTime = telemetry.currentTime ?? pb.currentTime ?? 0;
-  const rvfc = telemetry.perf?.cadence?.rvfcPerSec ?? 0;
   const inVR = Boolean(telemetry.inVR);
   const glErr = telemetry.perf?.webgl?.glError || telemetry.gl?.error || 'NO_ERROR';
   const glLoss = telemetry.perf?.webgl?.contextLostCount ?? 0;
@@ -209,9 +218,11 @@ export function handleCanaryTelemetry(telemetry, iphoneStatus = null) {
     if (!pb.paused && curTime > lastObservedCurrentTime && lastObservedCurrentTime >= 0) {
       consecutiveAdvancingCount++;
       if (consecutiveAdvancingCount >= 2) {
-        if (videoUploads === 0 && rvfc === 0) {
+        // Texture stall condition: playback time or rVFC advancing, but GPU texture uploads stalled at zero
+        if (videoUploads === 0) {
           recordStageTransition(VerificationStage.TEXTURE_UPLOAD_STALLED);
-        } else if (inVR) {
+        } else if (inVR && rvfc > 0 && videoUploads > 0) {
+          // Strictly require inVR === true AND rvfc > 0 AND videoUploads > 0 simultaneously
           recordStageTransition(VerificationStage.VR_PLAYBACK_ACTIVE);
           currentTestSession.inVRVerified = true;
         } else {
@@ -260,10 +271,10 @@ export function updateVerificationBadge() {
     [VerificationStage.BUFFER_ATTACHED]: { cls: 'badge badge-slate', text: '🔵 STAGE 3: BUFFER_ATTACHED (Metadata & Buffer Loaded)' },
     [VerificationStage.FIRST_FRAME_PRESENTED]: { cls: 'badge badge-slate', text: '🟣 STAGE 4: FIRST_FRAME_PRESENTED (Fresh Frame Rendered)' },
     [VerificationStage.FLAT_PLAYBACK_ACTIVE]: { cls: 'badge badge-amber', text: '🟡 FLAT_PLAYBACK_ACTIVE (Advancing in 2D — Awaiting VR Mode)' },
-    [VerificationStage.VR_PLAYBACK_ACTIVE]: { cls: 'badge badge-green', text: '🟢 STAGE 5: VR_PLAYBACK_ACTIVE (In-VR Stereo Verified)' },
-    [VerificationStage.TEXTURE_UPLOAD_STALLED]: { cls: 'badge badge-red', text: '🔴 TEXTURE_UPLOAD_STALLED (Time advancing but no GPU upload)' },
+    [VerificationStage.VR_PLAYBACK_ACTIVE]: { cls: 'badge badge-green', text: '🟢 STAGE 5: VR_PLAYBACK_ACTIVE (Live Cadence Active — Not Certified)' },
+    [VerificationStage.TEXTURE_UPLOAD_STALLED]: { cls: 'badge badge-red', text: '🔴 TEXTURE_UPLOAD_STALLED (Time/rVFC advancing but GPU upload is 0)' },
     [VerificationStage.WEBGL_ERROR]: { cls: 'badge badge-red', text: '🔴 WEBGL_ERROR (Context Lost or Shader Error)' },
-    [VerificationStage.BLOCKED_FAIL_CLOSED]: { cls: 'badge badge-red', text: '🔴 BLOCKED_FAIL_CLOSED (Policy Denied HTTP 403)' },
+    [VerificationStage.BLOCKED_FAIL_CLOSED]: { cls: 'badge badge-red', text: '🔴 BLOCKED_FAIL_CLOSED (Policy Denied / Unadmitted Candidate)' },
     [VerificationStage.IPHONE_OFFLINE]: { cls: 'badge badge-slate', text: '⚪ IPHONE_OFFLINE (Connection Disconnected)' },
     [VerificationStage.TELEMETRY_STALE]: { cls: 'badge badge-amber', text: '🟡 TELEMETRY_STALE (>3s ago — Dropping Active Status)' }
   };
