@@ -69,43 +69,39 @@ export class ProvisionalAdmissionStore {
 
   loadFromDisk() {
     this.entries.clear();
-    try {
-      if (fs.existsSync(this.storagePath)) {
-        const raw = JSON.parse(fs.readFileSync(this.storagePath, 'utf8'));
-        if (raw && typeof raw === 'object') {
-          const list = Array.isArray(raw) ? raw : (raw.admissions || []);
-          for (const item of list) {
-            if (item && item.fingerprintId) {
-              this.entries.set(item.fingerprintId, item);
-            }
-          }
-          return;
-        }
-      }
-    } catch (e) {
-      console.warn(`[ProvisionalAdmissionStore] Failed to read ${this.storagePath}:`, e.message);
+    if (!fs.existsSync(this.storagePath)) {
+      // Fail-closed: missing file means 0 active provisional entries, never silently re-grant defaults
+      return { ok: true, count: 0, reason: 'FILE_NOT_FOUND' };
     }
 
-    // Initialize with default entries if file does not exist
-    for (const item of DEFAULT_PROVISIONAL_ENTRIES) {
-      this.entries.set(item.fingerprintId, { ...item });
+    try {
+      const raw = JSON.parse(fs.readFileSync(this.storagePath, 'utf8'));
+      if (raw && typeof raw === 'object') {
+        const list = Array.isArray(raw) ? raw : (raw.admissions || []);
+        for (const item of list) {
+          if (item && item.fingerprintId) {
+            this.entries.set(item.fingerprintId, item);
+          }
+        }
+        return { ok: true, count: this.entries.size, reason: 'LOADED' };
+      }
+      return { ok: false, count: 0, reason: 'INVALID_PAYLOAD' };
+    } catch (e) {
+      // Fail-closed: corrupted JSON leaves entries empty, never mutates or seeds defaults
+      console.warn(`[ProvisionalAdmissionStore] Corrupted or unreadable ${this.storagePath}: ${e.message}. Failing closed with 0 entries.`);
+      return { ok: false, count: 0, reason: e.message };
     }
-    this.saveToDisk();
   }
 
   saveToDisk() {
-    try {
-      const payload = {
-        version: '1.0.0',
-        updatedAt: new Date().toISOString(),
-        admissions: Array.from(this.entries.values())
-      };
-      const tmp = `${this.storagePath}.tmp`;
-      fs.writeFileSync(tmp, JSON.stringify(payload, null, 2), 'utf8');
-      fs.renameSync(tmp, this.storagePath);
-    } catch (e) {
-      console.error(`[ProvisionalAdmissionStore] Failed to write ${this.storagePath}:`, e.message);
-    }
+    const payload = {
+      version: '1.0.0',
+      updatedAt: new Date().toISOString(),
+      admissions: Array.from(this.entries.values())
+    };
+    const tmp = `${this.storagePath}.tmp`;
+    fs.writeFileSync(tmp, JSON.stringify(payload, null, 2), 'utf8');
+    fs.renameSync(tmp, this.storagePath);
   }
 
   /**
@@ -127,19 +123,26 @@ export class ProvisionalAdmissionStore {
   }
 
   /**
-   * Revoke provisional admission for a fingerprint.
+   * Revoke provisional admission for a fingerprint with fail-safe disk persistence.
    * @param {string} fingerprintId
    * @returns {boolean}
    */
   revokeAdmission(fingerprintId) {
     if (!fingerprintId || !this.entries.has(fingerprintId)) return false;
+    const previous = this.entries.get(fingerprintId);
     this.entries.delete(fingerprintId);
-    this.saveToDisk();
-    return true;
+    try {
+      this.saveToDisk();
+      return true;
+    } catch (err) {
+      // Revert in-memory mutation to maintain parity with disk
+      this.entries.set(fingerprintId, previous);
+      throw new Error(`Failed to persist provisional admission revocation: ${err.message}`);
+    }
   }
 
   /**
-   * Add or update provisional admission.
+   * Add or update provisional admission with fail-safe disk persistence.
    * @param {object} item
    * @returns {object}
    */
@@ -155,9 +158,17 @@ export class ProvisionalAdmissionStore {
       userReportedDate: item.userReportedDate || new Date().toISOString().split('T')[0],
       notes: item.notes || 'User-verified normal playback'
     };
+    const previous = this.entries.get(entry.fingerprintId);
     this.entries.set(entry.fingerprintId, entry);
-    this.saveToDisk();
-    return entry;
+    try {
+      this.saveToDisk();
+      return entry;
+    } catch (err) {
+      // Revert in-memory mutation to maintain parity with disk
+      if (previous) this.entries.set(entry.fingerprintId, previous);
+      else this.entries.delete(entry.fingerprintId);
+      throw new Error(`Failed to persist provisional admission: ${err.message}`);
+    }
   }
 
   /**

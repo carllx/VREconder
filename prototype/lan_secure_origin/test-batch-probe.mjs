@@ -27,16 +27,21 @@ import { buildBatchCandidateQueue, serializePublicBatchQueue } from './src/healt
 import { handleBatchProbeRoutes } from './src/health/batch-probe-router.mjs';
 import { checkPlaybackAdmission } from './src/server/preflight-router.mjs';
 import { getMediaFingerprint } from './src/normalization/fingerprint.mjs';
+import { fileURLToPath } from 'node:url';
 import { loadCheckpoint as loadIssue26Checkpoint } from './src/health/media-health-store.mjs';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 describe('AV1 Batch Compatibility Probe Test Suite (Final Readiness Delta)', () => {
   let tempDir;
   let prodRegHashBefore;
   let prodCpHashBefore;
 
-  const PROD_DIR = path.resolve('.');
+  const PROD_DIR = __dirname;
   const PROD_REG = path.join(PROD_DIR, 'batch_probe_registry.jsonl');
   const PROD_CP = path.join(PROD_DIR, 'batch_probe_checkpoint.json');
+  const PROD_PROV = path.join(PROD_DIR, 'provisional_playback_admissions.json');
 
   function getFileHash(filePath) {
     if (!fs.existsSync(filePath)) return 'missing';
@@ -47,6 +52,9 @@ describe('AV1 Batch Compatibility Probe Test Suite (Final Readiness Delta)', () 
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'vreconder-batch-probe-isolated-'));
     prodRegHashBefore = getFileHash(PROD_REG);
     prodCpHashBefore = getFileHash(PROD_CP);
+    if (fs.existsSync(PROD_PROV)) {
+      fs.copyFileSync(PROD_PROV, path.join(tempDir, 'provisional_playback_admissions.json'));
+    }
   });
 
   after(() => {

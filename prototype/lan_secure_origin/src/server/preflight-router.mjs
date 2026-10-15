@@ -347,27 +347,28 @@ export function handlePreflightRoutes(req, res, pathname, __dirname, allowedRoot
   }
 
   // 9. Loopback-only PC Management endpoints for Provisional Admissions
-  if (pathname === '/api/provisional-admissions' && req.method === 'GET') {
-    const list = provisionalStore.listAdmissions();
-    res.writeHead(200, {
-      'Content-Type': 'application/json; charset=utf-8',
-      'Cache-Control': 'no-cache, no-store'
-    });
-    res.end(JSON.stringify({ count: list.length, admissions: list }, null, 2));
-    return true;
-  }
-
-  if (pathname === '/api/provisional-admissions' && req.method === 'POST') {
+  if (pathname === '/api/provisional-admissions') {
     const remoteAddress = req.socket.remoteAddress || '';
     const cleaned = remoteAddress.replace(/^::ffff:/, '');
     const isLoopback = cleaned === '127.0.0.1' || cleaned === '::1' || cleaned === 'localhost';
     if (!isLoopback) {
       res.writeHead(403, { 'Content-Type': 'application/json; charset=utf-8' });
-      res.end(JSON.stringify({ error: 'Provisional admission mutations are only permitted from PC loopback (127.0.0.1)' }));
+      res.end(JSON.stringify({ error: 'Provisional admission management is only permitted from PC loopback (127.0.0.1)' }));
       return true;
     }
 
-    let body = '';
+    if (req.method === 'GET') {
+      const list = provisionalStore.listAdmissions();
+      res.writeHead(200, {
+        'Content-Type': 'application/json; charset=utf-8',
+        'Cache-Control': 'no-cache, no-store'
+      });
+      res.end(JSON.stringify({ count: list.length, admissions: list }, null, 2));
+      return true;
+    }
+
+    if (req.method === 'POST') {
+      let body = '';
     req.on('data', chunk => { body += chunk; });
     req.on('end', () => {
       try {
@@ -393,6 +394,7 @@ export function handlePreflightRoutes(req, res, pathname, __dirname, allowedRoot
       }
     });
     return true;
+    }
   }
 
   return false;

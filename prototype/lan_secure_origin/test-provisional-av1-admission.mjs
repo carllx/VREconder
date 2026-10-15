@@ -133,7 +133,65 @@ async function run() {
     console.log('  ✅ [PASS] Officially certified Ashina Honoka retains CERTIFIED_DIRECT_AV1_4K_60_MOOV_FIRST authority');
   }
 
-  console.log('\n============================================================');
+  // 6. Controlled Rollback, Cache Invalidation, Restart Immunity, and Persistence Failure
+  console.log('\nSuite 6: Controlled Rollback, Cache Invalidation, Restart Immunity & Persistence Failure');
+  const rollbackStoreFile = path.join(__dirname, 'test_rollback_store.json');
+  try {
+    // 6a. Fresh store with 0 items (fail-closed, does not seed defaults)
+    const rbStore = new ProvisionalAdmissionStore(rollbackStoreFile);
+    assert.strictEqual(rbStore.listAdmissions().length, 0, 'New store on non-existent file must fail closed with 0 entries');
+
+    // 6b. Add provisional candidate
+    const testFp = 'test_rb_fp_123456';
+    rbStore.addAdmission({
+      fingerprintId: testFp,
+      name: 'Rollback Candidate Video.mp4',
+      notes: 'Canary test entry'
+    });
+    assert.strictEqual(rbStore.getAdmission(testFp)?.fingerprintId, testFp, 'Added candidate must be present in memory');
+
+    // 6c. Verify persistence on disk
+    const diskContent = JSON.parse(fs.readFileSync(rollbackStoreFile, 'utf8'));
+    assert(diskContent.admissions.some(a => a.fingerprintId === testFp), 'Added candidate must be persisted to disk');
+
+    // 6d. Revoke candidate
+    const revoked = rbStore.revokeAdmission(testFp);
+    assert.strictEqual(revoked, true, 'revokeAdmission must return true on existing entry');
+    assert.strictEqual(rbStore.getAdmission(testFp), null, 'Revoked candidate must be deleted from memory');
+
+    // 6e. Verify deletion persisted to disk (not relying on file deletion)
+    const diskAfterRevoke = JSON.parse(fs.readFileSync(rollbackStoreFile, 'utf8'));
+    assert(!diskAfterRevoke.admissions.some(a => a.fingerprintId === testFp), 'Revoked candidate must be deleted from disk');
+
+    // 6f. Restart immunity: instantiate brand new store instance from same file
+    const restartedStore = new ProvisionalAdmissionStore(rollbackStoreFile);
+    assert.strictEqual(restartedStore.getAdmission(testFp), null, 'Revoked candidate must NOT resurrect after store reload');
+    assert.strictEqual(restartedStore.listAdmissions().length, 0, 'Store must remain empty after reload');
+
+    // 6g. Corrupted file fail-closed check
+    const corruptStoreFile = path.join(__dirname, 'test_corrupt_store.json');
+    fs.writeFileSync(corruptStoreFile, '{ invalid json syntax !!!', 'utf8');
+    const corruptStore = new ProvisionalAdmissionStore(corruptStoreFile);
+    assert.strictEqual(corruptStore.listAdmissions().length, 0, 'Corrupted JSON must fail closed with 0 entries');
+    if (fs.existsSync(corruptStoreFile)) fs.unlinkSync(corruptStoreFile);
+
+    // 6h. Persistence failure atomicity: in-memory rollback on write error
+    const unwritableStoreFile = path.join(__dirname, 'non_existent_sub_dir_123', 'store.json');
+    const unwritableStore = new ProvisionalAdmissionStore(unwritableStoreFile);
+    let addThrew = false;
+    try {
+      unwritableStore.addAdmission({ fingerprintId: 'fail_fp_111', name: 'Fail.mp4' });
+    } catch (_) {
+      addThrew = true;
+    }
+    assert.strictEqual(addThrew, true, 'addAdmission must throw if saveToDisk fails');
+    assert.strictEqual(unwritableStore.getAdmission('fail_fp_111'), null, 'Memory must roll back if disk write fails');
+
+    console.log('  ✅ [PASS] Controlled rollback: Add -> Persist -> Revoke -> Restart -> Fail-Closed verified');
+  } finally {
+    if (fs.existsSync(rollbackStoreFile)) fs.unlinkSync(rollbackStoreFile);
+    if (fs.existsSync(`${rollbackStoreFile}.tmp`)) fs.unlinkSync(`${rollbackStoreFile}.tmp`);
+  }
   console.log('PROVISIONAL ADMISSION SUITE: ✅ ALL PASSED');
   console.log('============================================================\n');
 }
