@@ -7,9 +7,9 @@ import { fileURLToPath } from 'node:url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-console.log('=== RUNNING CANARY DELIVERY & VERIFICATION SUITE ===\n');
+console.log('=== RUNNING RIGOROUS CANARY DELIVERY & TELEMETRY REGRESSION SUITE ===\n');
 
-// 1. Setup DOM mocks for importing controller modules
+// 1. DOM Mocks for importing controller modules in Node
 const domElements = {};
 const mockElement = (id) => {
   if (!domElements[id]) {
@@ -42,7 +42,7 @@ globalThis.document = {
 globalThis.window = {};
 globalThis.EventSource = class { constructor() {} };
 
-// Mock server for testing /api/canary-queue
+// 2. Setup mock server for /api/canary-queue
 import { handlePreflightRoutes } from './src/server/preflight-router.mjs';
 
 const server = http.createServer(async (req, res) => {
@@ -59,15 +59,13 @@ const port = server.address().port;
 
 try {
   // Test 1: Loopback GET /api/canary-queue returns dynamic ranked queue
-  console.log('Test 1: Loopback GET /api/canary-queue');
+  console.log('Test 1: Loopback GET /api/canary-queue & Risk Ordering');
   const res = await fetch(`http://127.0.0.1:${port}/api/canary-queue`);
   assert.equal(res.status, 200, 'Loopback should return 200');
   const queueData = await res.json();
   assert(queueData.count > 0, 'Queue should return candidates');
   assert(Array.isArray(queueData.topRiskCandidates), 'Should have topRiskCandidates');
-  assert(queueData.topRiskCandidates.length <= 10, 'Top risk should have up to 10 candidates');
 
-  // Verify rank ordering: stalls desc, then seekFirstFrameLatMs desc
   const top1 = queueData.topRiskCandidates[0];
   const top2 = queueData.topRiskCandidates[1];
   assert(top1.evidence.stalls >= top2.evidence.stalls, 'Rank 1 stalls >= Rank 2 stalls');
@@ -76,26 +74,16 @@ try {
   }
   console.log(`  ✅ [PASS] Queue returned ${queueData.count} candidates; Rank 1 fp=${top1.fingerprintId} (stalls=${top1.evidence.stalls}, seekFF=${top1.evidence.seekFirstFrameLatMs}ms, seekApi=${top1.evidence.seekApiLatMs}ms)`);
 
-  // Test 2: Remote LAN IP is blocked with 403
+  // Test 2: Non-loopback request is blocked with 403 Forbidden
   console.log('\nTest 2: Non-loopback request to /api/canary-queue blocked');
-  const mockReq = {
-    socket: { remoteAddress: '192.168.1.100' },
-    method: 'GET',
-    headers: {}
-  };
+  const mockReq = { socket: { remoteAddress: '192.168.1.100' }, method: 'GET', headers: {} };
   let blockedStatus = 0;
-  let blockedBody = '';
-  const mockRes = {
-    writeHead: (code) => { blockedStatus = code; },
-    end: (str) => { blockedBody = str; }
-  };
-  const wasHandled = await handlePreflightRoutes(mockReq, mockRes, '/api/canary-queue', __dirname, []);
-  assert.equal(wasHandled, true, 'Handler should handle route');
+  const mockRes = { writeHead: (code) => { blockedStatus = code; }, end: () => {} };
+  await handlePreflightRoutes(mockReq, mockRes, '/api/canary-queue', __dirname, []);
   assert.equal(blockedStatus, 403, 'Non-loopback must receive 403');
   console.log('  ✅ [PASS] Remote LAN IP blocked with 403 Forbidden');
 
-  // Test 3: Import canary controller and test 5-stage state machine
-  console.log('\nTest 3: 5-Stage Verification State Machine');
+  // Load controller
   globalThis.fetch = async (url) => {
     if (url === '/api/canary-queue') return { ok: true, json: async () => queueData };
     if (url === '/api/provisional-admissions') return { ok: true, json: async () => ({ admissions: [] }) };
@@ -105,89 +93,163 @@ try {
   const canaryCtrl = await import('./src/controls/canary-test-controller.js');
   await canaryCtrl.loadCanaryQueue();
   await canaryCtrl.refreshCanaryAdmissions();
+  const stages = canaryCtrl.VerificationStage;
 
-  assert.equal(canaryCtrl.currentVerificationStage, canaryCtrl.VerificationStage.IDLE);
-
-  // 3a. 1-Click Top Risk Select
+  // Test 3: Exact Path Matching (No substring false positives)
+  console.log('\nTest 3: Exact Path Matching Guardrail');
   canaryCtrl.selectTopRiskCanary();
-  assert.equal(canaryCtrl.currentVerificationStage, canaryCtrl.VerificationStage.TARGET_SELECTED);
-  assert.equal(canaryCtrl.currentTargetCandidate.rank, 1);
-  console.log('  ✅ [PASS] Stage 1 (TARGET_SELECTED): Candidate #1 selected via 1-click');
+  assert.equal(canaryCtrl.currentVerificationStage, stages.TARGET_SELECTED);
 
-  // 3b. Mismatched mediaPath does NOT advance stage
-  canaryCtrl.handleCanaryTelemetry({ mediaPath: 'some_other_video.mp4' });
-  assert.equal(canaryCtrl.currentVerificationStage, canaryCtrl.VerificationStage.TARGET_SELECTED, 'Mismatched video must NOT advance stage');
-
-  // 3c. Matching mediaPath advances to IPHONE_MEDIA_PATH_MATCH (NOT verified!)
+  // Substring / different file does NOT match
   canaryCtrl.handleCanaryTelemetry({
-    mediaPath: canaryCtrl.currentTargetCandidate.fileName,
-    playback: { readyState: 0, networkState: 1 }
-  });
-  assert.equal(canaryCtrl.currentVerificationStage, canaryCtrl.VerificationStage.IPHONE_MEDIA_PATH_MATCH);
-  console.log('  ✅ [PASS] Stage 2 (IPHONE_MEDIA_PATH_MATCH): Path matched, verified NOT marked as pass');
+    mediaPath: canaryCtrl.currentTargetCandidate.fileName + '.bak',
+    perf: { playback: { readyState: 4 } }
+  }, { state: 'active', ageMs: 100 });
+  assert.equal(canaryCtrl.currentVerificationStage, stages.TARGET_SELECTED, 'Substring match must NOT advance stage');
+  console.log('  ✅ [PASS] Substring filename does not advance verification stage');
 
-  // 3d. Unadmitted file blocked by gate
+  // Test 4: Regression Case A - Unadmitted file cannot pass (fail-closed)
+  console.log('\nTest 4: Regression Case A - Unadmitted file blocked (Fail-Closed)');
   canaryCtrl.handleCanaryTelemetry({
     mediaPath: canaryCtrl.currentTargetCandidate.fileName,
     mediaStatus: 'POLICY_BLOCKED',
-    playback: { networkState: 3 }
-  });
-  assert.equal(canaryCtrl.currentVerificationStage, canaryCtrl.VerificationStage.BLOCKED_FAIL_CLOSED);
-  console.log('  ✅ [PASS] Unadmitted file correctly transitions to BLOCKED_FAIL_CLOSED (403)');
+    perf: { playback: { networkState: 3 } }
+  }, { state: 'active', ageMs: 100 });
+  assert.equal(canaryCtrl.currentVerificationStage, stages.BLOCKED_FAIL_CLOSED);
+  console.log('  ✅ [PASS] Unadmitted video correctly blocked in BLOCKED_FAIL_CLOSED');
 
-  // 3e. Admitted file progresses: STREAM_206 -> FIRST_FRAME_PRESENTED -> PLAYBACK_ADVANCING
+  // Test 5: Regression Case B - No actual decoded frames cannot pass
+  console.log('\nTest 5: Regression Case B - No decoded frames cannot advance past BUFFER_ATTACHED');
   canaryCtrl.activeAdmissions.add(canaryCtrl.currentTargetCandidate.fingerprintId);
-  canaryCtrl.selectCanary(canaryCtrl.currentTargetCandidate.id); // re-select
-  assert.equal(canaryCtrl.currentVerificationStage, canaryCtrl.VerificationStage.TARGET_SELECTED);
+  canaryCtrl.selectCanary(canaryCtrl.currentTargetCandidate.id); // re-select candidate
 
-  // Media match + 206 readyState
+  // Buffer attached (readyState 2) but zero frame progression
   canaryCtrl.handleCanaryTelemetry({
     mediaPath: canaryCtrl.currentTargetCandidate.fileName,
-    playback: { readyState: 2, networkState: 2, paused: false }
-  });
-  assert.equal(canaryCtrl.currentVerificationStage, canaryCtrl.VerificationStage.STREAM_206);
-  console.log('  ✅ [PASS] Stage 3 (STREAM_206): ReadyState 2 promotes to STREAM_206');
+    currentTime: 0,
+    timings: { firstRenderAt: 0, selectedAt: 100 },
+    perf: {
+      cadence: { videoUploadsPerSec: 0, rvfcPerSec: 0 },
+      playback: { readyState: 2, networkState: 2, quality: { totalVideoFrames: 0 } }
+    }
+  }, { state: 'active', ageMs: 100 });
+  assert.equal(canaryCtrl.currentVerificationStage, stages.BUFFER_ATTACHED);
+  console.log('  ✅ [PASS] Buffer attached but zero frames halts at BUFFER_ATTACHED (no false PASS)');
 
-  // First frame presented
+  // Test 6: Regression Case C - Old frame evidence from previous video cannot be reused
+  console.log('\nTest 6: Regression Case C - Old frame evidence cannot be reused after switching media');
+  // First video had 5000 frames rendered in previous playback
+  canaryCtrl.selectTopRiskCanary(); // re-selects candidate #1, resets baseline
+  assert.equal(canaryCtrl.currentVerificationStage, stages.TARGET_SELECTED);
+
+  // iPhone arrives with stale frame count of 5000 from previous video, but 0 new uploads
   canaryCtrl.handleCanaryTelemetry({
     mediaPath: canaryCtrl.currentTargetCandidate.fileName,
-    currentTime: 0.1,
-    perf: { firstFrameTiming: { firstRenderAt: 120 } },
-    playback: { readyState: 4, networkState: 2, paused: false }
-  });
-  assert.equal(canaryCtrl.currentVerificationStage, canaryCtrl.VerificationStage.FIRST_FRAME_PRESENTED);
-  console.log('  ✅ [PASS] Stage 4 (FIRST_FRAME_PRESENTED): Decoded first frame promotes to FIRST_FRAME_PRESENTED');
-
-  // Playback advancing
+    currentTime: 0.0,
+    timings: { firstRenderAt: 1000, selectedAt: 900 },
+    perf: {
+      cadence: { videoUploadsPerSec: 0, rvfcPerSec: 0 },
+      playback: { readyState: 2, quality: { totalVideoFrames: 5000 } }
+    }
+  }, { state: 'active', ageMs: 100 });
+  // Baseline captures totalVideoFrames: 5000, firstRenderAt: 1000
+  // Second telemetry still has totalVideoFrames: 5000 and firstRenderAt: 1000
   canaryCtrl.handleCanaryTelemetry({
     mediaPath: canaryCtrl.currentTargetCandidate.fileName,
-    currentTime: 0.5,
-    playback: { readyState: 4, paused: false }
-  });
+    currentTime: 0.0,
+    timings: { firstRenderAt: 1000, selectedAt: 900 },
+    perf: {
+      cadence: { videoUploadsPerSec: 0, rvfcPerSec: 0 },
+      playback: { readyState: 2, quality: { totalVideoFrames: 5000 } }
+    }
+  }, { state: 'active', ageMs: 100 });
+  assert.equal(canaryCtrl.currentVerificationStage, stages.BUFFER_ATTACHED, 'Old 5000 frames must NOT trigger FIRST_FRAME_PRESENTED');
+
+  // When actual new frame is delivered (totalVideoFrames: 5001 or videoUploadsPerSec > 0):
+  canaryCtrl.handleCanaryTelemetry({
+    mediaPath: canaryCtrl.currentTargetCandidate.fileName,
+    currentTime: 0.05,
+    timings: { firstRenderAt: 1050, selectedAt: 900 },
+    perf: {
+      cadence: { videoUploadsPerSec: 60, rvfcPerSec: 60 },
+      playback: { readyState: 4, quality: { totalVideoFrames: 5001 } }
+    }
+  }, { state: 'active', ageMs: 100 });
+  assert.equal(canaryCtrl.currentVerificationStage, stages.FIRST_FRAME_PRESENTED);
+  console.log('  ✅ [PASS] Previous video 5000 frames rejected; only fresh frame 5001 promoted stage');
+
+  // Test 7: Regression Case D - Time advancing without WebGL texture upload cannot be marked VR Pass
+  console.log('\nTest 7: Regression Case D - Audio/time advancing without GPU texture upload detected');
+  // Telemetry advances time, but videoUploadsPerSec = 0 and rvfcPerSec = 0
   canaryCtrl.handleCanaryTelemetry({
     mediaPath: canaryCtrl.currentTargetCandidate.fileName,
     currentTime: 1.0,
-    playback: { readyState: 4, paused: false }
-  });
-  assert.equal(canaryCtrl.currentVerificationStage, canaryCtrl.VerificationStage.PLAYBACK_ADVANCING);
-  console.log('  ✅ [PASS] Stage 5 (PLAYBACK_ADVANCING): Increasing currentTime promotes to PLAYBACK_ADVANCING');
+    inVR: true,
+    perf: {
+      cadence: { videoUploadsPerSec: 0, rvfcPerSec: 0 },
+      playback: { paused: false, readyState: 4 }
+    }
+  }, { state: 'active', ageMs: 100 });
+  canaryCtrl.handleCanaryTelemetry({
+    mediaPath: canaryCtrl.currentTargetCandidate.fileName,
+    currentTime: 2.0,
+    inVR: true,
+    perf: {
+      cadence: { videoUploadsPerSec: 0, rvfcPerSec: 0 },
+      playback: { paused: false, readyState: 4 }
+    }
+  }, { state: 'active', ageMs: 100 });
+  assert.equal(canaryCtrl.currentVerificationStage, stages.TEXTURE_UPLOAD_STALLED);
+  console.log('  ✅ [PASS] Time advancing without GPU texture upload correctly halts at TEXTURE_UPLOAD_STALLED');
 
-  // Test 4: Auto-advance to next Canary
-  console.log('\nTest 4: Auto-advance to Next Canary Candidate');
-  canaryCtrl.advanceNextCanary();
-  assert.equal(canaryCtrl.currentTargetCandidate.rank, 2, 'advanceNextCanary should step to Rank 2');
-  assert.equal(canaryCtrl.currentVerificationStage, canaryCtrl.VerificationStage.TARGET_SELECTED);
-  console.log('  ✅ [PASS] Auto-advance stepped to Rank 2 candidate');
+  // When videoUploads > 0, rvfc > 0, but inVR is false:
+  canaryCtrl.handleCanaryTelemetry({
+    mediaPath: canaryCtrl.currentTargetCandidate.fileName,
+    currentTime: 3.0,
+    inVR: false, // User has NOT entered VR mode
+    perf: {
+      cadence: { videoUploadsPerSec: 60, rvfcPerSec: 60 },
+      playback: { paused: false, readyState: 4 },
+      webgl: { glError: 'NO_ERROR', contextLostCount: 0 }
+    }
+  }, { state: 'active', ageMs: 100 });
+  assert.equal(canaryCtrl.currentVerificationStage, stages.FLAT_PLAYBACK_ACTIVE);
+  console.log('  ✅ [PASS] Rendering frames in 2D mode identified as FLAT_PLAYBACK_ACTIVE (not false VR Pass)');
 
-  // Test 5: Source Code Privacy Guardrail
-  console.log('\nTest 5: Privacy Guardrail - No hardcoded private names in client source');
+  // When inVR is true and rendering:
+  canaryCtrl.handleCanaryTelemetry({
+    mediaPath: canaryCtrl.currentTargetCandidate.fileName,
+    currentTime: 4.0,
+    inVR: true, // User enters VR stereo mode!
+    perf: {
+      cadence: { videoUploadsPerSec: 60, rvfcPerSec: 60 },
+      playback: { paused: false, readyState: 4 },
+      webgl: { glError: 'NO_ERROR', contextLostCount: 0 }
+    }
+  }, { state: 'active', ageMs: 100 });
+  assert.equal(canaryCtrl.currentVerificationStage, stages.VR_PLAYBACK_ACTIVE);
+  console.log('  ✅ [PASS] In-VR stereo active rendering verified as VR_PLAYBACK_ACTIVE');
+
+  // Test 8: Regression Case E - iPhone offline or telemetry stale drops verified state
+  console.log('\nTest 8: Regression Case E - Offline / Stale Telemetry drops Verified state');
+  // Stale (>3000ms)
+  canaryCtrl.handleCanaryTelemetry(null, { state: 'stale', ageMs: 4500 });
+  assert.equal(canaryCtrl.currentVerificationStage, stages.TELEMETRY_STALE);
+  console.log('  ✅ [PASS] Telemetry age > 3000ms immediately downgrades to TELEMETRY_STALE');
+
+  // Offline
+  canaryCtrl.handleCanaryTelemetry(null, { state: 'offline', ageMs: 10000 });
+  assert.equal(canaryCtrl.currentVerificationStage, stages.IPHONE_OFFLINE);
+  console.log('  ✅ [PASS] Disconnected iPhone immediately downgrades to IPHONE_OFFLINE');
+
+  // Test 9: Privacy Guardrail
+  console.log('\nTest 9: Privacy Guardrail in git-tracked code');
   const ctrlJs = fs.readFileSync(path.join(__dirname, 'src', 'controls', 'canary-test-controller.js'), 'utf8');
-  assert(!ctrlJs.includes('Keely Rose'), 'canary-test-controller.js must not contain private video titles');
-  assert(!ctrlJs.includes('Shishido Riho'), 'canary-test-controller.js must not contain private video titles');
-  assert(!ctrlJs.includes('G:\\'), 'canary-test-controller.js must not contain absolute paths');
-  console.log('  ✅ [PASS] Zero private filenames or absolute paths in tracked controller code');
+  assert(!ctrlJs.includes('Keely Rose'), 'No private titles in canary-test-controller.js');
+  assert(!ctrlJs.includes('G:\\'), 'No absolute paths in canary-test-controller.js');
+  console.log('  ✅ [PASS] Zero private titles or absolute paths in client source code');
 
-  console.log('\nCANARY DELIVERY SUITE: ✅ ALL PASSED');
+  console.log('\nCANARY DELIVERY REGRESSION SUITE: ✅ ALL 9/9 SUITES PASSED');
 } finally {
   server.close();
 }

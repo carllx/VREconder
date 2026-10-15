@@ -1,6 +1,6 @@
 // ==========================================
 // Canary & Risk-Directed VR Test Controller
-// Zero-Search dynamic queue with 5-stage verification state machine
+// Zero-Search dynamic queue with rigorous 5-stage verification state machine
 // ==========================================
 
 import { onSelectMedia } from './controller-app.js';
@@ -9,10 +9,15 @@ export const VerificationStage = {
   IDLE: 'IDLE',
   TARGET_SELECTED: 'TARGET_SELECTED',
   IPHONE_MEDIA_PATH_MATCH: 'IPHONE_MEDIA_PATH_MATCH',
-  STREAM_206: 'STREAM_206',
+  BUFFER_ATTACHED: 'BUFFER_ATTACHED',
   FIRST_FRAME_PRESENTED: 'FIRST_FRAME_PRESENTED',
-  PLAYBACK_ADVANCING: 'PLAYBACK_ADVANCING',
-  BLOCKED_FAIL_CLOSED: 'BLOCKED_FAIL_CLOSED'
+  FLAT_PLAYBACK_ACTIVE: 'FLAT_PLAYBACK_ACTIVE',
+  VR_PLAYBACK_ACTIVE: 'VR_PLAYBACK_ACTIVE',
+  TEXTURE_UPLOAD_STALLED: 'TEXTURE_UPLOAD_STALLED',
+  WEBGL_ERROR: 'WEBGL_ERROR',
+  BLOCKED_FAIL_CLOSED: 'BLOCKED_FAIL_CLOSED',
+  IPHONE_OFFLINE: 'IPHONE_OFFLINE',
+  TELEMETRY_STALE: 'TELEMETRY_STALE'
 };
 
 export let canaryCandidates = [];
@@ -20,10 +25,25 @@ export let activeAdmissions = new Set();
 export let currentTargetCandidate = null;
 export let currentVerificationStage = VerificationStage.IDLE;
 export let currentTestSession = null;
+export let selectionBaseline = null;
 
-let lastTelemetryCurrentTime = -1;
-let lastTelemetryTimeMs = 0;
+let lastObservedCurrentTime = -1;
 let consecutiveAdvancingCount = 0;
+let lastKnownIphoneStatus = { state: 'offline' };
+
+export function normalizeMediaName(pathOrName) {
+  if (!pathOrName || typeof pathOrName !== 'string') return '';
+  const cleaned = pathOrName.replace(/\\/g, '/').trim();
+  const base = cleaned.split('/').pop() || '';
+  return base.toLowerCase().trim();
+}
+
+export function isExactMediaMatch(telemetryPath, targetPath) {
+  const normTelem = normalizeMediaName(telemetryPath);
+  const normTarget = normalizeMediaName(targetPath);
+  if (!normTelem || !normTarget) return false;
+  return normTelem === normTarget;
+}
 
 export async function loadCanaryQueue() {
   try {
@@ -78,8 +98,8 @@ export function selectCanary(candidateId) {
 
   currentTargetCandidate = c;
   currentVerificationStage = VerificationStage.TARGET_SELECTED;
-  lastTelemetryCurrentTime = -1;
-  lastTelemetryTimeMs = Date.now();
+  selectionBaseline = null;
+  lastObservedCurrentTime = -1;
   consecutiveAdvancingCount = 0;
 
   currentTestSession = {
@@ -87,80 +107,129 @@ export function selectCanary(candidateId) {
     rank: c.rank,
     fingerprintId: c.fingerprintId,
     file: c.fileName,
+    selectedAtEpochMs: Date.now(),
     startedAt: new Date().toISOString(),
     stageHistory: [VerificationStage.TARGET_SELECTED],
     stallsObserved: 0,
-    maxSeekLatMs: 0,
-    glErrors: [],
-    frameDropHistory: []
+    webglErrors: [],
+    inVRVerified: false,
+    finalStage: VerificationStage.TARGET_SELECTED
   };
 
-  // Push selection via existing PC-to-iPhone control link
   onSelectMedia(c.relPath);
   renderCanaryUI();
   updateVerificationBadge();
 }
 
-export function handleCanaryTelemetry(telemetry) {
-  if (!telemetry || !currentTargetCandidate || !currentTestSession) return;
+export function handleCanaryTelemetry(telemetry, iphoneStatus = null) {
+  if (iphoneStatus) lastKnownIphoneStatus = iphoneStatus;
 
-  const currentMediaPath = telemetry.mediaPath || telemetry.mediaName || '';
-  const targetFile = currentTargetCandidate.fileName || '';
-  const isMatch = (targetFile && currentMediaPath.includes(targetFile)) || (currentMediaPath && targetFile.includes(currentMediaPath));
+  if (!currentTargetCandidate || !currentTestSession) return;
 
-  if (!isMatch) {
+  // 1. Device Freshness & Disconnection Guardrail
+  if (lastKnownIphoneStatus) {
+    if (lastKnownIphoneStatus.state === 'offline') {
+      currentVerificationStage = VerificationStage.IPHONE_OFFLINE;
+      updateVerificationBadge();
+      return;
+    }
+    if (lastKnownIphoneStatus.state === 'stale' || (typeof lastKnownIphoneStatus.ageMs === 'number' && lastKnownIphoneStatus.ageMs > 3000)) {
+      currentVerificationStage = VerificationStage.TELEMETRY_STALE;
+      updateVerificationBadge();
+      return;
+    }
+  }
+
+  if (!telemetry) return;
+
+  // 2. Exact Path Identity Guardrail
+  const telemetryMediaPath = telemetry.mediaPath || telemetry.mediaName || '';
+  if (!isExactMediaMatch(telemetryMediaPath, currentTargetCandidate.relPath)) {
+    // Telemetry belongs to previous or different media - do NOT advance stages
     updateVerificationBadge();
     return;
   }
 
-  // 1. Promote to IPHONE_MEDIA_PATH_MATCH
-  if (currentVerificationStage === VerificationStage.TARGET_SELECTED) {
+  // 3. Establish Selection Baseline on First Fresh Telemetry Arrival
+  if (!selectionBaseline) {
+    selectionBaseline = {
+      establishedAt: Date.now(),
+      totalVideoFrames: telemetry.perf?.playback?.quality?.totalVideoFrames ?? telemetry.playback?.quality?.totalVideoFrames ?? 0,
+      currentTime: telemetry.currentTime ?? telemetry.perf?.playback?.currentTime ?? 0,
+      firstRenderAt: telemetry.timings?.firstRenderAt ?? 0,
+      selectedAt: telemetry.timings?.selectedAt ?? 0
+    };
     recordStageTransition(VerificationStage.IPHONE_MEDIA_PATH_MATCH);
   }
 
-  const pb = telemetry.playback || {};
+  const pb = telemetry.perf?.playback || telemetry.playback || {};
   const isAdmitted = activeAdmissions.has(currentTargetCandidate.fingerprintId);
 
-  // Check if admission gate denied this video
-  if (!isAdmitted && (pb.networkState === 3 || pb.error || telemetry.mediaStatus === 'POLICY_BLOCKED')) {
+  // 4. Policy Block & Unadmitted Detection (Fail-Closed)
+  if (!isAdmitted && (telemetry.mediaStatus === 'POLICY_BLOCKED' || pb.networkState === 3 || pb.error || telemetry.error)) {
     recordStageTransition(VerificationStage.BLOCKED_FAIL_CLOSED);
     updateVerificationBadge();
     return;
   }
 
-  // 2. Promote to STREAM_206 if readyState indicates metadata/data loaded
-  if ((currentVerificationStage === VerificationStage.IPHONE_MEDIA_PATH_MATCH) && (pb.readyState >= 2 || pb.networkState === 2 || isAdmitted)) {
-    recordStageTransition(VerificationStage.STREAM_206);
+  // 5. Buffer Attached & Metadata Loaded
+  if (currentVerificationStage === VerificationStage.IPHONE_MEDIA_PATH_MATCH) {
+    if (pb.readyState >= 1 || pb.readyState >= 2 || (Array.isArray(pb.bufferedRanges) && pb.bufferedRanges.length > 0)) {
+      recordStageTransition(VerificationStage.BUFFER_ATTACHED);
+    }
   }
 
-  // 3. Promote to FIRST_FRAME_PRESENTED
-  const curTime = typeof telemetry.currentTime === 'number' ? telemetry.currentTime : 0;
-  const q = pb.quality || {};
-  const perf = telemetry.perf || {};
-  const videoUploads = perf.cadence?.videoUploadsPerSec || 0;
-  const totalFrames = q.totalVideoFrames || 0;
-  const firstRender = perf.firstFrameTiming?.firstRenderAt || 0;
+  // 6. First Frame Presented (Only from Fresh Post-Selection Frame Evidence)
+  const currentTotalFrames = pb.quality?.totalVideoFrames ?? 0;
+  const currentFirstRender = telemetry.timings?.firstRenderAt ?? 0;
+  const videoUploads = telemetry.perf?.cadence?.videoUploadsPerSec ?? 0;
+  const hasFreshFrameEvidence = (currentFirstRender > selectionBaseline.firstRenderAt) ||
+    (currentTotalFrames > selectionBaseline.totalVideoFrames) ||
+    (videoUploads > 0);
 
-  if (currentVerificationStage === VerificationStage.STREAM_206 && (curTime > 0.05 || firstRender > 0 || videoUploads > 0 || totalFrames > 0)) {
+  if ((currentVerificationStage === VerificationStage.BUFFER_ATTACHED) && hasFreshFrameEvidence) {
     recordStageTransition(VerificationStage.FIRST_FRAME_PRESENTED);
   }
 
-  // 4. Promote to PLAYBACK_ADVANCING
-  if (currentVerificationStage === VerificationStage.FIRST_FRAME_PRESENTED || currentVerificationStage === VerificationStage.PLAYBACK_ADVANCING) {
-    if (!pb.paused && !pb.ended && curTime > lastTelemetryCurrentTime && lastTelemetryCurrentTime >= 0) {
+  // 7. Video Progress, WebGL & VR Stereo Render Verification
+  const curTime = telemetry.currentTime ?? pb.currentTime ?? 0;
+  const rvfc = telemetry.perf?.cadence?.rvfcPerSec ?? 0;
+  const inVR = Boolean(telemetry.inVR);
+  const glErr = telemetry.perf?.webgl?.glError || telemetry.gl?.error || 'NO_ERROR';
+  const glLoss = telemetry.perf?.webgl?.contextLostCount ?? 0;
+
+  if (glErr !== 'NO_ERROR' || glLoss > 0) {
+    recordStageTransition(VerificationStage.WEBGL_ERROR);
+    if (!currentTestSession.webglErrors.includes(glErr)) currentTestSession.webglErrors.push(glErr);
+  } else if (currentVerificationStage === VerificationStage.FIRST_FRAME_PRESENTED ||
+             currentVerificationStage === VerificationStage.FLAT_PLAYBACK_ACTIVE ||
+             currentVerificationStage === VerificationStage.VR_PLAYBACK_ACTIVE ||
+             currentVerificationStage === VerificationStage.TEXTURE_UPLOAD_STALLED) {
+
+    if (!pb.paused && curTime > lastObservedCurrentTime && lastObservedCurrentTime >= 0) {
       consecutiveAdvancingCount++;
       if (consecutiveAdvancingCount >= 2) {
-        recordStageTransition(VerificationStage.PLAYBACK_ADVANCING);
+        if (videoUploads === 0 && rvfc === 0) {
+          recordStageTransition(VerificationStage.TEXTURE_UPLOAD_STALLED);
+        } else if (inVR) {
+          recordStageTransition(VerificationStage.VR_PLAYBACK_ACTIVE);
+          currentTestSession.inVRVerified = true;
+        } else {
+          recordStageTransition(VerificationStage.FLAT_PLAYBACK_ACTIVE);
+        }
       }
     } else if (pb.paused) {
       consecutiveAdvancingCount = 0;
     }
   }
 
-  lastTelemetryCurrentTime = curTime;
-  lastTelemetryTimeMs = Date.now();
+  lastObservedCurrentTime = curTime;
 
-  if (typeof telemetry.stallCount === 'number') {
+  if (telemetry.stall && typeof telemetry.stall.stallCount === 'number') {
+    currentTestSession.stallsObserved = Math.max(currentTestSession.stallsObserved, telemetry.stall.stallCount);
+  } else if (telemetry.perf?.stall && typeof telemetry.perf.stall.stallCount === 'number') {
+    currentTestSession.stallsObserved = Math.max(currentTestSession.stallsObserved, telemetry.perf.stall.stallCount);
+  } else if (typeof telemetry.stallCount === 'number') {
     currentTestSession.stallsObserved = Math.max(currentTestSession.stallsObserved, telemetry.stallCount);
   }
 
@@ -171,8 +240,11 @@ export function handleCanaryTelemetry(telemetry) {
 function recordStageTransition(newStage) {
   if (currentVerificationStage !== newStage) {
     currentVerificationStage = newStage;
-    if (currentTestSession && !currentTestSession.stageHistory.includes(newStage)) {
-      currentTestSession.stageHistory.push(newStage);
+    if (currentTestSession) {
+      currentTestSession.finalStage = newStage;
+      if (!currentTestSession.stageHistory.includes(newStage)) {
+        currentTestSession.stageHistory.push(newStage);
+      }
     }
   }
 }
@@ -183,12 +255,17 @@ export function updateVerificationBadge() {
 
   const stageConfig = {
     [VerificationStage.IDLE]: { cls: 'badge badge-slate', text: '⚪ IDLE: No Target' },
-    [VerificationStage.TARGET_SELECTED]: { cls: 'badge badge-amber', text: '🟡 STAGE 1: TARGET_SELECTED (Pushed)' },
-    [VerificationStage.IPHONE_MEDIA_PATH_MATCH]: { cls: 'badge badge-amber', text: '🟡 STAGE 2: IPHONE_MEDIA_PATH_MATCH' },
-    [VerificationStage.STREAM_206]: { cls: 'badge badge-slate', text: '🔵 STAGE 3: STREAM_206 (Buffering)' },
-    [VerificationStage.FIRST_FRAME_PRESENTED]: { cls: 'badge badge-slate', text: '🟣 STAGE 4: FIRST_FRAME_PRESENTED' },
-    [VerificationStage.PLAYBACK_ADVANCING]: { cls: 'badge badge-green', text: '🟢 STAGE 5: PLAYBACK_ADVANCING (Verified)' },
-    [VerificationStage.BLOCKED_FAIL_CLOSED]: { cls: 'badge badge-red', text: '🔴 BLOCKED_FAIL_CLOSED (HTTP 403)' }
+    [VerificationStage.TARGET_SELECTED]: { cls: 'badge badge-amber', text: '🟡 STAGE 1: TARGET_SELECTED (Pushed via SSE)' },
+    [VerificationStage.IPHONE_MEDIA_PATH_MATCH]: { cls: 'badge badge-amber', text: '🟡 STAGE 2: IPHONE_MEDIA_PATH_MATCH (Path Confirmed)' },
+    [VerificationStage.BUFFER_ATTACHED]: { cls: 'badge badge-slate', text: '🔵 STAGE 3: BUFFER_ATTACHED (Metadata & Buffer Loaded)' },
+    [VerificationStage.FIRST_FRAME_PRESENTED]: { cls: 'badge badge-slate', text: '🟣 STAGE 4: FIRST_FRAME_PRESENTED (Fresh Frame Rendered)' },
+    [VerificationStage.FLAT_PLAYBACK_ACTIVE]: { cls: 'badge badge-amber', text: '🟡 FLAT_PLAYBACK_ACTIVE (Advancing in 2D — Awaiting VR Mode)' },
+    [VerificationStage.VR_PLAYBACK_ACTIVE]: { cls: 'badge badge-green', text: '🟢 STAGE 5: VR_PLAYBACK_ACTIVE (In-VR Stereo Verified)' },
+    [VerificationStage.TEXTURE_UPLOAD_STALLED]: { cls: 'badge badge-red', text: '🔴 TEXTURE_UPLOAD_STALLED (Time advancing but no GPU upload)' },
+    [VerificationStage.WEBGL_ERROR]: { cls: 'badge badge-red', text: '🔴 WEBGL_ERROR (Context Lost or Shader Error)' },
+    [VerificationStage.BLOCKED_FAIL_CLOSED]: { cls: 'badge badge-red', text: '🔴 BLOCKED_FAIL_CLOSED (Policy Denied HTTP 403)' },
+    [VerificationStage.IPHONE_OFFLINE]: { cls: 'badge badge-slate', text: '⚪ IPHONE_OFFLINE (Connection Disconnected)' },
+    [VerificationStage.TELEMETRY_STALE]: { cls: 'badge badge-amber', text: '🟡 TELEMETRY_STALE (>3s ago — Dropping Active Status)' }
   };
 
   const conf = stageConfig[currentVerificationStage] || stageConfig[VerificationStage.IDLE];
@@ -200,16 +277,22 @@ export function renderLiveTelemetry(telemetry) {
   const metricsEl = document.getElementById('canaryLiveMetrics');
   if (!metricsEl) return;
 
-  const q = telemetry.playback?.quality || {};
+  const pb = telemetry.perf?.playback || telemetry.playback || {};
+  const q = pb.quality || {};
   const ft = telemetry.perf?.frameTimeMs || {};
-  const glErr = telemetry.gl?.error || 'NO_ERROR';
-  const curTime = telemetry.currentTime ? telemetry.currentTime.toFixed(1) : '0.0';
-  const dur = telemetry.duration ? telemetry.duration.toFixed(1) : '0.0';
+  const cad = telemetry.perf?.cadence || {};
+  const gl = telemetry.perf?.webgl || telemetry.gl || {};
+  const glErr = gl.glError || gl.error || 'NO_ERROR';
+  const curTime = (typeof telemetry.currentTime === 'number' ? telemetry.currentTime : (pb.currentTime || 0)).toFixed(1);
+  const dur = (pb.duration ? pb.duration : (telemetry.duration || 0)).toFixed(1);
+  const inVRText = telemetry.inVR ? '<b style="color:#34d399;">YES (Stereo)</b>' : '<b style="color:#fbbf24;">NO (Flat)</b>';
 
   metricsEl.innerHTML = `
     <b>Target:</b> ${currentTargetCandidate?.fileName || '--'} |
     <b>Time:</b> <span style="color:#38bdf8;">${curTime}s / ${dur}s</span> |
-    <b>Stalls:</b> <b>${telemetry.stallCount ?? 0}</b> |
+    <b>inVR:</b> ${inVRText} |
+    <b>rVFC:</b> <b>${cad.rvfcPerSec ?? '--'}/s</b> |
+    <b>VidUp:</b> <b>${cad.videoUploadsPerSec ?? '--'}/s</b> |
     <b>DropRate:</b> <b>${q.windowDropRate ?? '--'}%</b> (${q.windowDeltaDropped ?? 0}/${q.windowDeltaTotal ?? 0}) |
     <b>p95 FT:</b> <b>${ft.p95 ?? '--'}ms</b> |
     <b>GL:</b> <b style="color:${glErr === 'NO_ERROR' ? '#34d399' : '#f87171'}">${glErr}</b>
@@ -229,8 +312,8 @@ export function renderCanaryUI() {
     const isAdmitted = activeAdmissions.has(c.fingerprintId);
     const isSelected = currentTargetCandidate?.id === c.id;
     const gateBadge = isAdmitted
-      ? `<span class="badge badge-green" style="font-size:0.68rem;">🟢 Provisional (206)</span>`
-      : `<span class="badge badge-red" style="font-size:0.68rem;">🔴 Denied (403)</span>`;
+      ? `<span class="badge badge-green" style="font-size:0.68rem;">🟢 Provisional Admitted</span>`
+      : `<span class="badge badge-red" style="font-size:0.68rem;">🔴 Policy Denied (403)</span>`;
     
     return `
       <div style="display:flex; justify-content:space-between; align-items:center; background:#1e293b; padding:8px 10px; border-radius:6px; border:1px solid ${isSelected ? '#38bdf8' : '#334155'}; gap:8px;">
@@ -267,7 +350,9 @@ export function exportCanarySessionSummary() {
     fingerprintId: currentTestSession.fingerprintId,
     finalStage: currentVerificationStage,
     stageHistory: currentTestSession.stageHistory,
+    inVRVerified: currentTestSession.inVRVerified,
     stallsObserved: currentTestSession.stallsObserved,
+    webglErrors: currentTestSession.webglErrors,
     startedAt: currentTestSession.startedAt,
     exportedAt: new Date().toISOString()
   };

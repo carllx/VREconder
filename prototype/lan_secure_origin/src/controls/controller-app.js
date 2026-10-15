@@ -548,7 +548,7 @@ export function updateTelemetryUI(data) {
       }
       if (evtEl && ci.lastEvent) evtEl.textContent = `${ci.lastEvent.type}: ${JSON.stringify(ci.lastEvent.data || {})}`;
     }
-    if (window.handleCanaryTelemetry) window.handleCanaryTelemetry(data);
+    if (window.handleCanaryTelemetry) window.handleCanaryTelemetry(data, currentIphoneStatus);
   } catch (e) {}
 }
 
