@@ -108,21 +108,24 @@ try {
   assert.equal(canaryCtrl.currentVerificationStage, stages.TARGET_SELECTED, 'Substring match must NOT advance stage');
   console.log('  ✅ [PASS] Substring filename does not advance verification stage');
 
-  // Test 4: Regression Case A - Unadmitted file cannot pass (fail-closed)
-  console.log('\nTest 4: Regression Case A - Unadmitted file blocked (Fail-Closed)');
-  canaryCtrl.activeAdmissions.clear(); // Ensure not admitted
+  // Test 4: Regression Case A - Security / Boundary Block & Decode Error Separation
+  console.log('\nTest 4: Regression Case A - Security boundary block & decode error separation');
   canaryCtrl.selectTopRiskCanary();
   canaryCtrl.handleCanaryTelemetry({
     mediaPath: canaryCtrl.currentTargetCandidate.fileName,
-    currentTime: 1.0,
-    inVR: true,
-    perf: {
-      cadence: { videoUploadsPerSec: 60, rvfcPerSec: 60 },
-      playback: { readyState: 4, paused: false, quality: { totalVideoFrames: 100 } }
-    }
+    mediaStatus: 'POLICY_BLOCKED',
+    perf: { playback: { readyState: 0 } }
   }, { state: 'active', ageMs: 100 });
-  assert.equal(canaryCtrl.currentVerificationStage, stages.BLOCKED_FAIL_CLOSED, 'Unadmitted candidate must be BLOCKED_FAIL_CLOSED even if telemetry attempts playback');
-  console.log('  ✅ [PASS] Unadmitted video strictly blocked in BLOCKED_FAIL_CLOSED (Fail-Closed enforced)');
+  assert.equal(canaryCtrl.currentVerificationStage, stages.BLOCKED_FAIL_CLOSED, 'Explicit POLICY_BLOCKED must trigger BLOCKED_FAIL_CLOSED');
+
+  // Genuine hardware decode error on unverified media
+  canaryCtrl.selectTopRiskCanary();
+  canaryCtrl.handleCanaryTelemetry({
+    mediaPath: canaryCtrl.currentTargetCandidate.fileName,
+    perf: { playback: { readyState: 0, error: { code: 3, message: 'DECODE_ERROR' } } }
+  }, { state: 'active', ageMs: 100 });
+  assert.equal(canaryCtrl.currentVerificationStage, stages.PLAYBACK_DECODE_ERROR, 'Hardware decode failure must trigger PLAYBACK_DECODE_ERROR (not confused with policy block)');
+  console.log('  ✅ [PASS] Boundary blocks and hardware decode errors cleanly distinguished');
 
   // Test 5: Regression Case B - No actual decoded frames cannot pass
   console.log('\nTest 5: Regression Case B - No decoded frames cannot advance past BUFFER_ATTACHED');

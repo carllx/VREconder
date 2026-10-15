@@ -15,6 +15,7 @@ export const VerificationStage = {
   VR_PLAYBACK_ACTIVE: 'VR_PLAYBACK_ACTIVE',
   TEXTURE_UPLOAD_STALLED: 'TEXTURE_UPLOAD_STALLED',
   WEBGL_ERROR: 'WEBGL_ERROR',
+  PLAYBACK_DECODE_ERROR: 'PLAYBACK_DECODE_ERROR',
   BLOCKED_FAIL_CLOSED: 'BLOCKED_FAIL_CLOSED',
   IPHONE_OFFLINE: 'IPHONE_OFFLINE',
   TELEMETRY_STALE: 'TELEMETRY_STALE'
@@ -165,17 +166,17 @@ export function handleCanaryTelemetry(telemetry, iphoneStatus = null) {
   const pb = telemetry.perf?.playback || telemetry.playback || {};
   const isAdmitted = activeAdmissions.has(currentTargetCandidate.fingerprintId);
 
-  // 4. Policy Block & Unadmitted Detection (Fail-Closed)
-  // Candidate must have active provisional admission. If denied/unadmitted, fail closed immediately.
-  if (!isAdmitted) {
-    recordStageTransition(VerificationStage.BLOCKED_FAIL_CLOSED);
-    updateVerificationBadge();
-    return;
-  }
-
-  // Also check if mediaStatus reported an explicit policy block or network load failure
+  // 4. Decode / Network Load / Policy Error Handling
+  // Distinguish genuine media decode/network failures from policy blocks
   if (telemetry.mediaStatus === 'POLICY_BLOCKED' || pb.networkState === 3 || pb.error || telemetry.error) {
-    recordStageTransition(VerificationStage.BLOCKED_FAIL_CLOSED);
+    if (telemetry.mediaStatus === 'POLICY_BLOCKED') {
+      recordStageTransition(VerificationStage.BLOCKED_FAIL_CLOSED);
+    } else {
+      recordStageTransition(VerificationStage.PLAYBACK_DECODE_ERROR);
+      if (currentTestSession && !currentTestSession.webglErrors.includes('MEDIA_ERROR')) {
+        currentTestSession.webglErrors.push('MEDIA_ERROR');
+      }
+    }
     updateVerificationBadge();
     return;
   }
@@ -271,10 +272,11 @@ export function updateVerificationBadge() {
     [VerificationStage.BUFFER_ATTACHED]: { cls: 'badge badge-slate', text: '🔵 STAGE 3: BUFFER_ATTACHED (Metadata & Buffer Loaded)' },
     [VerificationStage.FIRST_FRAME_PRESENTED]: { cls: 'badge badge-slate', text: '🟣 STAGE 4: FIRST_FRAME_PRESENTED (Fresh Frame Rendered)' },
     [VerificationStage.FLAT_PLAYBACK_ACTIVE]: { cls: 'badge badge-amber', text: '🟡 FLAT_PLAYBACK_ACTIVE (Advancing in 2D — Awaiting VR Mode)' },
-    [VerificationStage.VR_PLAYBACK_ACTIVE]: { cls: 'badge badge-green', text: '🟢 STAGE 5: VR_PLAYBACK_ACTIVE (Live Cadence Active — Not Certified)' },
+    [VerificationStage.VR_PLAYBACK_ACTIVE]: { cls: 'badge badge-green', text: '🟢 STAGE 5: VR_PLAYBACK_ACTIVE (Live Cadence Active — Unverified)' },
     [VerificationStage.TEXTURE_UPLOAD_STALLED]: { cls: 'badge badge-red', text: '🔴 TEXTURE_UPLOAD_STALLED (Time/rVFC advancing but GPU upload is 0)' },
     [VerificationStage.WEBGL_ERROR]: { cls: 'badge badge-red', text: '🔴 WEBGL_ERROR (Context Lost or Shader Error)' },
-    [VerificationStage.BLOCKED_FAIL_CLOSED]: { cls: 'badge badge-red', text: '🔴 BLOCKED_FAIL_CLOSED (Policy Denied / Unadmitted Candidate)' },
+    [VerificationStage.PLAYBACK_DECODE_ERROR]: { cls: 'badge badge-red', text: '🔴 DECODE_ERROR (Hardware/Decoder Failure on Safari)' },
+    [VerificationStage.BLOCKED_FAIL_CLOSED]: { cls: 'badge badge-red', text: '🔴 BLOCKED_FAIL_CLOSED (Security/Path Boundary Blocked)' },
     [VerificationStage.IPHONE_OFFLINE]: { cls: 'badge badge-slate', text: '⚪ IPHONE_OFFLINE (Connection Disconnected)' },
     [VerificationStage.TELEMETRY_STALE]: { cls: 'badge badge-amber', text: '🟡 TELEMETRY_STALE (>3s ago — Dropping Active Status)' }
   };
@@ -323,8 +325,8 @@ export function renderCanaryUI() {
     const isAdmitted = activeAdmissions.has(c.fingerprintId);
     const isSelected = currentTargetCandidate?.id === c.id;
     const gateBadge = isAdmitted
-      ? `<span class="badge badge-green" style="font-size:0.68rem;">🟢 Provisional Admitted</span>`
-      : `<span class="badge badge-red" style="font-size:0.68rem;">🔴 Policy Denied (403)</span>`;
+      ? `<span class="badge badge-green" style="font-size:0.68rem;">🟢 Provisional Certified</span>`
+      : `<span class="badge badge-amber" style="font-size:0.68rem;">🟡 Unverified (Trial Allowed)</span>`;
     
     return `
       <div style="display:flex; justify-content:space-between; align-items:center; background:#1e293b; padding:8px 10px; border-radius:6px; border:1px solid ${isSelected ? '#38bdf8' : '#334155'}; gap:8px;">

@@ -59,15 +59,17 @@ async function run() {
     console.log(`  ✅ [PASS] ${item.name} -> allowed: true (${admission.classification})`);
   }
 
-  // 3. Negative Counter-Example (Uncertified AV1 must be DENIED)
+  // 3. Negative Counter-Example (Uncertified AV1 retains uncertified classification while allowing user playback trial)
   console.log('\nSuite 3: Negative Counter-Examples & General AV1 Envelope Invariance');
-  const deniedCandidateName = 'Haruna Noa - SBGVR014-cut-merged-1788061546710.mp4';
-  const deniedFullPath = path.join(mediaDir, deniedCandidateName);
+  const deniedCandidateName = 'Haruna Noa - SBGVR014-cut-merged-1788079570967.mp4';
+  const deniedFullPath = path.join(mediaDir, 'Haruna Noa - SBGVR014-cut-merged-1788061546710.mp4');
   if (fs.existsSync(deniedFullPath)) {
-    const deniedAdmission = await checkPlaybackAdmission(deniedFullPath);
-    assert.strictEqual(deniedAdmission.allowed, false, 'Uncertified AV1 must be DENIED');
-    assert.strictEqual(deniedAdmission.classification, IntakeClassification.UNSUPPORTED_UNKNOWN_FIX, 'Uncertified AV1 classification must remain UNSUPPORTED_UNKNOWN_FIX');
-    console.log(`  ✅ [PASS] Uncertified AV1 ${deniedCandidateName} -> denied: ${deniedAdmission.classification}`);
+    const unverifiedAdmission = await checkPlaybackAdmission(deniedFullPath);
+    assert.strictEqual(unverifiedAdmission.certified, false, 'Uncertified AV1 must NOT be certified');
+    assert.strictEqual(unverifiedAdmission.compatibilityStatus, 'UNVERIFIED', 'Uncertified AV1 must be UNVERIFIED');
+    assert.strictEqual(unverifiedAdmission.allowed, true, 'User-owned media in media roots is permitted for trial');
+    assert.strictEqual(unverifiedAdmission.classification, IntakeClassification.UNSUPPORTED_UNKNOWN_FIX, 'Uncertified AV1 classification must remain UNSUPPORTED_UNKNOWN_FIX');
+    console.log(`  ✅ [PASS] Uncertified AV1 ${path.basename(deniedFullPath)} -> certified: false (${unverifiedAdmission.classification}), allowed: true (UNVERIFIED trial)`);
   }
 
   // 4. Fingerprint Invalidation / Content Change Fallback Test

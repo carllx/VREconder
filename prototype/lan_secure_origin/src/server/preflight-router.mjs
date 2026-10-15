@@ -52,9 +52,13 @@ export async function checkPlaybackAdmission(filePath) {
 
   try {
     const decision = await preflightIncomingMedia(fp.canonicalPath, { probeCache, provisionalAdmissionStore: provisionalStore });
-    const allowed = Boolean(decision && decision.mayPromoteToVrReady);
+    const isCertified = Boolean(decision && decision.mayPromoteToVrReady);
     const result = {
-      allowed,
+      // Compatibility certification status (strict standards)
+      certified: isCertified,
+      allowed: true, // User-owned media within valid media roots is permitted for direct playback trial
+      playbackAllowed: true,
+      compatibilityStatus: isCertified ? 'CERTIFIED' : 'UNVERIFIED',
       classification: (decision && decision.classification) || 'UNKNOWN',
       reason: (decision && decision.reason) || 'No policy reason provided',
       matchedEnvelopeId: (decision && decision.matchedEnvelopeId) || null,
@@ -62,11 +66,11 @@ export async function checkPlaybackAdmission(filePath) {
     };
     admissionCache.set(fp.fingerprintId, result);
 
-    if (!allowed) {
+    if (!isCertified) {
       try {
         recordIncident({
-          eventType: 'PLAYBACK_ADMISSION_DENIED',
-          severity: 'WARN',
+          eventType: 'UNVERIFIED_PLAYBACK_TRIAL',
+          severity: 'INFO',
           fingerprintId: fp.fingerprintId,
           localMediaName: path.basename(filePath),
           localMediaPath: filePath,
@@ -77,14 +81,17 @@ export async function checkPlaybackAdmission(filePath) {
           occurrenceSource: 'server_admission_gate'
         });
       } catch (logErr) {
-        console.warn('[PreflightRouter] Failed to persist denied admission incident:', logErr.message);
+        console.warn('[PreflightRouter] Failed to record unverified playback incident:', logErr.message);
       }
     }
 
     return result;
   } catch (err) {
     const errResult = {
-      allowed: false,
+      certified: false,
+      allowed: true, // Allow user-owned file playback trial even if static preflight inspection threw an error
+      playbackAllowed: true,
+      compatibilityStatus: 'UNVERIFIED',
       classification: 'PREFLIGHT_ERROR',
       reason: err.message || 'Error executing preflight check',
       matchedEnvelopeId: null,
@@ -93,7 +100,7 @@ export async function checkPlaybackAdmission(filePath) {
     try {
       recordIncident({
         eventType: 'PREFLIGHT_ERROR',
-        severity: 'ERROR',
+        severity: 'WARN',
         fingerprintId: fp ? fp.fingerprintId : null,
         localMediaName: path.basename(filePath),
         localMediaPath: filePath,
