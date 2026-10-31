@@ -19,7 +19,7 @@ export function createSyntheticItem(overrides = {}) {
     filePath: overrides.filePath || `synthetic/sample_${assetId}.mp4`,
     accessible: overrides.accessible !== undefined ? overrides.accessible : true,
     fileSize: overrides.fileSize || 1073741824, // 1 GB
-    durationSeconds: overrides.durationSeconds || 1200, // 20 mins
+    durationSeconds: overrides.durationSeconds !== undefined ? overrides.durationSeconds : 1200, // 20 mins
     identityStatus: overrides.identityStatus || IDENTITY_STATUS.RESOLVED,
     logicalMediaKey: overrides.identityStatus === IDENTITY_STATUS.UNRESOLVED
       ? null
@@ -89,6 +89,26 @@ export const CROSS_ROOT_CONFLICTING_FIXTURE = Object.freeze([
     isFavorite: true, // Conflict!
     historyStatus: HISTORY_STATUS.PLAYED, // Conflict!
     effectivePlayCount: 5
+  })
+]);
+
+/**
+ * Fixture: Multi-root observation with durationSeconds conflict.
+ */
+export const CROSS_ROOT_DURATION_CONFLICT_FIXTURE = Object.freeze([
+  createSyntheticItem({
+    assetId: 'ast-dur-conflict-202',
+    rootId: 'root-alpha',
+    filePath: 'vids/movie.mp4',
+    durationSeconds: 1200,
+    fileSize: 1000000
+  }),
+  createSyntheticItem({
+    assetId: 'ast-dur-conflict-202',
+    rootId: 'root-beta',
+    filePath: 'backup/vids/movie.mp4', // Differing root-local path is allowed
+    durationSeconds: 1800,              // Conflicting duration!
+    fileSize: 1000000
   })
 ]);
 
@@ -231,4 +251,28 @@ export const BALANCED_DISCOVERY_FIXTURE = Object.freeze([
   createSyntheticItem({ assetId: 'bal-high-2', historyStatus: HISTORY_STATUS.PLAYED, effectivePlayCount: 12 }),
   createSyntheticItem({ assetId: 'bal-disliked', isDisliked: true, historyStatus: HISTORY_STATUS.CONFIRMED_ZERO }),
   createSyntheticItem({ assetId: 'bal-inaccessible', accessible: false, historyStatus: HISTORY_STATUS.CONFIRMED_ZERO })
+]);
+
+/**
+ * Fixture: Long unwatched ordering vs unknown chronology.
+ */
+export const LONG_UNWATCHED_FIXTURE = Object.freeze([
+  createSyntheticItem({
+    assetId: 'ast-recent',
+    historyStatus: HISTORY_STATUS.PLAYED,
+    effectivePlayCount: 1,
+    lastPlayedAt: 1700000000
+  }),
+  createSyntheticItem({
+    assetId: 'ast-ancient',
+    historyStatus: HISTORY_STATUS.PLAYED,
+    effectivePlayCount: 1,
+    lastPlayedAt: 1500000000 // Oldest verified played date
+  }),
+  createSyntheticItem({
+    assetId: 'ast-no-history',
+    historyStatus: HISTORY_STATUS.UNKNOWN,
+    effectivePlayCount: 0,
+    lastPlayedAt: null // Unknown chronology
+  })
 ]);

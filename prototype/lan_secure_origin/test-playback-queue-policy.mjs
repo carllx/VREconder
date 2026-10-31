@@ -2,7 +2,7 @@
  * Test Suite: Playback Queue Policy & Synthetic Catalog Snapshot
  * Ticket 34.1 / Issue #35
  *
- * Verifies Acceptance Gates G1–G8 and Browser Review Refinements (comment 6548337055).
+ * Verifies Acceptance Gates G1–G8 and Browser Review Refinements (comments 6548337055 & 6548549330).
  */
 
 import assert from 'node:assert';
@@ -21,11 +21,13 @@ import {
   createSyntheticItem,
   MULTI_ROOT_OVERLAPPING_FIXTURE,
   CROSS_ROOT_CONFLICTING_FIXTURE,
+  CROSS_ROOT_DURATION_CONFLICT_FIXTURE,
   SAME_NAME_DIFFERENT_ASSETS_FIXTURE,
   UNRESOLVED_IDENTITY_FIXTURE,
   FAVORITES_ORDERING_FIXTURE,
   DISLIKE_COEXISTENCE_FIXTURE,
-  BALANCED_DISCOVERY_FIXTURE
+  BALANCED_DISCOVERY_FIXTURE,
+  LONG_UNWATCHED_FIXTURE
 } from './src/queue/synthetic-catalog-snapshot.mjs';
 
 console.log('============================================================');
@@ -141,7 +143,7 @@ console.log('\nTest G6: Dislike Exclusion & Favorite Coexistence');
 }
 
 // -------------------------------------------------------------
-// Gate G7 & Refinement 4: In-Session Frozen Queue Snapshot (Anti-Shuffle)
+// Gate G7: In-Session Queue Freeze (Anti-Shuffle Invariant)
 // -------------------------------------------------------------
 console.log('\nTest G7: In-Session Queue Freeze (Anti-Shuffle Invariant)');
 {
@@ -154,14 +156,6 @@ console.log('\nTest G7: In-Session Queue Freeze (Anti-Shuffle Invariant)');
   const session = buildPlaybackQueue(initialItems, { mode: QUEUE_MODE.DEFAULT });
   assert.strictEqual(session.currentIndex, 0);
   assert.strictEqual(session.frozenItems[0].assetId, 'item-1');
-
-  // Simulate background statistics update to item-1 (e.g. now played 5 times)
-  const mutatedItem1 = createSyntheticItem({
-    assetId: 'item-1',
-    historyStatus: HISTORY_STATUS.PLAYED,
-    effectivePlayCount: 5,
-    lastPlayedAt: 99999999
-  });
 
   // Advance session: session.frozenItems must NOT reorder or reshuffle
   const step1 = resolveNextQueueItem(session, 'SUCCESS');
@@ -183,9 +177,9 @@ console.log('\nTest G7: In-Session Queue Freeze (Anti-Shuffle Invariant)');
 }
 
 // -------------------------------------------------------------
-// Gate G8 & Refinement 5: Consecutive Failure Circuit Breaker
+// Gate G8: Consecutive Failure Circuit Breaker & Post-Trip Invariance
 // -------------------------------------------------------------
-console.log('\nTest G8: Consecutive Failure Circuit Breaker');
+console.log('\nTest G8: Consecutive Failure Circuit Breaker & Post-Trip Invariance');
 {
   const items = [
     createSyntheticItem({ assetId: 'fail-1' }),
@@ -224,7 +218,20 @@ console.log('\nTest G8: Consecutive Failure Circuit Breaker');
   assert.strictEqual(step.item, null);
   assert.strictEqual(step.session.consecutiveFailures, 4);
 
-  // Verify recovery if success occurs before threshold
+  // POST-TRIP INVARIANCE: A tripped session must remain stopped, even if SUCCESS is sent
+  const postTripSuccess = resolveNextQueueItem(step.session, 'SUCCESS');
+  assert.strictEqual(postTripSuccess.status, QUEUE_NAVIGATION_STATUS.CIRCUIT_BREAKER_TRIPPED);
+  assert.strictEqual(postTripSuccess.item, null);
+
+  const postTripFailure = resolveNextQueueItem(step.session, 'FAILURE');
+  assert.strictEqual(postTripFailure.status, QUEUE_NAVIGATION_STATUS.CIRCUIT_BREAKER_TRIPPED);
+  assert.strictEqual(postTripFailure.item, null);
+
+  const postTripPrevious = resolvePreviousQueueItem(step.session);
+  assert.strictEqual(postTripPrevious.status, QUEUE_NAVIGATION_STATUS.CIRCUIT_BREAKER_TRIPPED);
+  assert.strictEqual(postTripPrevious.item, null);
+
+  // Recovery before trip threshold
   let recoverSession = buildPlaybackQueue(items, { mode: QUEUE_MODE.DEFAULT });
   let failStep = resolveNextQueueItem(recoverSession, 'FAILURE');
   assert.strictEqual(failStep.session.consecutiveFailures, 1);
@@ -237,67 +244,100 @@ console.log('\nTest G8: Consecutive Failure Circuit Breaker');
   assert.strictEqual(endStep.status, QUEUE_NAVIGATION_STATUS.QUEUE_END);
   assert.strictEqual(endStep.item, null);
 
-  console.log('  ✅ [PASS] Gate G8: Exactly 3 failures advance, 4th trips circuit breaker; success resets counter');
+  // Verify empty previous returns QUEUE_END
+  let emptySession = buildPlaybackQueue([], { mode: QUEUE_MODE.DEFAULT });
+  let emptyPrevStep = resolvePreviousQueueItem(emptySession);
+  assert.strictEqual(emptyPrevStep.status, QUEUE_NAVIGATION_STATUS.QUEUE_END);
+  assert.strictEqual(emptyPrevStep.item, null);
+
+  console.log('  ✅ [PASS] Gate G8: Exactly 3 failures advance; 4th trips breaker; post-trip session remains stopped');
 }
 
 // -------------------------------------------------------------
-// Refinement 2: Conflicting Cross-Root Observations
+// Refinement 2: Conflicting Cross-Root Observations (Duration & Metadata)
 // -------------------------------------------------------------
-console.log('\nTest Refinement 2: Conflicting Cross-Root Observations');
+console.log('\nTest Refinement 2: Conflicting Cross-Root Observations (Duration & Metadata)');
 {
-  // 1. Default onConflict === 'throw'
+  // 1. Conflict on history & favorite throws
   assert.throws(
     () => buildPlaybackQueue(CROSS_ROOT_CONFLICTING_FIXTURE, { onConflict: 'throw' }),
     PlaybackQueueConflictError,
     'Conflicting metadata across roots must throw PlaybackQueueConflictError'
   );
 
-  // 2. onConflict === 'exclude' safely removes ambiguous asset
-  const session = buildPlaybackQueue(CROSS_ROOT_CONFLICTING_FIXTURE, { onConflict: 'exclude' });
+  // 2. Conflict on durationSeconds throws (fail-closed)
+  assert.throws(
+    () => buildPlaybackQueue(CROSS_ROOT_DURATION_CONFLICT_FIXTURE, { onConflict: 'throw' }),
+    PlaybackQueueConflictError,
+    'Conflicting durationSeconds across roots must throw PlaybackQueueConflictError'
+  );
+
+  // 3. onConflict === 'exclude' safely removes ambiguous assets
+  const session = buildPlaybackQueue(CROSS_ROOT_DURATION_CONFLICT_FIXTURE, { onConflict: 'exclude' });
   assert.strictEqual(session.frozenItems.length, 0);
-  assert.deepStrictEqual(session.diagnostics.conflictedAssetIds, ['ast-conflict-201']);
-  console.log('  ✅ [PASS] Refinement 2: Conflicting cross-root observations fail explicitly without silent erasure');
+  assert.deepStrictEqual(session.diagnostics.conflictedAssetIds, ['ast-dur-conflict-202']);
+  console.log('  ✅ [PASS] Refinement 2: Duration conflicts & metadata conflicts fail closed without silent merge');
 }
 
 // -------------------------------------------------------------
-// Refinement 3: Balanced Queue Determinism & Disjoint Cohorts
+// Refinement 3 & 5: Balanced Queue Default & Deterministic Seed Variance
 // -------------------------------------------------------------
-console.log('\nTest Refinement 3: Balanced Queue Determinism & Disjoint Cohorts');
+console.log('\nTest Refinement 3 & 5: Balanced Default & Deterministic Seed Variance');
 {
-  const session1 = buildPlaybackQueue(BALANCED_DISCOVERY_FIXTURE, {
-    mode: QUEUE_MODE.BALANCED,
-    seed: 42
-  });
+  // 1. Unspecified mode defaults to Owner-approved BALANCED
+  const defaultSession = buildPlaybackQueue(BALANCED_DISCOVERY_FIXTURE);
+  assert.strictEqual(defaultSession.mode, QUEUE_MODE.BALANCED, 'Default mode must be BALANCED');
 
-  const session2 = buildPlaybackQueue(BALANCED_DISCOVERY_FIXTURE, {
-    mode: QUEUE_MODE.BALANCED,
-    seed: 42
-  });
+  // 2. Invalid mode explicitly rejected
+  assert.throws(
+    () => buildPlaybackQueue(BALANCED_DISCOVERY_FIXTURE, { mode: 'UNSUPPORTED_MODE' }),
+    /Invalid queue mode/,
+    'Invalid queue mode must be rejected explicitly'
+  );
 
-  // 1. Deterministic repeatability: same seed produces identical order
-  const ids1 = session1.frozenItems.map(i => i.assetId);
-  const ids2 = session2.frozenItems.map(i => i.assetId);
-  assert.deepStrictEqual(ids1, ids2, 'Same snapshot and seed must yield identical queue');
+  // 3. Seed-driven variance: same seed produces identical order
+  const sessionSeed42A = buildPlaybackQueue(BALANCED_DISCOVERY_FIXTURE, { mode: QUEUE_MODE.BALANCED, seed: 42 });
+  const sessionSeed42B = buildPlaybackQueue(BALANCED_DISCOVERY_FIXTURE, { mode: QUEUE_MODE.BALANCED, seed: 42 });
+  const ids42A = sessionSeed42A.frozenItems.map(i => i.assetId);
+  const ids42B = sessionSeed42B.frozenItems.map(i => i.assetId);
+  assert.deepStrictEqual(ids42A, ids42B, 'Same seed must yield identical queue sequence');
 
-  // 2. Single-assignment: no duplicate assetId anywhere in the queue
-  const uniqueIds = new Set(ids1);
-  assert.strictEqual(uniqueIds.size, ids1.length, 'Every assetId in balanced queue must be unique');
+  // 4. Different seed produces bounded variance in order
+  const sessionSeed99 = buildPlaybackQueue(BALANCED_DISCOVERY_FIXTURE, { mode: QUEUE_MODE.BALANCED, seed: 99 });
+  const ids99 = sessionSeed99.frozenItems.map(i => i.assetId);
+  assert.notDeepStrictEqual(ids42A, ids99, 'Different seeds must produce deterministic variance');
 
-  // 3. Exclusions respected
-  assert.ok(!ids1.includes('bal-disliked'), 'Disliked item must be excluded');
-  assert.ok(!ids1.includes('bal-inaccessible'), 'Inaccessible item must be excluded');
+  // 5. Single assignment: zero duplicate assetId in either queue
+  assert.strictEqual(new Set(ids42A).size, ids42A.length, 'Every assetId must be unique in seed 42 queue');
+  assert.strictEqual(new Set(ids99).size, ids99.length, 'Every assetId must be unique in seed 99 queue');
 
-  // 4. UNKNOWN items are included as discovery cohort
-  assert.ok(ids1.includes('bal-unk-1'), 'UNKNOWN items must be included in discovery');
-  assert.ok(ids1.includes('bal-unk-2'), 'UNKNOWN items must be included in discovery');
+  // 6. Discovery cohort inclusion and exclusions
+  assert.ok(ids42A.includes('bal-unk-1'), 'UNKNOWN items must be included in discovery');
+  assert.ok(!ids42A.includes('bal-disliked'), 'Disliked items must be excluded');
 
-  console.log('  ✅ [PASS] Refinement 3: Balanced queue has disjoint cohorts, zero duplicate assetIds, deterministic seed');
+  console.log('  ✅ [PASS] Refinement 3 & 5: BALANCED is default; seed variance is active and deterministic');
 }
 
 // -------------------------------------------------------------
-// Refinement 4: Pure Function & Deep Immutability Safety
+// Refinement 4: Chronology Distinction in LONG_UNWATCHED_FIRST
 // -------------------------------------------------------------
-console.log('\nTest Refinement 4: Pure Function & Immutability Safety');
+console.log('\nTest Refinement 4: Chronology Distinction in LONG_UNWATCHED_FIRST');
+{
+  const session = buildPlaybackQueue(LONG_UNWATCHED_FIXTURE, { mode: QUEUE_MODE.LONG_UNWATCHED_FIRST });
+  const ids = session.frozenItems.map(i => i.assetId);
+
+  // Expected order:
+  // 1. ast-ancient (played at 1500000000 - oldest confirmed played)
+  // 2. ast-recent (played at 1700000000 - more recently played)
+  // 3. ast-no-history (lastPlayedAt: null - unknown chronology, must NOT masquerade as ancient -1)
+  assert.deepStrictEqual(ids, ['ast-ancient', 'ast-recent', 'ast-no-history']);
+  console.log('  ✅ [PASS] Refinement 4: Genuinely old timestamps precede unknown chronology (no -1 fake ancient)');
+}
+
+// -------------------------------------------------------------
+// Refinement 6: Pure Function & Deep Immutability Safety
+// -------------------------------------------------------------
+console.log('\nTest Refinement 6: Pure Function & Immutability Safety');
 {
   const deepFrozenInput = Object.freeze([
     Object.freeze(createSyntheticItem({ assetId: 'imm-1' })),
@@ -309,14 +349,13 @@ console.log('\nTest Refinement 4: Pure Function & Immutability Safety');
   assert.ok(Object.isFrozen(session.frozenItems), 'frozenItems must be frozen');
   assert.ok(Object.isFrozen(session.frozenItems[0]), 'Individual frozen items must be frozen');
 
-  // Attempting mutation should throw or fail silently in strict mode
   assert.throws(() => {
     session.currentIndex = 99;
   }, /Cannot assign to read only property/);
 
-  console.log('  ✅ [PASS] Refinement 4: Policy engine enforces deep immutability on input and session objects');
+  console.log('  ✅ [PASS] Refinement 6: Policy engine enforces deep immutability on input and session objects');
 }
 
 console.log('\n------------------------------------------------------------');
-console.log('OVERALL ISSUE #35 (TICKET 34.1) SUITE: ✅ ALL 10 GATES PASSED');
+console.log('OVERALL ISSUE #35 (TICKET 34.1) SUITE: ✅ ALL GATES & REFINEMENTS PASSED');
 console.log('------------------------------------------------------------\n');

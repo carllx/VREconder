@@ -60,6 +60,20 @@ function createDeterministicRandom(seed = 0) {
 }
 
 /**
+ * Bounded deterministic Fisher-Yates shuffle using seeded PRNG.
+ */
+function deterministicShuffle(array, prng) {
+  const result = array.slice();
+  for (let i = result.length - 1; i > 0; i--) {
+    const j = Math.floor(prng() * (i + 1));
+    const temp = result[i];
+    result[i] = result[j];
+    result[j] = temp;
+  }
+  return result;
+}
+
+/**
  * Deterministic string hash for session ID derivation when not explicitly passed.
  */
 function hashString(str) {
@@ -72,7 +86,7 @@ function hashString(str) {
 }
 
 /**
- * Deduplicate raw snapshot items across roots with conflict detection.
+ * Deduplicate raw snapshot items across roots with complete conflict detection.
  */
 function deduplicateAndValidateSnapshot(items, options = {}) {
   const onConflict = options.onConflict || 'throw'; // 'throw' | 'exclude'
@@ -108,11 +122,14 @@ function deduplicateAndValidateSnapshot(items, options = {}) {
       if (
         current.historyStatus !== base.historyStatus ||
         current.effectivePlayCount !== base.effectivePlayCount ||
+        current.totalWatchSeconds !== base.totalWatchSeconds ||
+        current.lastPlayedAt !== base.lastPlayedAt ||
         current.isFavorite !== base.isFavorite ||
         current.isDisliked !== base.isDisliked ||
         current.identityStatus !== base.identityStatus ||
         current.logicalMediaKey !== base.logicalMediaKey ||
-        current.fileSize !== base.fileSize
+        current.fileSize !== base.fileSize ||
+        current.durationSeconds !== base.durationSeconds
       ) {
         hasConflict = true;
         conflictDetails = {
@@ -165,7 +182,7 @@ function assignBalancedCohort(item) {
 }
 
 /**
- * Build balanced queue using deterministic single-assignment interleaving.
+ * Build balanced queue using deterministic single-assignment interleaving with seed variance.
  */
 function buildBalancedQueue(candidates, seed = 0) {
   const cohorts = {
@@ -181,9 +198,18 @@ function buildBalancedQueue(candidates, seed = 0) {
     cohorts[cohortKey].push(item);
   }
 
-  // Stable secondary sorting within each cohort by assetId
+  // Stable secondary sorting within each cohort by assetId first
   for (const key of Object.keys(cohorts)) {
     cohorts[key].sort((a, b) => a.assetId.localeCompare(b.assetId));
+  }
+
+  const prng = createDeterministicRandom(seed);
+
+  // Apply deterministic seed-driven shuffling to cohorts with multiple candidates
+  for (const key of Object.keys(cohorts)) {
+    if (cohorts[key].length > 1) {
+      cohorts[key] = deterministicShuffle(cohorts[key], prng);
+    }
   }
 
   // Interleave cohorts deterministically
@@ -197,7 +223,6 @@ function buildBalancedQueue(candidates, seed = 0) {
 
   const result = [];
   const visited = new Set();
-  const prng = createDeterministicRandom(seed);
 
   let remaining = true;
   while (remaining) {
@@ -206,7 +231,6 @@ function buildBalancedQueue(candidates, seed = 0) {
       const list = cohorts[key];
       if (list.length > 0) {
         remaining = true;
-        // Deterministic pop from front (stable FIFO interleaving)
         const item = list.shift();
         if (!visited.has(item.assetId)) {
           visited.add(item.assetId);
@@ -254,13 +278,19 @@ function buildFavoritesQueue(candidates) {
 
 /**
  * Pure Function: Build Playback Queue from synthetic catalog snapshot.
+ * Default queue mode is Owner-approved BALANCED.
  */
 export function buildPlaybackQueue(snapshotItems, options = {}) {
   if (!Array.isArray(snapshotItems)) {
     throw new TypeError('snapshotItems must be an array');
   }
 
-  const mode = options.mode || QUEUE_MODE.DEFAULT;
+  const validModes = new Set(Object.values(QUEUE_MODE));
+  const mode = options.mode !== undefined ? options.mode : QUEUE_MODE.BALANCED;
+  if (!validModes.has(mode)) {
+    throw new Error(`Invalid queue mode: ${mode}`);
+  }
+
   const seed = typeof options.seed === 'number' ? options.seed : 0;
   const maxItems = typeof options.maxItems === 'number' ? options.maxItems : null;
 
@@ -316,15 +346,26 @@ export function buildPlaybackQueue(snapshotItems, options = {}) {
 
     case QUEUE_MODE.LONG_UNWATCHED_FIRST:
       orderedItems = eligibleCandidates.slice().sort((a, b) => {
-        const aTime = typeof a.lastPlayedAt === 'number' ? a.lastPlayedAt : -1;
-        const bTime = typeof b.lastPlayedAt === 'number' ? b.lastPlayedAt : -1;
-        if (aTime !== bTime) return aTime - bTime;
+        const aHasTime = typeof a.lastPlayedAt === 'number' && Number.isFinite(a.lastPlayedAt);
+        const bHasTime = typeof b.lastPlayedAt === 'number' && Number.isFinite(b.lastPlayedAt);
+
+        if (aHasTime && bHasTime) {
+          if (a.lastPlayedAt !== b.lastPlayedAt) {
+            return a.lastPlayedAt - b.lastPlayedAt; // Oldest known played first
+          }
+          return a.assetId.localeCompare(b.assetId);
+        }
+
+        // Genuinely played items with known timestamps precede unknown chronology
+        if (aHasTime && !bHasTime) return -1;
+        if (!aHasTime && bHasTime) return 1;
+
+        // Both lack known timestamp: tie-break deterministically without masquerading as ancient
         return a.assetId.localeCompare(b.assetId);
       });
       break;
 
     case QUEUE_MODE.DEFAULT:
-    default:
       orderedItems = eligibleCandidates.slice().sort((a, b) => a.assetId.localeCompare(b.assetId));
       break;
   }
@@ -359,6 +400,15 @@ export function buildPlaybackQueue(snapshotItems, options = {}) {
 export function resolveNextQueueItem(session, outcome = 'SUCCESS') {
   if (!session || typeof session !== 'object') {
     throw new TypeError('session must be a valid PlaybackQueueSession object');
+  }
+
+  // If circuit breaker is already tripped, session remains stopped
+  if (session.consecutiveFailures > 3) {
+    return {
+      session,
+      item: null,
+      status: QUEUE_NAVIGATION_STATUS.CIRCUIT_BREAKER_TRIPPED
+    };
   }
 
   const items = session.frozenItems;
@@ -450,11 +500,29 @@ export function resolvePreviousQueueItem(session) {
     throw new TypeError('session must be a valid PlaybackQueueSession object');
   }
 
-  const items = session.frozenItems;
-  if (!items || items.length === 0 || session.currentIndex <= 0) {
+  // If circuit breaker is already tripped, session remains stopped
+  if (session.consecutiveFailures > 3) {
     return {
       session,
-      item: items && items.length > 0 ? items[0] : null,
+      item: null,
+      status: QUEUE_NAVIGATION_STATUS.CIRCUIT_BREAKER_TRIPPED
+    };
+  }
+
+  const items = session.frozenItems;
+  // Empty queue reports QUEUE_END
+  if (!items || items.length === 0 || session.currentIndex < 0) {
+    return {
+      session,
+      item: null,
+      status: QUEUE_NAVIGATION_STATUS.QUEUE_END
+    };
+  }
+
+  if (session.currentIndex <= 0) {
+    return {
+      session,
+      item: items[0],
       status: QUEUE_NAVIGATION_STATUS.ADVANCED
     };
   }
