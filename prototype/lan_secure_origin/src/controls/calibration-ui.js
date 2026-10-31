@@ -11,6 +11,37 @@ function logAction(msg, data = null) {
   }).catch(() => {});
 }
 
+export function resolveRegistrationDelta(msg) {
+  if (!msg || typeof msg !== 'object') {
+    return { valid: false, reason: 'INVALID_MESSAGE_OBJECT' };
+  }
+
+  // 1. Direct explicit deltaDeg mode
+  if (msg.deltaDeg !== undefined) {
+    if (typeof msg.deltaDeg === 'number' && Number.isFinite(msg.deltaDeg) && !Number.isNaN(msg.deltaDeg)) {
+      return { valid: true, delta: msg.deltaDeg };
+    }
+    return { valid: false, reason: 'INVALID_DELTA_DEG' };
+  }
+
+  // 2. Step and direction mode (strictly validated)
+  const isStepValid = (msg.step === 'coarse' || msg.step === 'fine');
+  const isDirValid = (msg.direction === 1 || msg.direction === -1);
+
+  if (isStepValid && isDirValid) {
+    const stepSize = (msg.step === 'fine') ? REGISTRATION_STEPS.fineDeg : REGISTRATION_STEPS.coarseDeg;
+    return { valid: true, delta: stepSize * msg.direction };
+  }
+
+  if (!isStepValid && !isDirValid) {
+    return { valid: false, reason: 'MISSING_OR_INVALID_STEP_AND_DIRECTION' };
+  }
+  if (!isStepValid) {
+    return { valid: false, reason: 'INVALID_STEP' };
+  }
+  return { valid: false, reason: 'INVALID_DIRECTION' };
+}
+
 export class CalibrationUI {
   constructor(options) {
     this.storage = options.storage;
@@ -200,14 +231,12 @@ export class CalibrationUI {
         logAction('Rejected set_ui_registration_offset: ' + validation.reason, { msg });
       }
     } else if (act === 'adjust_ui_registration_x') {
-      let delta = 0;
-      if (typeof msg.deltaDeg === 'number' && Number.isFinite(msg.deltaDeg) && !Number.isNaN(msg.deltaDeg)) {
-        delta = msg.deltaDeg;
-      } else {
-        const stepSize = (msg.step === 'fine') ? REGISTRATION_STEPS.fineDeg : REGISTRATION_STEPS.coarseDeg;
-        const dir = (msg.direction === -1) ? -1 : 1;
-        delta = stepSize * dir;
+      const deltaResult = resolveRegistrationDelta(msg);
+      if (!deltaResult.valid) {
+        logAction('Rejected adjust_ui_registration_x: ' + deltaResult.reason, { msg });
+        return;
       }
+      const delta = deltaResult.delta;
       const currentX = (typeof state.uiRegistrationOffsetXDeg === 'number') ? state.uiRegistrationOffsetXDeg : 0.0;
       const targetX = Number((currentX + delta).toFixed(4));
       const currentY = (typeof state.uiRegistrationOffsetYDeg === 'number') ? state.uiRegistrationOffsetYDeg : 0.0;
@@ -220,14 +249,12 @@ export class CalibrationUI {
         logAction('Rejected adjust_ui_registration_x: ' + validation.reason, { currentX, targetX, delta });
       }
     } else if (act === 'adjust_ui_registration_y') {
-      let delta = 0;
-      if (typeof msg.deltaDeg === 'number' && Number.isFinite(msg.deltaDeg) && !Number.isNaN(msg.deltaDeg)) {
-        delta = msg.deltaDeg;
-      } else {
-        const stepSize = (msg.step === 'fine') ? REGISTRATION_STEPS.fineDeg : REGISTRATION_STEPS.coarseDeg;
-        const dir = (msg.direction === -1) ? -1 : 1;
-        delta = stepSize * dir;
+      const deltaResult = resolveRegistrationDelta(msg);
+      if (!deltaResult.valid) {
+        logAction('Rejected adjust_ui_registration_y: ' + deltaResult.reason, { msg });
+        return;
       }
+      const delta = deltaResult.delta;
       const currentX = (typeof state.uiRegistrationOffsetXDeg === 'number') ? state.uiRegistrationOffsetXDeg : 0.0;
       const currentY = (typeof state.uiRegistrationOffsetYDeg === 'number') ? state.uiRegistrationOffsetYDeg : 0.0;
       const targetY = Number((currentY + delta).toFixed(4));

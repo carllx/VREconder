@@ -246,6 +246,57 @@ calUI.handleRemoteControlAction({ action: 'set_ui_registration_offset', xDeg: 4.
 calUI.handleRemoteControlAction({ action: 'adjust_ui_registration_x', step: 'coarse', direction: 1 }); // 4.8 + 0.5 = 5.3 > 5.0
 assert.equal(state.uiRegistrationOffsetXDeg, 4.8, 'Incremental adjustment crossing bound must fail-closed');
 
+// Regression Tests: Rigorous Direct Delta & Step/Direction Validation
+// 1. Direct explicit deltaDeg mode (positive and negative)
+calUI.handleRemoteControlAction({ action: 'set_ui_registration_offset', xDeg: 1.0, yDeg: 1.0 });
+calUI.handleRemoteControlAction({ action: 'adjust_ui_registration_x', deltaDeg: -0.30 });
+assert.equal(state.uiRegistrationOffsetXDeg, 0.70, 'Valid deltaDeg -0.30 must update X to 0.70');
+
+calUI.handleRemoteControlAction({ action: 'adjust_ui_registration_y', deltaDeg: 0.25 });
+assert.equal(state.uiRegistrationOffsetYDeg, 1.25, 'Valid deltaDeg +0.25 must update Y to 1.25');
+
+// 2. Invalid direct deltaDeg (NaN, Infinity, string, null, object) -> MUST NOT mutate state
+const savedX = state.uiRegistrationOffsetXDeg;
+const savedY = state.uiRegistrationOffsetYDeg;
+
+const invalidDeltas = ['0.5', NaN, Infinity, -Infinity, null, undefined, {}, []];
+for (const badDelta of invalidDeltas) {
+  if (badDelta !== undefined) {
+    calUI.handleRemoteControlAction({ action: 'adjust_ui_registration_x', deltaDeg: badDelta });
+    assert.equal(state.uiRegistrationOffsetXDeg, savedX, 'Invalid deltaDeg must leave X unchanged');
+    calUI.handleRemoteControlAction({ action: 'adjust_ui_registration_y', deltaDeg: badDelta });
+    assert.equal(state.uiRegistrationOffsetYDeg, savedY, 'Invalid deltaDeg must leave Y unchanged');
+  }
+}
+
+// 3. Invalid step values -> MUST NOT silently default to coarse/fine or mutate state
+const invalidSteps = ['medium', 'normal', '', 123, null, undefined, true, false];
+for (const badStep of invalidSteps) {
+  calUI.handleRemoteControlAction({ action: 'adjust_ui_registration_x', step: badStep, direction: 1 });
+  assert.equal(state.uiRegistrationOffsetXDeg, savedX, 'Invalid step must leave X unchanged (no silent default)');
+  calUI.handleRemoteControlAction({ action: 'adjust_ui_registration_y', step: badStep, direction: 1 });
+  assert.equal(state.uiRegistrationOffsetYDeg, savedY, 'Invalid step must leave Y unchanged (no silent default)');
+}
+
+// 4. Invalid direction values -> MUST NOT silently default to positive direction or mutate state
+const invalidDirs = [0, 2, -2, '1', '-1', 'up', 'down', null, undefined, true, false];
+for (const badDir of invalidDirs) {
+  calUI.handleRemoteControlAction({ action: 'adjust_ui_registration_x', step: 'coarse', direction: badDir });
+  assert.equal(state.uiRegistrationOffsetXDeg, savedX, 'Invalid direction must leave X unchanged (no silent default)');
+  calUI.handleRemoteControlAction({ action: 'adjust_ui_registration_y', step: 'coarse', direction: badDir });
+  assert.equal(state.uiRegistrationOffsetYDeg, savedY, 'Invalid direction must leave Y unchanged (no silent default)');
+}
+
+// 5. Completely empty or garbage payload -> MUST NOT mutate state
+calUI.handleRemoteControlAction({ action: 'adjust_ui_registration_x' });
+assert.equal(state.uiRegistrationOffsetXDeg, savedX, 'Empty payload must leave X unchanged');
+
+calUI.handleRemoteControlAction({ action: 'adjust_ui_registration_y' });
+assert.equal(state.uiRegistrationOffsetYDeg, savedY, 'Empty payload must leave Y unchanged');
+
+calUI.handleRemoteControlAction({ action: 'adjust_ui_registration_x', foo: 'bar', randomVal: 99 });
+assert.equal(state.uiRegistrationOffsetXDeg, savedX, 'Garbage payload must leave X unchanged');
+
 // D. Reset to exact zero
 calUI.handleRemoteControlAction({ action: 'reset_ui_registration_offset' });
 assert.equal(state.uiRegistrationOffsetXDeg, 0.0, 'Reset must return X to exact 0.0');
