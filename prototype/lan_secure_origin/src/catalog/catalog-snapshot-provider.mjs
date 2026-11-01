@@ -217,8 +217,10 @@ export function transformCatalogRecords(records, rootAvailability = {}, options 
       if (raw.historyStatus === HISTORY_STATUS.CONFIRMED_ZERO) {
         historyStatus = HISTORY_STATUS.CONFIRMED_ZERO;
         effectivePlayCount = 0;
-        totalWatchSeconds = 0;
-        lastPlayedAt = null;
+        totalWatchSeconds = (typeof raw.totalWatchSeconds === 'number' && Number.isFinite(raw.totalWatchSeconds) && raw.totalWatchSeconds >= 0)
+          ? Math.trunc(raw.totalWatchSeconds)
+          : 0;
+        lastPlayedAt = normalizeTimestamp(raw.lastPlayedAt);
       } else if (raw.historyStatus === HISTORY_STATUS.PLAYED) {
         const count = (typeof raw.effectivePlayCount === 'number' && Number.isFinite(raw.effectivePlayCount))
           ? Math.trunc(raw.effectivePlayCount)

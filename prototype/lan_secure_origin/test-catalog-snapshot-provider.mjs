@@ -298,7 +298,7 @@ function runTests() {
     const rootAvailability = { root_online: { basePath: 'M:/', accessible: true } };
 
     const records = [
-      // 7.1 Unverified scene-level metrics must not attach fake timestamp or play count
+      // 7.1 Unverified scene-level metrics must not attach fake timestamp, count, or duration
       {
         assetId: 'asset_unverified',
         rootId: 'root_online',
@@ -306,6 +306,7 @@ function runTests() {
         fileSize: 1000,
         durationSeconds: 60,
         play_count: 8,
+        totalWatchSeconds: 9999, // Upstream unverified scene duration
         lastPlayedAt: '2020-01-01T00:00:00.000Z' // Upstream unverified scene timestamp
       },
       // 7.2 Missing logicalMediaKey must force UNRESOLVED
@@ -350,15 +351,40 @@ function runTests() {
         historyStatus: HISTORY_STATUS.PLAYED,
         effectivePlayCount: 3,
         lastPlayedAt: '2026-08-01T00:00:00.000Z'
+      },
+      // 7.6 CONFIRMED_ZERO with valid positive duration must preserve totalWatchSeconds
+      {
+        assetId: 'asset_cz_with_duration',
+        rootId: 'root_online',
+        filePath: 'cz_duration.mp4',
+        fileSize: 1000,
+        durationSeconds: 60,
+        hasVerifiedAssetHistory: true,
+        historyStatus: HISTORY_STATUS.CONFIRMED_ZERO,
+        effectivePlayCount: 0,
+        totalWatchSeconds: 7200
+      },
+      // 7.7 CONFIRMED_ZERO with negative/invalid duration falls back to 0
+      {
+        assetId: 'asset_cz_invalid_duration',
+        rootId: 'root_online',
+        filePath: 'cz_invalid.mp4',
+        fileSize: 1000,
+        durationSeconds: 60,
+        hasVerifiedAssetHistory: true,
+        historyStatus: HISTORY_STATUS.CONFIRMED_ZERO,
+        effectivePlayCount: 0,
+        totalWatchSeconds: -50
       }
     ];
 
     const result = transformCatalogRecords(records, rootAvailability);
 
-    // 7.1: UNKNOWN history has null lastPlayedAt and 0 count
+    // 7.1: UNKNOWN history has null lastPlayedAt and 0 count and 0 duration
     const unverified = result.items.find(i => i.assetId === 'asset_unverified');
     assert.equal(unverified.historyStatus, HISTORY_STATUS.UNKNOWN);
     assert.equal(unverified.effectivePlayCount, 0);
+    assert.equal(unverified.totalWatchSeconds, 0);
     assert.equal(unverified.lastPlayedAt, null);
 
     // 7.2: No logicalMediaKey forces UNRESOLVED with null key
@@ -383,6 +409,18 @@ function runTests() {
     assert.equal(validPlayed.effectivePlayCount, 3);
     assert.equal(typeof validPlayed.lastPlayedAt, 'number');
     assert.equal(validPlayed.lastPlayedAt, Date.parse('2026-08-01T00:00:00.000Z'));
+
+    // 7.6: CONFIRMED_ZERO preserves verified positive duration
+    const czDuration = result.items.find(i => i.assetId === 'asset_cz_with_duration');
+    assert.equal(czDuration.historyStatus, HISTORY_STATUS.CONFIRMED_ZERO);
+    assert.equal(czDuration.effectivePlayCount, 0);
+    assert.equal(czDuration.totalWatchSeconds, 7200);
+
+    // 7.7: CONFIRMED_ZERO with negative duration falls back to 0
+    const czInvalid = result.items.find(i => i.assetId === 'asset_cz_invalid_duration');
+    assert.equal(czInvalid.historyStatus, HISTORY_STATUS.CONFIRMED_ZERO);
+    assert.equal(czInvalid.effectivePlayCount, 0);
+    assert.equal(czInvalid.totalWatchSeconds, 0);
   }
 
   // Test 8: Stash GraphQL Reader Contract Status HOLD
@@ -485,7 +523,7 @@ function runTests() {
     // Build #35 queue using provider.items
     const session = buildPlaybackQueue(snapshot.items, {
       mode: QUEUE_MODE.BALANCED,
-      randomSeed: 42
+      seed: 42
     });
 
     // Disliked item excluded, conflicted item quarantined, replica deduplicated
