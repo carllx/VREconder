@@ -276,3 +276,57 @@ export const LONG_UNWATCHED_FIXTURE = Object.freeze([
     lastPlayedAt: null // Unknown chronology
   })
 ]);
+
+/**
+ * Fixture: Multi-root duplicate with offline-first, online-second.
+ */
+export const CROSS_ROOT_ONLINE_OFFLINE_FIXTURE = Object.freeze([
+  createSyntheticItem({
+    assetId: 'ast-on-off-pair',
+    rootId: 'root-offline',
+    filePath: 'offline/media/video.mp4',
+    accessible: false
+  }),
+  createSyntheticItem({
+    assetId: 'ast-on-off-pair',
+    rootId: 'root-online',
+    filePath: 'online/media/video.mp4',
+    accessible: true
+  })
+]);
+
+/**
+ * Fixture: Multi-root duplicate with multiple online directories.
+ */
+export const CROSS_ROOT_MULTI_ONLINE_FIXTURE = Object.freeze([
+  createSyntheticItem({
+    assetId: 'ast-multi-online',
+    rootId: 'root-z-store',
+    filePath: 'z_store/video.mp4',
+    accessible: true
+  }),
+  createSyntheticItem({
+    assetId: 'ast-multi-online',
+    rootId: 'root-a-store',
+    filePath: 'a_store/video.mp4',
+    accessible: true
+  })
+]);
+
+/**
+ * Fixture: Multi-root duplicate where all directories are offline.
+ */
+export const CROSS_ROOT_ALL_OFFLINE_FIXTURE = Object.freeze([
+  createSyntheticItem({
+    assetId: 'ast-all-offline',
+    rootId: 'root-unplugged-1',
+    filePath: 'disk1/offline_video.mp4',
+    accessible: false
+  }),
+  createSyntheticItem({
+    assetId: 'ast-all-offline',
+    rootId: 'root-unplugged-2',
+    filePath: 'disk2/offline_video.mp4',
+    accessible: false
+  })
+]);

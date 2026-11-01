@@ -27,7 +27,10 @@ import {
   FAVORITES_ORDERING_FIXTURE,
   DISLIKE_COEXISTENCE_FIXTURE,
   BALANCED_DISCOVERY_FIXTURE,
-  LONG_UNWATCHED_FIXTURE
+  LONG_UNWATCHED_FIXTURE,
+  CROSS_ROOT_ONLINE_OFFLINE_FIXTURE,
+  CROSS_ROOT_MULTI_ONLINE_FIXTURE,
+  CROSS_ROOT_ALL_OFFLINE_FIXTURE
 } from './src/queue/synthetic-catalog-snapshot.mjs';
 
 console.log('============================================================');
@@ -277,6 +280,47 @@ console.log('\nTest Refinement 2: Conflicting Cross-Root Observations (Duration 
   assert.strictEqual(session.frozenItems.length, 0);
   assert.deepStrictEqual(session.diagnostics.conflictedAssetIds, ['ast-dur-conflict-202']);
   console.log('  ✅ [PASS] Refinement 2: Duration conflicts & metadata conflicts fail closed without silent merge');
+}
+
+// -------------------------------------------------------------
+// Residual Fix: Multi-Root Accessible Root Selection & Deterministic Tie-Break
+// -------------------------------------------------------------
+console.log('\nTest Residual: Multi-Root Accessible Selection & Deterministic Tie-Break');
+{
+  // 1. Offline-first, online-second selects online root and path
+  const session1 = buildPlaybackQueue(CROSS_ROOT_ONLINE_OFFLINE_FIXTURE, { mode: QUEUE_MODE.DEFAULT });
+  assert.strictEqual(session1.frozenItems.length, 1);
+  const item1 = session1.frozenItems[0];
+  assert.strictEqual(item1.accessible, true);
+  assert.strictEqual(item1.rootId, 'root-online');
+  assert.strictEqual(item1.filePath, 'online/media/video.mp4');
+
+  // 2. Reversed order (online-first, offline-second) produces identical result
+  const reversedFixture = [CROSS_ROOT_ONLINE_OFFLINE_FIXTURE[1], CROSS_ROOT_ONLINE_OFFLINE_FIXTURE[0]];
+  const session2 = buildPlaybackQueue(reversedFixture, { mode: QUEUE_MODE.DEFAULT });
+  assert.strictEqual(session2.frozenItems.length, 1);
+  const item2 = session2.frozenItems[0];
+  assert.strictEqual(item2.accessible, true);
+  assert.strictEqual(item2.rootId, 'root-online');
+  assert.strictEqual(item2.filePath, 'online/media/video.mp4');
+
+  // 3. Multiple online directories tie-break deterministically independent of input order
+  const multiOnlineOrderA = buildPlaybackQueue(CROSS_ROOT_MULTI_ONLINE_FIXTURE, { mode: QUEUE_MODE.DEFAULT });
+  const multiOnlineOrderB = buildPlaybackQueue(
+    [CROSS_ROOT_MULTI_ONLINE_FIXTURE[1], CROSS_ROOT_MULTI_ONLINE_FIXTURE[0]],
+    { mode: QUEUE_MODE.DEFAULT }
+  );
+  assert.strictEqual(multiOnlineOrderA.frozenItems.length, 1);
+  assert.strictEqual(multiOnlineOrderB.frozenItems.length, 1);
+  assert.strictEqual(multiOnlineOrderA.frozenItems[0].rootId, 'root-a-store');
+  assert.strictEqual(multiOnlineOrderA.frozenItems[0].filePath, 'a_store/video.mp4');
+  assert.deepStrictEqual(multiOnlineOrderA.frozenItems[0], multiOnlineOrderB.frozenItems[0]);
+
+  // 4. All directories offline: item is ineligible and does not enter auto queue
+  const allOfflineSession = buildPlaybackQueue(CROSS_ROOT_ALL_OFFLINE_FIXTURE, { mode: QUEUE_MODE.DEFAULT });
+  assert.strictEqual(allOfflineSession.frozenItems.length, 0, 'All-offline asset must not enter automated queue');
+
+  console.log('  ✅ [PASS] Residual: Online root is selected regardless of order; deterministic tie-break; all-offline excluded');
 }
 
 // -------------------------------------------------------------

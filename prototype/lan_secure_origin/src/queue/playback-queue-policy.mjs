@@ -153,9 +153,23 @@ function deduplicateAndValidateSnapshot(items, options = {}) {
       }
     }
 
-    // If compatible, merge root accessibility (accessible if any observation is accessible)
-    const merged = { ...base };
-    merged.accessible = observations.some(obs => obs.accessible === true);
+    // Select representative observation:
+    // Prefer accessible observations; break ties deterministically independent of input order.
+    const accessibleObs = observations.filter(obs => obs.accessible === true);
+    let representative;
+
+    if (accessibleObs.length > 0) {
+      accessibleObs.sort((a, b) => a.rootId.localeCompare(b.rootId) || a.filePath.localeCompare(b.filePath));
+      representative = accessibleObs[0];
+    } else {
+      const sortedOffline = observations.slice().sort(
+        (a, b) => a.rootId.localeCompare(b.rootId) || a.filePath.localeCompare(b.filePath)
+      );
+      representative = sortedOffline[0];
+    }
+
+    const merged = { ...representative };
+    merged.accessible = accessibleObs.length > 0;
     deduplicated.push(merged);
   }
 
