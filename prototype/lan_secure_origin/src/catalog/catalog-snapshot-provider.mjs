@@ -4,11 +4,12 @@
  *
  * Implements:
  * 1. Flattened multi-root observations mapping to ReadonlyArray<MediaSnapshotItem> for Issue #35
- * 2. Fail-closed identity conflict quarantine (quarantinedItems)
+ * 2. Fail-closed identity and semantic conflict quarantine (quarantinedItems)
  * 3. Root availability injection & offline root resilience (accessible: false without deletion)
- * 4. Safe scoped path sanitization and host secret/token redaction
+ * 4. Strict component-boundary path scoping, outside-root rejection & secret redaction
  * 5. Strict epoch millisecond timestamp normalization (number | null)
- * 6. Scene-level count vs verified per-asset history separation (unknown history保真)
+ * 6. Coherent fail-honest state: unknown history has null timestamp, RESOLVED requires valid key,
+ *    PLAYED requires positive integer play count
  * 7. Version-specific Stash reader contract marked as HOLD pending schema evidence
  */
 
@@ -21,6 +22,7 @@ export const QUARANTINE_REASON = Object.freeze({
   METADATA_CONFLICT: 'METADATA_CONFLICT',
   INVALID_ATTRIBUTES: 'INVALID_ATTRIBUTES',
   PATH_TRAVERSAL_RISK: 'PATH_TRAVERSAL_RISK',
+  OUTSIDE_AUTHORIZED_ROOT: 'OUTSIDE_AUTHORIZED_ROOT',
   AMBIGUOUS_IDENTITY: 'AMBIGUOUS_IDENTITY'
 });
 
@@ -56,8 +58,11 @@ export function normalizeTimestamp(val) {
 }
 
 /**
- * Sanitize file path: strip private host absolute roots, prevent traversal,
- * normalize separators to forward slashes, and produce a safe scoped path.
+ * Sanitize file path with component-boundary containment:
+ * - Reject paths outside the authorized root, wrong drive, or UNC unless root matches
+ * - Prevent traversal attacks (..)
+ * - Strip query strings / tokens
+ * - Produce safe relative scoped path
  */
 export function sanitizeScopedPath(rawPath, rootBasePath = '') {
   if (typeof rawPath !== 'string' || rawPath.trim() === '') {
@@ -65,41 +70,64 @@ export function sanitizeScopedPath(rawPath, rootBasePath = '') {
   }
 
   let normalized = rawPath.replace(/\\/g, '/').trim();
-  let normalizedBase = (typeof rootBasePath === 'string') ? rootBasePath.replace(/\\/g, '/').trim() : '';
+  const normalizedBase = (typeof rootBasePath === 'string')
+    ? rootBasePath.replace(/\\/g, '/').trim().replace(/\/+$/, '')
+    : '';
 
   // Redact URL tokens / passwords if embedded
   if (normalized.includes('?')) {
     normalized = normalized.split('?')[0];
   }
 
-  // If path starts with rootBasePath, strip it
-  if (normalizedBase && normalized.toLowerCase().startsWith(normalizedBase.toLowerCase())) {
-    normalized = normalized.slice(normalizedBase.length);
+  let subpath = '';
+
+  // Determine if rawPath is an absolute path:
+  // Windows drive (e.g. C:/), UNC path (//server/share or //...), or root-slash (/...)
+  const isWindowsDrive = /^[a-zA-Z]:\//i.test(normalized);
+  const isUncPath = /^\/\//.test(normalized);
+  const isRootSlash = /^\/[^\/]/.test(normalized);
+  const isAbsolute = isWindowsDrive || isUncPath || isRootSlash;
+
+  if (isAbsolute) {
+    if (!normalizedBase) {
+      return { scopedPath: null, error: QUARANTINE_REASON.OUTSIDE_AUTHORIZED_ROOT };
+    }
+
+    const normLower = normalized.toLowerCase();
+    const baseLower = normalizedBase.toLowerCase();
+
+    // Must match rootBasePath with component boundary
+    if (normLower.startsWith(baseLower + '/')) {
+      subpath = normalized.slice(normalizedBase.length + 1);
+    } else {
+      // Prefix lookalike (e.g. G:/Media/VR2 vs G:/Media/VR), other drive (H:/...), or unmatching UNC
+      return { scopedPath: null, error: QUARANTINE_REASON.OUTSIDE_AUTHORIZED_ROOT };
+    }
+  } else {
+    // Relative path: must not start with drive letter or slash
+    if (/^[a-zA-Z]:/i.test(normalized) || normalized.startsWith('/')) {
+      return { scopedPath: null, error: QUARANTINE_REASON.OUTSIDE_AUTHORIZED_ROOT };
+    }
+    // Remove leading ./
+    subpath = normalized.replace(/^\.\//, '');
   }
 
-  // Remove leading slashes or drive letters (e.g. C:/)
-  normalized = normalized.replace(/^[a-zA-Z]:/, '');
-  normalized = normalized.replace(/^\/+/, '');
-
   // Prevent directory traversal attacks
-  const segments = normalized.split('/').filter(Boolean);
+  const segments = subpath.split('/').filter(Boolean);
+  if (segments.length === 0) {
+    return { scopedPath: null, error: 'EMPTY_PATH' };
+  }
   if (segments.some(seg => seg === '..')) {
     return { scopedPath: null, error: QUARANTINE_REASON.PATH_TRAVERSAL_RISK };
   }
 
-  const safePath = segments.join('/');
-  if (!safePath) {
-    return { scopedPath: null, error: 'EMPTY_PATH' };
-  }
-
-  return { scopedPath: safePath, error: null };
+  return { scopedPath: segments.join('/'), error: null };
 }
 
 /**
  * Validate and group raw catalog records into flattened MediaSnapshotItems or quarantined records.
  */
 export function transformCatalogRecords(records, rootAvailability = {}, options = {}) {
-  const requireVerifiedAssetHistory = options.requireVerifiedAssetHistory === true;
   const items = [];
   const quarantinedItems = [];
 
@@ -145,10 +173,8 @@ export function transformCatalogRecords(records, rootAvailability = {}, options 
     if (pathResult.error) {
       quarantinedItems.push({
         assetId,
-        reason: pathResult.error === QUARANTINE_REASON.PATH_TRAVERSAL_RISK
-          ? QUARANTINE_REASON.PATH_TRAVERSAL_RISK
-          : QUARANTINE_REASON.INVALID_ATTRIBUTES,
-        details: `Path sanitization failed: ${pathResult.error}`,
+        reason: pathResult.error,
+        details: 'Path failed sanitization and is outside authorized scope',
         candidateCount: 1
       });
       continue;
@@ -179,31 +205,67 @@ export function transformCatalogRecords(records, rootAvailability = {}, options 
     }
 
     // History and count attribution:
-    // Scene-level counts != verified per-file history. Unless explicitly marked as verified asset history,
-    // default to UNKNOWN with 0 effectivePlayCount.
+    // Scene-level counts != verified per-file history.
+    // Unknown asset history MUST have lastPlayedAt = null.
+    // PLAYED requires positive finite integer count (> 0); otherwise fall back to UNKNOWN.
     let historyStatus = HISTORY_STATUS.UNKNOWN;
     let effectivePlayCount = 0;
     let totalWatchSeconds = 0;
-    let lastPlayedAt = normalizeTimestamp(raw.lastPlayedAt);
+    let lastPlayedAt = null;
 
     if (raw.hasVerifiedAssetHistory === true) {
       if (raw.historyStatus === HISTORY_STATUS.CONFIRMED_ZERO) {
         historyStatus = HISTORY_STATUS.CONFIRMED_ZERO;
         effectivePlayCount = 0;
+        totalWatchSeconds = 0;
+        lastPlayedAt = null;
       } else if (raw.historyStatus === HISTORY_STATUS.PLAYED) {
-        historyStatus = HISTORY_STATUS.PLAYED;
-        effectivePlayCount = typeof raw.effectivePlayCount === 'number' && raw.effectivePlayCount >= 0
+        const count = (typeof raw.effectivePlayCount === 'number' && Number.isFinite(raw.effectivePlayCount))
           ? Math.trunc(raw.effectivePlayCount)
           : 0;
-        totalWatchSeconds = typeof raw.totalWatchSeconds === 'number' && raw.totalWatchSeconds >= 0
-          ? Math.trunc(raw.totalWatchSeconds)
-          : 0;
+        if (count > 0) {
+          historyStatus = HISTORY_STATUS.PLAYED;
+          effectivePlayCount = count;
+          totalWatchSeconds = (typeof raw.totalWatchSeconds === 'number' && Number.isFinite(raw.totalWatchSeconds) && raw.totalWatchSeconds >= 0)
+            ? Math.trunc(raw.totalWatchSeconds)
+            : 0;
+          lastPlayedAt = normalizeTimestamp(raw.lastPlayedAt);
+        } else {
+          // Non-positive or invalid count for PLAYED: fall back to UNKNOWN with null lastPlayedAt
+          historyStatus = HISTORY_STATUS.UNKNOWN;
+          effectivePlayCount = 0;
+          totalWatchSeconds = 0;
+          lastPlayedAt = null;
+        }
       } else {
         historyStatus = HISTORY_STATUS.UNKNOWN;
+        effectivePlayCount = 0;
+        totalWatchSeconds = 0;
+        lastPlayedAt = null;
       }
-    } else if (requireVerifiedAssetHistory) {
+    } else {
+      // Unverified scene-level metrics do not populate per-file history
       historyStatus = HISTORY_STATUS.UNKNOWN;
       effectivePlayCount = 0;
+      totalWatchSeconds = 0;
+      lastPlayedAt = null;
+    }
+
+    // Identity status & Logical Media Key:
+    // RESOLVED requires explicit valid identity key; otherwise UNRESOLVED with null logicalMediaKey.
+    let identityStatus = IDENTITY_STATUS.UNRESOLVED;
+    let logicalMediaKey = null;
+
+    if (
+      raw.identityStatus === IDENTITY_STATUS.RESOLVED &&
+      typeof raw.logicalMediaKey === 'string' &&
+      raw.logicalMediaKey.trim() !== ''
+    ) {
+      identityStatus = IDENTITY_STATUS.RESOLVED;
+      logicalMediaKey = raw.logicalMediaKey.trim();
+    } else {
+      identityStatus = IDENTITY_STATUS.UNRESOLVED;
+      logicalMediaKey = null;
     }
 
     const observation = {
@@ -211,10 +273,8 @@ export function transformCatalogRecords(records, rootAvailability = {}, options 
       rootId,
       filePath: pathResult.scopedPath,
       accessible,
-      identityStatus: raw.identityStatus === IDENTITY_STATUS.UNRESOLVED
-        ? IDENTITY_STATUS.UNRESOLVED
-        : IDENTITY_STATUS.RESOLVED,
-      logicalMediaKey: typeof raw.logicalMediaKey === 'string' ? raw.logicalMediaKey.trim() : null,
+      identityStatus,
+      logicalMediaKey,
       historyStatus,
       effectivePlayCount,
       totalWatchSeconds,
@@ -233,7 +293,7 @@ export function transformCatalogRecords(records, rootAvailability = {}, options 
 
   let offlineCount = 0;
 
-  // Process grouped observations for conflict detection
+  // Process grouped observations for conflict detection across ALL fields checked by Issue #35
   for (const [assetId, observations] of candidateGroups.entries()) {
     if (observations.length === 1) {
       const obs = observations[0];
@@ -242,7 +302,6 @@ export function transformCatalogRecords(records, rootAvailability = {}, options 
       continue;
     }
 
-    // Check for physical metadata conflicts among multi-root observations of the same assetId
     const base = observations[0];
     const conflictFields = [];
 
@@ -260,6 +319,24 @@ export function transformCatalogRecords(records, rootAvailability = {}, options 
       if (curr.identityStatus !== base.identityStatus && !conflictFields.includes('identityStatus')) {
         conflictFields.push('identityStatus');
       }
+      if (curr.historyStatus !== base.historyStatus && !conflictFields.includes('historyStatus')) {
+        conflictFields.push('historyStatus');
+      }
+      if (curr.effectivePlayCount !== base.effectivePlayCount && !conflictFields.includes('effectivePlayCount')) {
+        conflictFields.push('effectivePlayCount');
+      }
+      if (curr.totalWatchSeconds !== base.totalWatchSeconds && !conflictFields.includes('totalWatchSeconds')) {
+        conflictFields.push('totalWatchSeconds');
+      }
+      if (curr.lastPlayedAt !== base.lastPlayedAt && !conflictFields.includes('lastPlayedAt')) {
+        conflictFields.push('lastPlayedAt');
+      }
+      if (curr.isFavorite !== base.isFavorite && !conflictFields.includes('isFavorite')) {
+        conflictFields.push('isFavorite');
+      }
+      if (curr.isDisliked !== base.isDisliked && !conflictFields.includes('isDisliked')) {
+        conflictFields.push('isDisliked');
+      }
     }
 
     if (conflictFields.length > 0) {
@@ -269,12 +346,16 @@ export function transformCatalogRecords(records, rootAvailability = {}, options 
         reason: QUARANTINE_REASON.METADATA_CONFLICT,
         conflictFields,
         candidateCount: observations.length,
-        details: `Physical metadata conflict on fields: ${conflictFields.join(', ')}`,
+        details: `Metadata conflict on fields: ${conflictFields.join(', ')}`,
         sanitizedObservations: observations.map(o => ({
           rootId: o.rootId,
           filePath: o.filePath,
           fileSize: o.fileSize,
-          durationSeconds: o.durationSeconds
+          durationSeconds: o.durationSeconds,
+          historyStatus: o.historyStatus,
+          effectivePlayCount: o.effectivePlayCount,
+          isFavorite: o.isFavorite,
+          isDisliked: o.isDisliked
         }))
       });
       continue; // Exclude from items array!

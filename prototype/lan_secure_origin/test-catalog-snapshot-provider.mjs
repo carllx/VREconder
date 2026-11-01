@@ -3,15 +3,15 @@
  * Ticket 34.2 / Issue #36
  *
  * Verifies:
- * 1. Multi-root flat observation transformation (ReadonlyArray<MediaSnapshotItem> for #35)
- * 2. Offline-first / online-second observation ordering and reverse-order stability
- * 3. All-roots-offline preservation without deletion
- * 4. Physical identity conflict quarantine (fail-closed, not playable)
- * 5. Unknown history preservation vs confirmed zero
- * 6. Timestamp normalization (finite epoch ms vs null)
- * 7. Path sanitization and host secret/token redaction
+ * 1. Timestamp normalization (finite epoch ms vs null)
+ * 2. Strict component-boundary path scoping, outside-root rejection & secret redaction
+ * 3. Multi-root flat observation transformation (ReadonlyArray<MediaSnapshotItem> for #35)
+ * 4. Offline-first / online-second observation ordering and reverse-order stability
+ * 5. All-roots-offline preservation without deletion
+ * 6. Physical and semantic identity conflict quarantine (fail-closed, not playable)
+ * 7. Coherent fail-honest state (unknown history null timestamp, UNRESOLVED default, PLAYED > 0)
  * 8. Stash GraphQL reader contract HOLD state
- * 9. Integration with #35 PlaybackQueuePolicy (balanced queue, favorites, navigation)
+ * 9. End-to-end integration with #35 PlaybackQueuePolicy (balanced queue, favorites, navigation)
  */
 
 import assert from 'node:assert/strict';
@@ -51,30 +51,62 @@ function runTests() {
     assert.equal(normalizeTimestamp('2025-11-01T12:00:00.000Z'), Date.parse('2025-11-01T12:00:00.000Z'));
   }
 
-  // Test 2: Safe Scoped Path Sanitization & Redaction
+  // Test 2: Safe Scoped Path Sanitization, Boundary Containment & Redaction
   {
-    console.log('[Test 2] Safe Scoped Path Sanitization & Redaction');
+    console.log('[Test 2] Safe Scoped Path Sanitization, Boundary Containment & Redaction');
     const rootBase = 'G:/Media/VR';
 
-    // Normal stripping of root base path
+    // 2.1 Normal stripping of root base path with component boundary
     const res1 = sanitizeScopedPath('G:/Media/VR/folder1/video.mp4', rootBase);
     assert.equal(res1.error, null);
     assert.equal(res1.scopedPath, 'folder1/video.mp4');
 
-    // Windows backslash normalization
+    // 2.2 Windows backslash normalization in root
     const res2 = sanitizeScopedPath('G:\\Media\\VR\\sub\\test.mp4', 'G:\\Media\\VR');
     assert.equal(res2.error, null);
     assert.equal(res2.scopedPath, 'sub/test.mp4');
 
-    // Redaction of query tokens
-    const res3 = sanitizeScopedPath('G:/Media/VR/clip.mp4?token=secret123&auth=abc', rootBase);
-    assert.equal(res3.error, null);
-    assert.equal(res3.scopedPath, 'clip.mp4');
+    // 2.3 Prefix lookalike must fail closed (G:/Media/VR2 vs G:/Media/VR)
+    const resLookalike = sanitizeScopedPath('G:/Media/VR2/private.mp4', rootBase);
+    assert.equal(resLookalike.error, QUARANTINE_REASON.OUTSIDE_AUTHORIZED_ROOT);
+    assert.equal(resLookalike.scopedPath, null);
 
-    // Path traversal detection
-    const res4 = sanitizeScopedPath('G:/Media/VR/../../secret.mp4', rootBase);
-    assert.equal(res4.error, QUARANTINE_REASON.PATH_TRAVERSAL_RISK);
-    assert.equal(res4.scopedPath, null);
+    // 2.4 Other-drive absolute path must fail closed
+    const resOtherDrive = sanitizeScopedPath('H:/Private/secret.mp4', rootBase);
+    assert.equal(resOtherDrive.error, QUARANTINE_REASON.OUTSIDE_AUTHORIZED_ROOT);
+    assert.equal(resOtherDrive.scopedPath, null);
+
+    // 2.5 UNC path outside root must fail closed
+    const resUnc = sanitizeScopedPath('//nas/share/secret.mp4', rootBase);
+    assert.equal(resUnc.error, QUARANTINE_REASON.OUTSIDE_AUTHORIZED_ROOT);
+    assert.equal(resUnc.scopedPath, null);
+
+    // 2.6 Valid relative path passes through
+    const resRel = sanitizeScopedPath('subfolder/clip.mp4', rootBase);
+    assert.equal(resRel.error, null);
+    assert.equal(resRel.scopedPath, 'subfolder/clip.mp4');
+
+    // 2.7 Directory traversal in relative path
+    const resTrav = sanitizeScopedPath('../../etc/passwd', rootBase);
+    assert.equal(resTrav.error, QUARANTINE_REASON.PATH_TRAVERSAL_RISK);
+    assert.equal(resTrav.scopedPath, null);
+
+    // 2.8 Directory traversal in root-prefixed path
+    const resTravRoot = sanitizeScopedPath('G:/Media/VR/../../secret.mp4', rootBase);
+    assert.equal(resTravRoot.error, QUARANTINE_REASON.PATH_TRAVERSAL_RISK);
+    assert.equal(resTravRoot.scopedPath, null);
+
+    // 2.9 Redaction of query tokens
+    const resQuery = sanitizeScopedPath('G:/Media/VR/clip.mp4?token=secret123&auth=abc', rootBase);
+    assert.equal(resQuery.error, null);
+    assert.equal(resQuery.scopedPath, 'clip.mp4');
+
+    // 2.10 Diagnostic leakage check: quarantined item details do not expose raw paths
+    const records = [{ assetId: 'leak_check', rootId: 'root1', filePath: 'H:/Private/secret.mp4', fileSize: 100, durationSeconds: 10 }];
+    const transformRes = transformCatalogRecords(records, { root1: { basePath: 'G:/Media/VR', accessible: true } });
+    assert.equal(transformRes.quarantinedItems.length, 1);
+    assert(!transformRes.quarantinedItems[0].details.includes('H:/Private/secret.mp4'));
+    assert(!transformRes.quarantinedItems[0].details.includes('secret'));
   }
 
   // Test 3: Multi-Root Flat Observation Transformation
@@ -112,11 +144,10 @@ function runTests() {
     assert.equal(result.quarantinedItems.length, 0);
     assert.equal(result.items.length, 2);
 
-    // Verify both items are flat and share assetId
     assert.equal(result.items[0].assetId, 'asset_multi_1');
     assert.equal(result.items[0].rootId, 'root_online_1');
     assert.equal(result.items[0].accessible, true);
-    assert.equal(result.items[0].observations, undefined); // No nested observations
+    assert.equal(result.items[0].observations, undefined);
 
     assert.equal(result.items[1].assetId, 'asset_multi_1');
     assert.equal(result.items[1].rootId, 'root_online_2');
@@ -155,7 +186,6 @@ function runTests() {
     assert.equal(res1.items[0].accessible, false);
     assert.equal(res1.items[1].accessible, true);
 
-    // Feed to #35 queue engine
     const session1 = buildPlaybackQueue(res1.items, { mode: QUEUE_MODE.DEFAULT });
     assert.equal(session1.frozenItems.length, 1);
     assert.equal(session1.frozenItems[0].accessible, true);
@@ -199,87 +229,160 @@ function runTests() {
     assert.equal(result.items[0].isFavorite, true);
     assert.equal(result.items[0].effectivePlayCount, 5);
 
-    // Feed into #35: excluded from active queue because accessible === false, but not deleted
     const session = buildPlaybackQueue(result.items, { mode: QUEUE_MODE.DEFAULT });
     assert.equal(session.frozenItems.length, 0);
   }
 
-  // Test 6: Physical Identity Conflict Quarantine (Fail-Closed)
+  // Test 6: Physical & Semantic Identity Conflict Quarantine (Fail-Closed)
   {
-    console.log('[Test 6] Physical Identity Conflict Quarantine (Fail-Closed)');
+    console.log('[Test 6] Physical & Semantic Identity Conflict Quarantine (Fail-Closed)');
     const rootAvailability = {
       root_a: { basePath: 'G:/Media/A', accessible: true },
       root_b: { basePath: 'G:/Media/B', accessible: true }
     };
 
-    const records = [
+    // 6.1 Physical conflict (fileSize mismatch)
+    const recordsPhysical = [
+      { assetId: 'asset_conf_phys', rootId: 'root_a', filePath: 'v1.mp4', fileSize: 1000, durationSeconds: 60 },
+      { assetId: 'asset_conf_phys', rootId: 'root_b', filePath: 'v2.mp4', fileSize: 2000, durationSeconds: 60 },
+      { assetId: 'asset_clean_1', rootId: 'root_a', filePath: 'clean1.mp4', fileSize: 3000, durationSeconds: 90 }
+    ];
+    const resPhys = transformCatalogRecords(recordsPhysical, rootAvailability);
+    assert.equal(resPhys.quarantinedItems.length, 1);
+    assert.equal(resPhys.quarantinedItems[0].assetId, 'asset_conf_phys');
+    assert.deepEqual(resPhys.quarantinedItems[0].conflictFields, ['fileSize']);
+    assert.equal(resPhys.items.length, 1);
+    assert.equal(resPhys.items[0].assetId, 'asset_clean_1');
+
+    // 6.2 Semantic conflict (divergent favorite / history status)
+    const recordsSemantic = [
       {
-        assetId: 'asset_conflicted',
+        assetId: 'asset_conf_sem',
         rootId: 'root_a',
-        filePath: 'video.mp4',
+        filePath: 's1.mp4',
         fileSize: 1000,
-        durationSeconds: 60
+        durationSeconds: 60,
+        hasVerifiedAssetHistory: true,
+        historyStatus: HISTORY_STATUS.PLAYED,
+        effectivePlayCount: 1,
+        isFavorite: true
       },
       {
-        assetId: 'asset_conflicted',
+        assetId: 'asset_conf_sem',
         rootId: 'root_b',
-        filePath: 'video_alt.mp4',
-        fileSize: 2000, // Conflict on fileSize!
-        durationSeconds: 60
-      },
-      {
-        assetId: 'asset_clean',
-        rootId: 'root_a',
-        filePath: 'clean.mp4',
-        fileSize: 3000,
-        durationSeconds: 90
+        filePath: 's2.mp4',
+        fileSize: 1000,
+        durationSeconds: 60,
+        hasVerifiedAssetHistory: true,
+        historyStatus: HISTORY_STATUS.PLAYED,
+        effectivePlayCount: 5, // Mismatched play count!
+        isFavorite: false     // Mismatched favorite!
       }
     ];
+    const resSem = transformCatalogRecords(recordsSemantic, rootAvailability);
+    assert.equal(resSem.quarantinedItems.length, 1);
+    assert.equal(resSem.quarantinedItems[0].assetId, 'asset_conf_sem');
+    assert(resSem.quarantinedItems[0].conflictFields.includes('effectivePlayCount'));
+    assert(resSem.quarantinedItems[0].conflictFields.includes('isFavorite'));
+    assert.equal(resSem.items.length, 0);
 
-    const result = transformCatalogRecords(records, rootAvailability);
-    assert.equal(result.quarantinedItems.length, 1);
-    assert.equal(result.quarantinedItems[0].assetId, 'asset_conflicted');
-    assert.equal(result.quarantinedItems[0].reason, QUARANTINE_REASON.METADATA_CONFLICT);
-    assert.deepEqual(result.quarantinedItems[0].conflictFields, ['fileSize']);
-
-    // The clean asset is emitted, while the conflicted asset is completely excluded from items!
-    assert.equal(result.items.length, 1);
-    assert.equal(result.items[0].assetId, 'asset_clean');
+    // Verify passing quarantined result to #35 never throws PlaybackQueueConflictError!
+    assert.doesNotThrow(() => {
+      buildPlaybackQueue(resSem.items, { mode: QUEUE_MODE.BALANCED });
+    });
   }
 
-  // Test 7: Unknown History vs Confirmed Zero
+  // Test 7: Coherent Fail-Honest State (History & Identity)
   {
-    console.log('[Test 7] Unknown History vs Confirmed Zero');
+    console.log('[Test 7] Coherent Fail-Honest State (History & Identity)');
+    const rootAvailability = { root_online: { basePath: 'M:/', accessible: true } };
+
     const records = [
+      // 7.1 Unverified scene-level metrics must not attach fake timestamp or play count
       {
-        assetId: 'asset_unverified_scene',
+        assetId: 'asset_unverified',
         rootId: 'root_online',
         filePath: 'scene_raw.mp4',
         fileSize: 1000,
         durationSeconds: 60,
-        play_count: 8 // Upstream scene play count without verified asset history
+        play_count: 8,
+        lastPlayedAt: '2020-01-01T00:00:00.000Z' // Upstream unverified scene timestamp
       },
+      // 7.2 Missing logicalMediaKey must force UNRESOLVED
       {
-        assetId: 'asset_confirmed_zero',
+        assetId: 'asset_no_key',
         rootId: 'root_online',
-        filePath: 'confirmed_new.mp4',
+        filePath: 'no_key.mp4',
+        fileSize: 1000,
+        durationSeconds: 60,
+        identityStatus: IDENTITY_STATUS.RESOLVED // Claims resolved but no key!
+      },
+      // 7.3 Valid key and identityStatus
+      {
+        assetId: 'asset_valid_resolved',
+        rootId: 'root_online',
+        filePath: 'valid.mp4',
+        fileSize: 1000,
+        durationSeconds: 60,
+        identityStatus: IDENTITY_STATUS.RESOLVED,
+        logicalMediaKey: 'lmk-proven-42'
+      },
+      // 7.4 PLAYED with count = 0 must fall back to UNKNOWN
+      {
+        assetId: 'asset_invalid_played_count',
+        rootId: 'root_online',
+        filePath: 'played_zero.mp4',
         fileSize: 1000,
         durationSeconds: 60,
         hasVerifiedAssetHistory: true,
-        historyStatus: HISTORY_STATUS.CONFIRMED_ZERO
+        historyStatus: HISTORY_STATUS.PLAYED,
+        effectivePlayCount: 0,
+        lastPlayedAt: '2026-05-01T00:00:00.000Z'
+      },
+      // 7.5 PLAYED with valid positive count retains finite timestamp
+      {
+        assetId: 'asset_valid_played',
+        rootId: 'root_online',
+        filePath: 'played_valid.mp4',
+        fileSize: 1000,
+        durationSeconds: 60,
+        hasVerifiedAssetHistory: true,
+        historyStatus: HISTORY_STATUS.PLAYED,
+        effectivePlayCount: 3,
+        lastPlayedAt: '2026-08-01T00:00:00.000Z'
       }
     ];
 
-    const rootAvailability = { root_online: { basePath: 'M:/', accessible: true } };
     const result = transformCatalogRecords(records, rootAvailability);
 
-    const unverified = result.items.find(i => i.assetId === 'asset_unverified_scene');
+    // 7.1: UNKNOWN history has null lastPlayedAt and 0 count
+    const unverified = result.items.find(i => i.assetId === 'asset_unverified');
     assert.equal(unverified.historyStatus, HISTORY_STATUS.UNKNOWN);
-    assert.equal(unverified.effectivePlayCount, 0); // Not assigned scene count!
+    assert.equal(unverified.effectivePlayCount, 0);
+    assert.equal(unverified.lastPlayedAt, null);
 
-    const confirmed = result.items.find(i => i.assetId === 'asset_confirmed_zero');
-    assert.equal(confirmed.historyStatus, HISTORY_STATUS.CONFIRMED_ZERO);
-    assert.equal(confirmed.effectivePlayCount, 0);
+    // 7.2: No logicalMediaKey forces UNRESOLVED with null key
+    const noKey = result.items.find(i => i.assetId === 'asset_no_key');
+    assert.equal(noKey.identityStatus, IDENTITY_STATUS.UNRESOLVED);
+    assert.equal(noKey.logicalMediaKey, null);
+
+    // 7.3: Valid key preserves RESOLVED
+    const validResolved = result.items.find(i => i.assetId === 'asset_valid_resolved');
+    assert.equal(validResolved.identityStatus, IDENTITY_STATUS.RESOLVED);
+    assert.equal(validResolved.logicalMediaKey, 'lmk-proven-42');
+
+    // 7.4: PLAYED with 0 count falls back to UNKNOWN and null lastPlayedAt
+    const invalidPlayed = result.items.find(i => i.assetId === 'asset_invalid_played_count');
+    assert.equal(invalidPlayed.historyStatus, HISTORY_STATUS.UNKNOWN);
+    assert.equal(invalidPlayed.effectivePlayCount, 0);
+    assert.equal(invalidPlayed.lastPlayedAt, null);
+
+    // 7.5: PLAYED with positive count preserves count and finite timestamp
+    const validPlayed = result.items.find(i => i.assetId === 'asset_valid_played');
+    assert.equal(validPlayed.historyStatus, HISTORY_STATUS.PLAYED);
+    assert.equal(validPlayed.effectivePlayCount, 3);
+    assert.equal(typeof validPlayed.lastPlayedAt, 'number');
+    assert.equal(validPlayed.lastPlayedAt, Date.parse('2026-08-01T00:00:00.000Z'));
   }
 
   // Test 8: Stash GraphQL Reader Contract Status HOLD
